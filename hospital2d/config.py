@@ -61,9 +61,10 @@ W_FATIGUE = 0.5  # per fatigue point
 W_BUSY = 25  # extra if it has to drop what it's doing
 W_RESTING = 40  # extra if it's resting
 PREEMPT_GAP = 2  # only interrupt for a task this many urgency levels higher (Red over Green)
-# Who goes first when there are more tasks than staff: priority = urgency * w + minutes waited * w + impatience * w
-# (impatience: 0 = full patience, 1 = about to give up). Starts as plain "most urgent first"; learn.py tunes it.
-PRIORITY_START = [10.0, 0.0, 0.0]
+# Who goes first when there are more tasks than staff: always the most urgent colour first, like real triage
+# (Manchester); within a colour, the highest minutes waited * w + impatience * w (impatience: 0 = full patience,
+# 1 = about to give up), ties by arrival. Starts as arrival order (both 0); learn.py tunes the two weights.
+PRIORITY_START = [0.0, 0.0]
 
 # Staff on call: the Boss calls one in when CALL_IN_AT more tasks are waiting than there are free staff of that role
 # (at most one every CALL_EVERY_S per role), and sends them home after SEND_HOME_AFTER_S with nothing waiting.

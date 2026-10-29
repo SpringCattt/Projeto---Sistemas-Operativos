@@ -85,7 +85,8 @@ python test_sim.py      # the simulation with real threads (~1.5 min)
 python bench.py         # how far it scales
 ```
 
-**The Boss learns** who to see first when there are more patients than doctors: `python learn.py 8 4` plays
+**The Boss learns** who to see first among patients of the same colour (the most urgent colour always goes first,
+like real triage) when there are more patients than doctors: `python learn.py 8 4` plays
 4 hospitals at once without the window, trying small changes and keeping what works (Ctrl+C stops it), and
 `python charts.py` draws how it's going (needs `pip install matplotlib`). When work piles up it also **calls in staff
 on call**, and sends them home when it's quiet again.

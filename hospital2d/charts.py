@@ -36,7 +36,7 @@ def main():
     if not rows:
         sys.exit('learning.csv has no data yet: wait for the first round to end.')
     rounds = column(rows, 'round')
-    fig, ax = plt.subplots(2, 2, figsize=(14, 9))
+    fig, ax = plt.subplots(2, 3, figsize=(20, 9))
     fig.suptitle(f'How the Boss is learning ({len(rows)} rounds)')
 
     a = ax[0][0]
@@ -64,6 +64,17 @@ def main():
     a.plot(rounds, smooth(error), color='tab:blue', label='trend (last 10)')
     a.set(title='How wrong its guesses of task times are', xlabel='round', ylabel='average error (s)')
     a.legend()
+
+    a = ax[0][2]
+    diff = column(rows, 'vs_start')
+    a.bar(rounds, [d or 0 for d in diff], color=['tab:green' if (d or 0) > 0 else 'tab:red' for d in diff],
+          label='each round')
+    a.plot(rounds, smooth(diff, 20), color='black', label='trend (last 20)')
+    a.axhline(0, color='gray', linewidth=0.8)
+    a.set(title='Learned weights vs the original ones, same day\n(above 0 = what it learned is better)',
+          xlabel='round', ylabel='score difference')
+    a.legend()
+    ax[1][2].axis('off')
 
     fig.tight_layout()
     out = OUT

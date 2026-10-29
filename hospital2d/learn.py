@@ -8,6 +8,8 @@
 #      weights nudged a bit, half of them one way and half the opposite way (+noise / -noise)
 #   2. each scores its round: treated - 3 x gave up - minutes Red patients waited for a doctor
 #   3. the weights move towards the nudges that scored better than the average, and the next round starts
+# With 4 or more hospitals, two of them play that same day with the current weights and with the ones it started
+# from: the fair test of whether what it learned is any better (vs_start in learning.csv, above 0 = better).
 # On top of that, as before, the Boss learns how long each task takes (who does it; averaged over the hospitals).
 # Everything is saved after every round in boss_brain.json (the game starts from it too) and learning.csv.
 # Run it again and it goes on from there. Graphs, whenever you want (even while this runs): python charts.py
@@ -26,7 +28,7 @@ from world import Dispatcher
 HERE = os.path.dirname(os.path.abspath(__file__))
 CSV = os.path.join(HERE, 'learning.csv')
 FIELDS = ['round', 'reward', 'best', 'worst', 'w_urgency', 'w_waited', 'w_impatience', 'treated', 'gave_up',
-          'red_wait_min', 'tasks', 'error_s']
+          'red_wait_min', 'tasks', 'error_s', 'vs_start']
 ROUND_MINUTES = 10
 NOISE = 2.0  # how big the nudges are
 STEP = 1.0  # how far the weights move each round (at most about one nudge)
@@ -82,7 +84,12 @@ def main(speed, n):
         with open(CSV, encoding='utf-8') as f:
             header = f.readline().strip().split(',')
             rnd = sum(1 for _ in f)
-        if header != FIELDS:  # from an older learn.py: kept aside
+        if header == FIELDS[:-1]:  # from before vs_start: the same, with that column empty
+            with open(CSV, encoding='utf-8') as f:
+                old = list(csv.reader(f))
+            with open(CSV, 'w', newline='', encoding='utf-8') as f:
+                csv.writer(f).writerows([FIELDS] + [row + [''] for row in old[1:]])
+        elif header != FIELDS:  # from an older learn.py: kept aside
             os.replace(CSV, os.path.join(HERE, 'learning_old.csv'))
             rnd = 0
     jobs, reports = [mp.Queue() for _ in range(n)], mp.Queue()
@@ -102,14 +109,17 @@ def main(speed, n):
             while True:
                 rnd += 1
                 seed = rng.randrange(10 ** 9)
-                # +noise / -noise in pairs (an odd one out plays the current weights as they are)
+                # +noise / -noise in pairs (an odd one out plays the current weights as they are), and the fair test
+                compare = 2 if n >= 4 else 0
                 noises = []
-                for _ in range(n // 2):
+                for _ in range((n - compare) // 2):
                     e = [rng.gauss(0, 1) for _ in boss.policy]
                     noises += [e, [-x for x in e]]
-                noises += [[0.0] * len(boss.policy)] * (n % 2)
-                for job, e in zip(jobs, noises):
-                    job.put((seed, [w + NOISE * x for w, x in zip(boss.policy, e)], boss.brain))
+                noises += [[0.0] * len(boss.policy)] * ((n - compare) % 2)
+                plays = [[w + NOISE * x for w, x in zip(boss.policy, e)] for e in noises]
+                plays += [list(boss.policy), list(config.PRIORITY_START)] if compare else []
+                for job, weights in zip(jobs, plays):
+                    job.put((seed, weights, boss.brain))
                 results = [None] * n
                 while None in results:
                     try:
@@ -117,12 +127,14 @@ def main(speed, n):
                     except queue.Empty:
                         continue
                     results[i] = r
-                rewards = [r['reward'] for r in results]
-                mean = sum(rewards) / n
-                spread = (sum((x - mean) ** 2 for x in rewards) / n) ** 0.5
-                if n >= 2 and spread > 0:  # towards the nudges that did better than the average
+                rewards = [r['reward'] for r in results[:len(noises)]]
+                m = len(rewards)
+                mean = sum(rewards) / m
+                spread = (sum((x - mean) ** 2 for x in rewards) / m) ** 0.5
+                vs_start = round(results[-2]['reward'] - results[-1]['reward'], 1) if compare else ''
+                if m >= 2 and spread > 0:  # towards the nudges that did better than the average
                     for k in range(len(boss.policy)):
-                        move = sum((x - mean) / spread * e[k] for x, e in zip(rewards, noises)) / n
+                        move = sum((x - mean) / spread * e[k] for x, e in zip(rewards, noises)) / m
                         boss.policy[k] = max(0.0, boss.policy[k] + STEP * NOISE * move)
                 kinds = {k for r in results for k in r['brain']}  # how long tasks take: averaged
                 boss.brain = {k: [sum(ws) / len(ws) for ws in zip(*(r['brain'][k] for r in results if k in r['brain']))]
@@ -134,12 +146,12 @@ def main(speed, n):
                 avg = [sum(r[k] for r in results) / n for k in ('treated', 'gave_up', 'red')]
                 out.writerow([rnd, round(mean, 1), round(max(rewards), 1), round(min(rewards), 1),
                               *[round(w, 2) for w in boss.policy], *[round(x, 1) for x in avg], tasks,
-                              round(errors / tasks, 1) if tasks else ''])
+                              round(errors / tasks, 1) if tasks else '', vs_start])
                 f.flush()  # so charts.py sees it straight away
                 keep_up = min(r['keep_up'] for r in results)
                 print(f'round {rnd}: score {mean:.1f} (best {max(rewards):.1f}, worst {min(rewards):.1f}); '
                       f'weights urgency {boss.policy[0]:.1f}, waited {boss.policy[1]:.1f}, '
-                      f'impatience {boss.policy[2]:.1f}; keeping up {100 * keep_up:.0f}%'
+                      f'impatience {boss.policy[2]:.1f}; vs start {vs_start}; keeping up {100 * keep_up:.0f}%'
                       + ('  << too many hospitals for this PC: use fewer' if keep_up < 0.9 else ''))
     except KeyboardInterrupt:
         pass

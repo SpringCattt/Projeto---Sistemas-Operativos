@@ -123,6 +123,8 @@ waited and impatience (how close the patient is to giving up). It starts as plai
 `learn.py` tunes it with an **evolution strategy**, in rounds of 10 simulated minutes: every hospital plays the same
 day (same seed) with the weights nudged a bit (half one way, half the opposite), each round is scored
 (treated − 3 × gave up − minutes Red patients waited) and the weights move towards the nudges that scored better.
+Two of the hospitals play each day with the learned weights and with the original ones: that difference
+(`vs_start`, its own chart) is the fair test of whether what it learned is actually better.
 
 ```
 python learn.py 8 4       # 4 hospitals at once at x8 (one process each); Ctrl+C stops it, run it again to go on

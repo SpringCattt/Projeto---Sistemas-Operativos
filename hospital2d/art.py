@@ -9,7 +9,7 @@ from layout import EMPTY, WALL, DOOR
 T = config.TILE
 ASSETS = os.path.join(os.path.dirname(__file__), 'assets')
 
-# Furniture kind -> image. H = Top Down Hospital pack, M = Modern Town sample, C = made by tools/make_assets.py
+# Furniture kind -> image. H = Top Down Hospital pack, M = Modern Town sample, C = our own PNGs (assets/custom)
 H, M, C = 'third_party/hospital/Pngs/', 'third_party/moderntown/sprites/shadow/16px/', 'custom/'
 FURNITURE = {
     'chair': H + 'maternity_chair', 'office_chair': C + 'office_chair', 'plant': H + 'room_flower',

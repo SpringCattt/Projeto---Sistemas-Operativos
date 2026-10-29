@@ -165,6 +165,7 @@ class Dispatcher:
         self.staff = []  # actors that take tasks from here (doctors, security, cleaners)
         self.decisions = deque(maxlen=12)  # (time, text): what it decided and why, shown on the Boss's card
         self.brain = {}  # task kind -> weights (FEATURES)
+        self.policy = list(config.PRIORITY_START)  # who goes first (priority)
         self.learned, self.error_sum = 0, 0.0  # tasks it learned from, and how wrong it was in total (seconds)
 
     def weights(self, kind):
@@ -175,10 +176,11 @@ class Dispatcher:
             with open(path, encoding='utf-8') as f:
                 saved = json.load(f)
             self.brain, self.learned, self.error_sum = saved['brain'], saved['learned'], saved['error_sum']
+            self.policy = saved.get('policy', self.policy)
 
     def save(self, path):
         with self.cond:
-            data = {'brain': self.brain, 'learned': self.learned, 'error_sum': self.error_sum}
+            data = {'brain': self.brain, 'learned': self.learned, 'error_sum': self.error_sum, 'policy': self.policy}
         with open(path + '.tmp', 'w', encoding='utf-8') as f:
             json.dump(data, f, indent=1)
         os.replace(path + '.tmp', path)  # never a half-written file, even if it's stopped right then
@@ -224,7 +226,7 @@ class Dispatcher:
     def assign(self):
         """Hands out what it can. Call it holding self.cond. Returns [(task, actor)] it gave."""
         given = []
-        for task in sorted(self.open, key=lambda t: (-t.urgency, t.created)):
+        for task in sorted(self.open, key=lambda t: (-self.priority(t), t.created)):
             scored = sorted((s, a.id, a) for a in self.staff if (s := self.score(a, task)) is not None)
             if not scored:
                 continue
@@ -241,6 +243,13 @@ class Dispatcher:
             actor.inbox.put(task)
             given.append((task, actor))
         return given
+
+    def priority(self, task):
+        """How soon a task is handed out (highest first): its urgency, how long it has been waiting and, for a
+        patient, how close it is to running out of patience. learn.py tunes the weights (config.PRIORITY_START)."""
+        w_urgency, w_waited, w_impatience = self.policy
+        impatience = 1 - task.patient.patience / 100 if task.patient is not None else 0.0
+        return w_urgency * task.urgency + w_waited * (self.clock() - task.created) / 60 + w_impatience * impatience
 
     def score(self, actor, task):
         if actor.role != task.role or not actor.inbox.empty():

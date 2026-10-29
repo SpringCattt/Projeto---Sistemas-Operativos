@@ -57,7 +57,7 @@ class Boss(Actor):
 
     def __init__(self, h, seat, rng):
         super().__init__(h, [seat], rng, name='Boss')
-        self.given = 0
+        self.given, self.checked = 0, 0.0
         self.doing = 'assigning tasks'
 
     def life(self):
@@ -67,6 +67,9 @@ class Boss(Actor):
                 d.cond.wait(timeout=1 / config.ACTOR_HZ)
                 given = d.assign()
             self.given += len(given)
+            if self.h.on_call and self.h.clock() - self.checked > 5:  # every 5 s: enough staff in?
+                self.checked = self.h.clock()
+                self.h.staffing()
             for task, actor in given:
                 if task.urgency == 2 and self.h.clock() > self.speech_until:
                     self.talk('boss_red', name=actor.first_name())
@@ -79,7 +82,8 @@ class Boss(Actor):
         busy = sum(1 for a in d.staff if a.task is not None)
         error = f'{d.error_sum / d.learned:.0f} s' if d.learned else '-'
         return [('Open tasks', len(d.open)), ('Tasks given', self.given), ('Staff busy', f'{busy}/{len(d.staff)}'),
-                ('Learned from', f'{d.learned} tasks'), ('Guess off by', error)]
+                ('Learned from', f'{d.learned} tasks'), ('Guess off by', error),
+                ('Called in', sum(1 for a in d.staff if a.on_call))]
 
     def snapshot(self):
         """Adds what the dispatcher is doing: each task being done (who, where), the open ones, its last decisions."""

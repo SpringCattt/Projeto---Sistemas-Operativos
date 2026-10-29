@@ -85,7 +85,8 @@ class Actor:
         self.lying = self.on_stretcher = False
         self.action = None  # animation while working: 'typing', 'mopping'
         self.pushing = None  # the empty stretcher, while it drives one (staff.WardNurse)
-        self.commute, self.quitting = None, False  # hired / sent home from the admin tablet
+        self.commute, self.quitting = None, False  # hired / sent home (admin tablet, or the Boss)
+        self.on_call = False  # called in by the Boss when work piled up (Hospital.staffing)
         self.detour_after = 0.0  # sim time: after a detour that found nothing better, it doesn't look for a while
         self.make_way = False  # a stretcher needs its tile: it steps aside at its next tick (unless it can't)
         self.yield_until, self.aside = 0.0, None  # making way for a stretcher: its step aside, then stays put a moment

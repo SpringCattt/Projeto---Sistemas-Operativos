@@ -115,20 +115,27 @@ would take to get it done and picks the quickest:
 seconds = base + distance to the task × w_distance + fatigue × w_fatigue  (+ w_busy if busy) (+ w_resting if resting)
 ```
 
-**It learns from its mistakes.** When the actor finishes, it compares the real time with its guess and nudges each
-weight in the direction that would have made the guess better (normalised least mean squares; one set of weights
-per kind of task, starting from config's `W_*`). To let it learn without the window:
+When the actor finishes, it compares the real time with its guess and nudges each weight in the direction that
+would have made the guess better (normalised least mean squares; one set of weights per kind of task).
+
+**Who goes first** when there are more patients than doctors is a priority with three weights: urgency, minutes
+waited and impatience (how close the patient is to giving up). It starts as plain "most urgent first" and
+`learn.py` tunes it with an **evolution strategy**, in rounds of 10 simulated minutes: every hospital plays the same
+day (same seed) with the weights nudged a bit (half one way, half the opposite), each round is scored
+(treated − 3 × gave up − minutes Red patients waited) and the weights move towards the nudges that scored better.
 
 ```
 python learn.py 8 4       # 4 hospitals at once at x8 (one process each); Ctrl+C stops it, run it again to go on
 python charts.py          # graphs of how it's going so far (charts.png), also while learn.py runs
 ```
 
-Each hospital learns on its own copy of the brain; every simulated minute the main process averages them
-(federated averaging) and sends the average back. Don't go above x8: people couldn't move as fast as they should.
-`learn.py` saves what it learned every simulated minute in `boss_brain.json` (the game starts from it too) and adds
-a row to `learning.csv`: how wrong the guesses were, the weights, and the hospital's results (treated, gave up,
-waits by urgency). To run it without slowing the PC down: `start "" /low python learn.py`.
+Don't go above x8: people couldn't move as fast as they should. After every round it saves `boss_brain.json` (the
+game starts from it too) and a row in `learning.csv`. In PowerShell, at low priority:
+`cmd /c start "learn" /low python learn.py 8 4`.
+
+**Staff on call** (`config.ON_CALL`): when tasks pile up for a role, the Boss calls someone in (they walk in from
+the street; on-call doctors get the rooms left empty for them) and sends them home once it has been quiet for a
+while.
 
 The distance is the real one, walking around walls and furniture (a breadth-first search from the task, cached).
 Click the Boss (or press `B`) to watch it: a line from every busy member of staff to its task, a pulsing ring on

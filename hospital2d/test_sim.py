@@ -168,6 +168,24 @@ def test_surgery():
             assert rooms[i - 1] == 'disinfection', f'entered surgery from {rooms[i - 1]}: {rooms}'
 
 
+def test_stretcher():
+    """A Red patient waits lying in Emergency; two nurses bring it on a stretcher to the doctor's exam bed."""
+    h = Hospital(seed=7, n_doctors=1, n_surgeries=0, n_patients=0)
+    p = h.add_waiting(info(2))
+    rode = set()
+    h.start()
+    try:
+        end = time.time() + 60
+        while time.time() < end and not h.stats['treated']:
+            if p.on_stretcher:
+                rode.add(h.lay.room_at[p.ty][p.tx].kind if h.lay.room_at[p.ty][p.tx] else 'door')
+            time.sleep(0.005)
+    finally:
+        stop(h)
+    assert h.stats['treated'] == 1, h.summary()
+    assert any('on a stretcher' in t for _, t in h.events) and 'corridor' in rode, rode
+
+
 def test_reactions():
     """Out of patience: passive leaves, medium complains at reception, aggressive starts a fight that security
     ends. Waiting patients get worse and throw up; a cleaner cleans it."""

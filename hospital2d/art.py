@@ -97,6 +97,14 @@ def character(index):
             for r, d in enumerate(DIRECTIONS)}
 
 
+def lying(frames, across):
+    """Someone in bed / on a stretcher: head and shoulders out of a blanket (lengthwise, or across if `across`)."""
+    body = pygame.Surface((CHAR_W, 26), pygame.SRCALPHA)
+    body.blit(frames['down'][1], (0, 0), (0, 0, CHAR_W, 20))
+    body.blit(image('custom/blanket'), (3, 14))
+    return pygame.transform.rotate(body, 90) if across else body
+
+
 # --- Speech bubbles: PNGs in assets/custom. Words go in the smallest bubble_s/m/l/xl/xxl they fit in; an icon
 # bubble (bubble_alert, ...) is used as it is.
 TEXT_BUBBLES = ['bubble_s', 'bubble_m', 'bubble_l', 'bubble_xl', 'bubble_xxl']

@@ -10,7 +10,7 @@ EMPTY, WALL, FLOOR, DOOR = 0, 1, 2, 3
 
 # Size (width, height) of each medical-wing room type, walls included
 SIZES = {
-    'doctor': (8, 8), 'surgery': (10, 9), 'disinfection': (6, 9),
+    'doctor': (8, 8), 'emergency': (14, 8), 'surgery': (10, 9), 'disinfection': (6, 9),
     'storage': (14, 9), 'rest': (12, 9),
 }
 MARGIN = 3  # grass tiles around the building
@@ -146,6 +146,16 @@ class Layout:
         for r in self.rooms_of('disinfection'):
             fronts = {(x, y + d) for f in furniture_in(r, 'sink') for x, y in f.tiles() for d in (1, -1)}
             self.sink_spots[r] = sorted(t for t in fronts if r.contains(*t) and self.walkable(*t))
+        def bed_spot(f):  # (tile beside a bed or table, where someone lying on it is drawn)
+            side = next((t for x in (f.x + f.w, f.x - 1) for t in ((x, f.y + f.h - 1), (x, f.y))
+                         if self.walkable(*t)), None)
+            return side, (f.x + f.w / 2, f.y + f.h / 2)
+        self.exam_spots = {r: bed_spot(furniture_in(r, 'exam_bed')[0]) for r in self.rooms_of('doctor')
+                           if furniture_in(r, 'exam_bed')}
+        self.table_spots = {r: bed_spot(furniture_in(r, 'operating_table')[0])[1] for r in self.rooms_of('surgery')}
+        self.emergency_beds = {r: [b for b in map(bed_spot, furniture_in(r, 'bed')) if b[0]]
+                               for r in self.rooms_of('emergency')}
+        self.stretcher_spots = [t for r in self.rooms_of('storage') for t in self.free_tiles(r)]
         self.waiting_seats = {r: [t for t in self.free_tiles(r) if t in self.seats] for r in self.rooms_of('waiting')}
         self.control_seat = next((f.x, f.y) for r in self.rooms_of('control') for f in furniture_in(r, 'office_chair'))
         self.rest_spots = [t for r in self.rooms_of('rest') for t in self.free_tiles(r) if t in self.seats]
@@ -291,6 +301,7 @@ def build_layout(n_doctors=config.MAX_DOCTORS, n_surgeries=config.N_SURGERIES):
 
     # Doctors' rooms first, so they're the closest to the centre; then surgery, storage and rest
     blocks = [[('doctor', f'Doctor\'s Room {i + 1}')] for i in range(n_doctors)]
+    blocks.insert(min(2, len(blocks)), [('emergency', 'Emergency')])  # Red patients: near the centre
     blocks += surgery_blocks(n_surgeries) + [[('storage', 'Storage')], [('rest', 'Rest')]]
     for block in blocks:
         width = sum(SIZES[kind][0] for kind, _ in block) - (len(block) - 1)  # neighbours share a wall
@@ -380,6 +391,10 @@ def furnish(r):
               Furniture('chair', cx, y0 + 2, False), Furniture('exam_bed', x1, y0 + 2, h=2), Furniture('plant', x0, y0),
               Furniture('books', cx, y0 + 1), Furniture('eye_chart', x1, y0), Furniture('bp_monitor', x1, y0 + 4),
               Furniture('cabinet', x0, y0 + 3), Furniture('sanitizer', x0, y0 + 4), Furniture('trash_bin', x1, y1)]
+    elif k == 'emergency':  # beds along the back wall, a monitor beside each (the free side faces the room)
+        for x in range(x0 + 1, x1, 3):
+            f += [Furniture('bed', x, y0, h=2), Furniture('monitor', x + 1, y0)]
+        f += [Furniture('sanitizer', x0, y1), Furniture('iv_stand', x1, y1), Furniture('plant', x1, y0 + 3)]
     elif k == 'surgery':
         f += [Furniture('operating_table', cx, cy - 1, w=2, h=3), Furniture('monitor', cx - 2, cy - 1),
               Furniture('monitor', cx + 3, cy), Furniture('iv_stand', cx + 2, cy - 1), Furniture('tray', cx - 1, cy + 2),

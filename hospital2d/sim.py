@@ -13,7 +13,7 @@ from arrivals import new_patient
 from layout import build_layout
 from patients import Patient
 from staff import Boss, Cleaner, Doctor, Receptionist, Security, TriageNurse, WardNurse
-from world import Dispatcher, Line, Task, Theatres, World
+from world import Dispatcher, Line, Task, Theatres, Transfer, World
 
 
 class Hospital:
@@ -57,7 +57,7 @@ class Hospital:
         for group, area in ((nurses, medical), (security, public), (cleaners, everywhere)):
             for a in group:
                 a.area = area
-        self.dispatcher.staff = doctors + security + cleaners
+        self.dispatcher.staff = doctors + security + cleaners + nurses
         boss = Boss(self, lay.control_seat, rng)
         self.actors = [boss] + staff + doctors + nurses + security + cleaners
 
@@ -110,8 +110,12 @@ class Hospital:
     def add_waiting(self, info, room=None):
         """A patient that is already triaged, sitting in a waiting room (the start of the day, and tests)."""
         rooms = self.lay.rooms_of('waiting')
+        for er, beds in self.lay.emergency_beds.items():  # Red: a free bed in Emergency, if there is one
+            if room is None and info['urgency'] == 2 and any(side not in self.world.occupied for side, _ in beds):
+                room = er
         room = room or rooms[len(self.patients()) % len(rooms)]
-        p = Patient(self, self.lay.waiting_seats[room] or self.lay.free_tiles(room), self.rng, info, triaged=True)
+        spots = [side for side, _ in self.lay.emergency_beds.get(room, [])] or self.lay.waiting_seats.get(room)
+        p = Patient(self, spots or self.lay.free_tiles(room), self.rng, info, triaged=True)
         p.waiting_room = room
         self.queue_for_doctor(p)
         with self.actors_lock:
@@ -131,6 +135,14 @@ class Hospital:
     def queue_for_doctor(self, p):
         p.task = Task('consult', 'doctor', p.rank, patient=p, created=self.clock())
         self.dispatcher.submit(p.task)
+
+    def fetch_stretcher(self, p, summons):
+        """Two nurses (two tasks for the dispatcher) bring `p` to `summons.tile` on a stretcher."""
+        summons.transfer = Transfer(p, summons)
+        for _ in range(2):
+            task = Task('stretcher', 'nurse', 2, patient=p, created=self.clock())
+            task.transfer = summons.transfer
+            self.dispatcher.submit(task)
 
     def consult_started(self, p):
         if p.triaged_at is not None:

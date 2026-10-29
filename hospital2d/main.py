@@ -8,6 +8,7 @@ import heapq
 import multiprocessing as mp
 import os
 import queue
+import time
 from types import SimpleNamespace
 
 import pygame
@@ -16,7 +17,7 @@ import config
 from actors import ROLE_LABEL
 from arrivals import run_arrivals
 from art import ASSETS, BUBBLE_TAIL_X, CHAR_H, CHAR_W, character, draw_layout, furniture_sprites, icon_bubble, image, \
-    text_bubble
+    lying, text_bubble
 from eventlog import run_log
 from layout import build_layout
 from sim import run_simulation
@@ -146,6 +147,22 @@ def run_ui(snapshots):
             looks[a.look] = character(a.look)
         return looks[a.look][a.facing][WALK_CYCLE[int(a.anim_t * 6) % 4] if a.path else 1]
 
+    lying_imgs = {}
+
+    def lying_img(a):
+        across = a.stretcher and a.facing in ('left', 'right')
+        if (a.look, across) not in lying_imgs:
+            frame(a)
+            lying_imgs[(a.look, across)] = lying(looks[a.look], across)
+        return lying_imgs[(a.look, across)]
+
+    stretcher = {False: image('custom/stretcher_v'), True: image('custom/stretcher_h')}
+    keyboard = [image('custom/keyboard_0'), image('custom/keyboard_1')]
+    mop, bucket = [image(f'custom/mop_{i}') for i in (0, 1, 2, 1)], image('custom/bucket')
+
+    def centred(img, x, y, depth):  # (depth, image, world x, world y) like furniture, centred on (x, y) in tiles
+        return depth, img, x * T - img.get_width() // 2, y * T - img.get_height() // 2
+
     zoom = 3
     centre = lay.rooms_of('control')[0]  # the hospital is built around it
     cam_x = (centre.x + centre.w / 2) * T - screen.get_width() / zoom / 2
@@ -244,16 +261,37 @@ def run_ui(snapshots):
                 pygame.draw.rect(screen, HIGHLIGHT, (x - zoom, y - zoom, 2 * zoom, 2 * zoom))
 
         # Furniture and people together, back to front: whoever is behind something is covered by it
-        bodies = sorted((((a.py + FEET) * T, None, a) for a in actors), key=lambda s: s[0])
+        beat = time.perf_counter()
+        bodies = sorted((((a.py + (1.7 if a.lying else FEET)) * T, None, a) for a in actors), key=lambda s: s[0])
+        extras = []  # stretchers, keyboards, buckets: drawn in depth order too
+        for a in actors:
+            if a.stretcher:
+                extras.append(centred(stretcher[a.facing in ("left", "right")], a.px, a.py, (a.py + 1.7) * T - 1))
+            if a.cart:
+                extras.append(centred(stretcher[a.facing in ('left', 'right')], *a.cart, (a.cart[1] + 0.5) * T))
+            if a.action == 'typing':  # on the counter, beside its screen (the patient stands in front of the screen)
+                extras.append(centred(keyboard[int(beat * 8) % 2], a.px + 0.9, a.ty + 1.35, (a.ty + 2) * T + 1))
+            if a.action == 'mopping':
+                extras.append(centred(bucket, a.px + 0.8, a.py + 0.2, (a.py + FEET) * T))
+                extras.append(centred(mop[int(beat * 5) % 4], a.px - 0.35, a.py, (a.py + FEET) * T + 1))
+        extras.sort(key=lambda s: s[0])
         heads = []
-        for item in heapq.merge(props, bodies, key=lambda s: s[0]):
+        for item in heapq.merge(props, extras, bodies, key=lambda s: s[0]):
             if item[1] is not None:  # furniture: (depth, image, x, y) in world pixels
                 blit_scaled(item[1], (item[2] - cam_x) * zoom, (item[3] - cam_y) * zoom)
                 continue
             a = item[2]
             # Feet a bit below the tile centre; the body sticks up over the tile behind (3/4 view)
-            x, y = to_screen(a.px - CHAR_W / 2 / T, a.py + FEET - CHAR_H / T)
-            blit_scaled(frame(a), x, y)
+            if a.lying:
+                img = lying_img(a)
+                x, y = to_screen(a.px - img.get_width() / 2 / T, a.py - img.get_height() / 2 / T - 0.15)
+                blit_scaled(img, x, y)
+                y -= (CHAR_H - img.get_height()) * zoom  # bubbles and marks above the head as usual
+            else:
+                x, y = to_screen(a.px - CHAR_W / 2 / T, a.py + FEET - CHAR_H / T)
+                if a.action == 'typing':  # bobs with the keystrokes
+                    y -= zoom * (int(beat * 8) % 2)
+                blit_scaled(frame(a), x, y)
             heads.append((a, x + CHAR_W * zoom / 2, y))
             if a is selected:
                 pygame.draw.rect(screen, HIGHLIGHT, (x, y, CHAR_W * zoom, CHAR_H * zoom), 2)

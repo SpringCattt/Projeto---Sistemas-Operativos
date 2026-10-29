@@ -61,6 +61,7 @@ They share the building, so they synchronise:
 | Registered patients waiting for a triage nurse | a **queue** (producer–consumer) |
 | A doctor calls a patient and waits for them | two **events**: "I'm here" and "you can go" |
 | Only so many operating rooms and sinks | **semaphores** |
+| Two nurses meet at storage before bringing a stretcher | **condition + events** (rendezvous) |
 | Who handles each task | the **Boss**, a thread that scores everyone by distance, fatigue and how busy they are |
 | Two people blocking each other in a doorway | whoever has waited too long steps aside (no deadlock) |
 

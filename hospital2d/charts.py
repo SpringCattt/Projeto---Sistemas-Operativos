@@ -3,6 +3,7 @@
 import csv
 import os
 import sys
+import time
 
 import matplotlib
 
@@ -67,10 +68,15 @@ def main():
     a.legend()
 
     fig.tight_layout()
-    fig.savefig(OUT, dpi=110)
-    print(f'Saved {OUT}')
+    out = OUT
+    try:
+        fig.savefig(out, dpi=110)
+    except OSError:  # charts.png is still open in an image viewer that locks it: a new file instead
+        out = os.path.join(HERE, f'charts_{time.strftime("%H%M%S")}.png')
+        fig.savefig(out, dpi=110)
+    print(f'Saved {out}')
     if os.name == 'nt' and '--no-open' not in sys.argv:
-        os.startfile(OUT)
+        os.startfile(out)
 
 
 if __name__ == '__main__':

@@ -3,4 +3,4 @@ __pycache__/
 hospital2d/assets/third_party/
 hospital2d/learning.csv
 hospital2d/boss_brain.json
-hospital2d/charts.png
+hospital2d/charts*.png

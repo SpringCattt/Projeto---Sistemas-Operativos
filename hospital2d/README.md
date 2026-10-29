@@ -108,11 +108,25 @@ called them, or into staff rooms.
 ### The dispatcher ([`world.py`](world.py), [`staff.py`](staff.py))
 
 The dispatcher is a person: the Boss in the control room, whose thread runs the assignment loop. For every open
-task (consultation, fight, mess), most urgent first, it scores every actor of the right role and picks the lowest:
+task (consultation, stretcher, fight, mess), most urgent first, it guesses how long each actor of the right role
+would take to get it done and picks the quickest:
 
 ```
-score = walking distance to the task × W_DISTANCE + fatigue × W_FATIGUE  (+ W_BUSY if busy) (+ W_RESTING if resting)
+seconds = base + distance to the task × w_distance + fatigue × w_fatigue  (+ w_busy if busy) (+ w_resting if resting)
 ```
+
+**It learns from its mistakes.** When the actor finishes, it compares the real time with its guess and nudges each
+weight in the direction that would have made the guess better (normalised least mean squares; one set of weights
+per kind of task, starting from config's `W_*`). To let it learn without the window:
+
+```
+python learn.py           # sped up x8 (python learn.py 16 for x16); Ctrl+C stops it, run it again to go on
+python charts.py          # graphs of how it's going so far (charts.png), also while learn.py runs
+```
+
+`learn.py` saves what it learned every simulated minute in `boss_brain.json` (the game starts from it too) and adds
+a row to `learning.csv`: how wrong the guesses were, the weights, and the hospital's results (treated, gave up,
+waits by urgency). To run it without slowing the PC down: `start "" /low python learn.py`.
 
 The distance is the real one, walking around walls and furniture (a breadth-first search from the task, cached).
 Click the Boss (or press `B`) to watch it: a line from every busy member of staff to its task, a pulsing ring on
@@ -126,9 +140,11 @@ straight instead of zig-zagging.
   jumping between similar tasks. The interrupted patient goes back to the waiting room, keeping its place.
 * **Surgery** is never interrupted. The doctor takes a free operating room (semaphore), washes in its disinfection
   room (semaphore) and only then goes in, from the disinfection room — never straight from the corridor.
+* **Ambulances:** patients who need surgery arrive by ambulance, already triaged as Red, through Emergency's own
+  door at the back (the ambulance bay), so they never walk through the hospital.
 * **Red patients** wait lying in a bed in **Emergency**. When a doctor takes one, two ward nurses run to storage,
-  wait for each other there, bring the stretcher, and push the patient (lying on it) to the doctor's exam bed or
-  straight to surgery. Nurse, stretcher and nurse are one block of three tiles that moves together, like a train:
+  wait for each other there, bring the stretcher right next to the patient's bed (it slides across onto it) and push
+  it to the doctor's exam bed or straight to surgery, where it slides across onto the bed or table. Nurse, stretcher and nurse are one block of three tiles that moves together, like a train:
   the lead nurse's thread moves all three at once, so they can never come apart (it can also turn round).
 * **Running:** staff run to tasks in other rooms, faster the more urgent (`RUN_SPEED`). Someone running never queues
   behind someone slower or standing still: it looks a few tiles ahead and goes round them.

@@ -25,7 +25,7 @@ FURNITURE = {
     'biohazard': H + 'room_biohazard_bin', 'poster': H + 'room_anatomy_poster', 'cabinet': H + 'room_cabinet',
     'bedside': H + 'room_bedside_table', 'armchair': H + 'room_armchair', 'fridge': H + 'lab_refrigerator',
     'tray': H + 'operation_accessories_table_full', 'ultrasound': H + 'operation_ultrasound_machine',
-    'books': H + 'lab_books',
+    'books': H + 'lab_books', 'ambulance': C + 'ambulance',
 }
 STACKED = {'shelf'}  # one image repeated on every tile of the footprint
 LIFT = {'pc': 9, 'bell': 9, 'cake': 9, 'donuts': 9, 'books': 9}  # pixels up: they stand on a counter/desk top

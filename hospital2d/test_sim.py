@@ -81,6 +81,29 @@ def test_dispatcher():
     assert near.task is red  # Red pre-empts the Green consultation (gap 2), not the Yellow ones
 
 
+def test_learning():
+    """The dispatcher's guesses get better: here a task really takes 20 s plus 1 s per tile."""
+    now = [0.0]
+    d = Dispatcher(clock=lambda: now[0])
+    a = SimpleNamespace(id=1, name='Dr 1', role='doctor', tx=0, ty=0, fatigue=0.0, resting=False, task=None,
+                        inbox=queue.Queue())
+    d.staff = [a]
+    errors = []
+    for i in range(300):
+        a.tx = i % 40
+        task = Task('consult', 'doctor', 0, tile=(0, 0))
+        d.submit(task)
+        with d.cond:
+            d.assign()
+        a.inbox.get_nowait()
+        real = 20 + a.tx
+        errors.append(abs(real - task.guess[2]))
+        now[0] += real
+        d.finished(a, task, completed=True)
+    assert sum(errors[-20:]) / 20 < sum(errors[:20]) / 20 / 4, (errors[:5], errors[-5:])
+    assert d.learned == 300
+
+
 def test_line_and_theatres():
     line = Line()
     a, b = object(), object()
@@ -192,6 +215,19 @@ def test_stretcher():
         stop(h)
     assert h.stats['treated'] == 1, h.summary()
     assert any('on a stretcher' in t for _, t in h.events) and 'corridor' in rode, rode
+
+
+def test_ambulance():
+    """Someone who needs surgery arrives by ambulance: through Emergency's own door, straight to a bed there."""
+    h = Hospital(seed=10, n_doctors=1, n_surgeries=1, n_patients=0)
+    p = h.admit(info(2, surgery=True))
+    rooms = set()
+    h.start()
+    try:
+        assert until(lambda: rooms.add(getattr(h.lay.room_at[p.ty][p.tx], 'kind', 'door')) or p.lying, 30)
+    finally:
+        stop(h)
+    assert p.rank == 2 and rooms <= {'street', 'emergency', 'door'}, rooms
 
 
 def test_admin():

@@ -11,6 +11,8 @@
 #
 # Deadlock rule: a thread never holds two of these locks at the same time.
 import itertools
+import json
+import os
 import threading
 from collections import deque
 
@@ -119,6 +121,7 @@ class Task:
         self.done = threading.Event()
         self.interruptions = 0
         self.target, self.result = None, None  # fights: who started it, and how security ended it
+        self.guess = None  # (actor, features, seconds it should take, when) while someone is on it
 
     @property
     def urgency(self):  # a patient's condition can get worse while they wait
@@ -132,12 +135,21 @@ class Task:
         return f'{self.kind}{who} ({config.URGENCY_NAMES[self.urgency]})'
 
 
-class Dispatcher:
-    """The 'AI' that decides who does what. For every open task, most urgent first, it scores each actor of
-    the right role and gives the task to the lowest score:
+FEATURES = ('base', 'distance', 'fatigue', 'busy', 'resting')
+SCALES = (1, 20, 100, 1, 1)  # typical size of each feature: so all of them learn at a similar pace
+LEARN_RATE = 0.05
 
-        score = walking distance to the task * W_DISTANCE + fatigue * W_FATIGUE
-                (+ W_BUSY if busy, + W_RESTING if resting)
+
+class Dispatcher:
+    """The 'AI' that decides who does what. For every open task, most urgent first, it guesses how long each
+    actor of the right role would take to get it done, and gives it to the quickest:
+
+        seconds = base + distance to the task * w_distance + fatigue * w_fatigue
+                  (+ w_busy if busy, + w_resting if resting)        (one set of weights per kind of task)
+
+    It learns from its mistakes: when the actor finishes, it compares the real time with its guess and moves each
+    weight a little in the direction that would have made the guess better (least mean squares, normalised).
+    It starts from config's W_* and what it learns can be saved and loaded (learn.py).
 
     An actor busy with something only gets interrupted when the new task is at least PREEMPT_GAP urgency
     levels above it (so they don't keep jumping between similar tasks), and never during a surgery.
@@ -152,6 +164,24 @@ class Dispatcher:
         self.open = []
         self.staff = []  # actors that take tasks from here (doctors, security, cleaners)
         self.decisions = deque(maxlen=12)  # (time, text): what it decided and why, shown on the Boss's card
+        self.brain = {}  # task kind -> weights (FEATURES)
+        self.learned, self.error_sum = 0, 0.0  # tasks it learned from, and how wrong it was in total (seconds)
+
+    def weights(self, kind):
+        return self.brain.setdefault(kind, [0.0, config.W_DISTANCE, config.W_FATIGUE, config.W_BUSY, config.W_RESTING])
+
+    def load(self, path):
+        if os.path.exists(path):
+            with open(path, encoding='utf-8') as f:
+                saved = json.load(f)
+            self.brain, self.learned, self.error_sum = saved['brain'], saved['learned'], saved['error_sum']
+
+    def save(self, path):
+        with self.cond:
+            data = {'brain': self.brain, 'learned': self.learned, 'error_sum': self.error_sum}
+        with open(path + '.tmp', 'w', encoding='utf-8') as f:
+            json.dump(data, f, indent=1)
+        os.replace(path + '.tmp', path)  # never a half-written file, even if it's stopped right then
 
     def submit(self, task):
         with self.cond:
@@ -165,11 +195,26 @@ class Dispatcher:
             if task in self.open:
                 self.open.remove(task)
 
-    def finished(self, actor, task):
-        """The actor is done with `task` (or dropped it): it may get another one."""
+    def finished(self, actor, task, completed=False):
+        """The actor is done with `task` (or dropped it): it may get another one. If it got it done, the dispatcher
+        learns from how long that really took compared with its guess."""
         with self.cond:
             if actor.task is task:
                 actor.task = None
+            if completed and task.guess and task.guess[0] is actor:
+                _, x, guess, since = task.guess
+                error = (self.clock() - since) - guess
+                w = self.weights(task.kind)
+                z = [v / s for v, s in zip(x, SCALES)]
+                step = LEARN_RATE * error / (1 + sum(v * v for v in z))
+                for i in range(len(w)):
+                    w[i] += step * z[i] / SCALES[i]
+                    if i:  # being far, tired, busy or resting never makes anyone quicker
+                        w[i] = max(0.0, w[i])
+                self.learned += 1
+                self.error_sum += abs(error)
+            if task.guess and task.guess[0] is actor:  # (if it was handed to someone else meanwhile, that one's)
+                task.guess = None
             self.cond.notify()
 
     def set_preemptable(self, task, value):
@@ -191,6 +236,7 @@ class Dispatcher:
                 why += f', interrupting {actor.task.label()}'
             self.decisions.append((self.clock(), why))
             self.open.remove(task)
+            task.guess = (actor, self.features(actor, task), best, self.clock())
             actor.task = task  # if it was busy, it notices the inbox, drops its task and that one is re-submitted
             actor.inbox.put(task)
             given.append((task, actor))
@@ -202,13 +248,11 @@ class Dispatcher:
         busy = actor.task
         if busy is not None and (not busy.preemptable or task.urgency - busy.urgency < config.PREEMPT_GAP):
             return None
-        distance = self.distance(task.where(), (actor.tx, actor.ty))
-        score = distance * config.W_DISTANCE + actor.fatigue * config.W_FATIGUE
-        if busy is not None:
-            score += config.W_BUSY
-        if actor.resting:
-            score += config.W_RESTING
-        return score
+        return sum(w * v for w, v in zip(self.weights(task.kind), self.features(actor, task)))
+
+    def features(self, actor, task):
+        return (1.0, self.distance(task.where(), (actor.tx, actor.ty)), actor.fatigue,
+                float(actor.task is not None), float(actor.resting))
 
 
 class Theatres:

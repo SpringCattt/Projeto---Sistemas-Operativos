@@ -85,6 +85,9 @@ python test_sim.py      # the simulation with real threads (~1.5 min)
 python bench.py         # how far it scales
 ```
 
+**The Boss learns from its mistakes**: `python learn.py` runs the hospital without the window (Ctrl+C stops it) and
+`python charts.py` draws how it's going (needs `pip install matplotlib`).
+
 ## Credits
 
 - [Hospital Top-Down Pixel Pack](https://soppycraft.itch.io/top-down-hospital) — Soppycraft

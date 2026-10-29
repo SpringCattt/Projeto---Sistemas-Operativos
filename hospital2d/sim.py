@@ -2,6 +2,7 @@
 # each running in its own thread, plus one dispatcher thread. The process talks to the others only through queues:
 #   arrivals process -> new patients and surges      UI process <- snapshots, -> commands ('quit')
 #   log process      <- events and the final summary
+import os
 import queue
 import random
 import threading
@@ -15,12 +16,14 @@ from patients import Patient
 from staff import Boss, Cleaner, Doctor, Receptionist, Security, TriageNurse, WardNurse
 
 SPEEDS = (0.25, 0.5, 1, 2, 4, 8)  # what the admin tablet offers
+BRAIN = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'boss_brain.json')  # written by learn.py
 JOBS = {c.__name__: c for c in (Doctor, WardNurse, TriageNurse, Receptionist, Security, Cleaner)}
 from world import Dispatcher, Line, Task, Theatres, Transfer, World
 
 
 class Hospital:
-    def __init__(self, seed=None, n_doctors=None, n_surgeries=None, n_patients=None, log_out=None):
+    def __init__(self, seed=None, n_doctors=None, n_surgeries=None, n_patients=None, log_out=None, brain=None):
+        """brain: file with what the Boss learned (learn.py), to start from instead of config's weights."""
         self.lay = build_layout(n_doctors or config.MAX_DOCTORS,
                                 config.N_SURGERIES if n_surgeries is None else n_surgeries)
         self.room_kinds = frozenset(r.kind for r in self.lay.rooms)
@@ -32,6 +35,8 @@ class Hospital:
         self.line = Line()
         self.triage_queue = queue.Queue()
         self.dispatcher = Dispatcher(self.clock, self.lay.walk_distance)
+        if brain:
+            self.dispatcher.load(brain)
         self.theatres = Theatres(self.lay.rooms_of('surgery'))
         self.disinfection = {r: threading.Semaphore(max(1, len(spots))) for r, spots in self.lay.sink_spots.items()}
         self.log_out = log_out  # Queue to the log process (or None)
@@ -116,6 +121,9 @@ class Hospital:
             self.count('turned_away')
             self.log(f'{info["name"]} is turned away: the hospital is full')
             return None
+        if info['surgery'] and self.lay.ambulance_bay:  # by ambulance: in through Emergency's own door, triaged
+            self.log(f'{info["name"]} arrives by ambulance')
+            return self.add_waiting(info, arrive=self.lay.ambulance_bay)
         p = Patient(self, self.lay.street_edge, self.rng, info)
         with self.actors_lock:
             self.actors.append(p)
@@ -123,15 +131,16 @@ class Hospital:
             self._spawn(p.run, (), f'patient-{p.id}')
         return p
 
-    def add_waiting(self, info, room=None):
-        """A patient that is already triaged, sitting in a waiting room (the start of the day, and tests)."""
+    def add_waiting(self, info, room=None, arrive=None):
+        """A patient that is already triaged, sitting in a waiting room (the start of the day, and tests), or Red in
+        Emergency. arrive: tiles it appears on and walks from (the ambulance bay) instead of already being there."""
         rooms = self.lay.rooms_of('waiting')
         for er, beds in self.lay.emergency_beds.items():  # Red: a free bed in Emergency, if there is one
             if room is None and info['urgency'] == 2 and any(side not in self.world.occupied for side, _ in beds):
                 room = er
         room = room or rooms[len(self.patients()) % len(rooms)]
         spots = [side for side, _ in self.lay.emergency_beds.get(room, [])] or self.lay.waiting_seats.get(room)
-        p = Patient(self, spots or self.lay.free_tiles(room), self.rng, info, triaged=True)
+        p = Patient(self, arrive or spots or self.lay.free_tiles(room), self.rng, info, triaged=True)
         p.waiting_room = room
         self.queue_for_doctor(p)
         with self.actors_lock:
@@ -343,7 +352,7 @@ def run_simulation(snapshots, commands, arrivals, log_out, seed=None, speed=None
     arrivals: Queue <- arrivals process. log_out: Queue -> log process. speed: shared Value with the arrivals
     process (how fast simulated time runs, 0 = paused)."""
     snapshots.cancel_join_thread()  # on exit, don't wait for the UI to read snapshots nobody needs any more
-    h = Hospital(seed, log_out=log_out)
+    h = Hospital(seed, log_out=log_out, brain=BRAIN)
     h.log('The hospital opens')
     h.start()
     quit_, poke = threading.Event(), threading.Event()  # poke: an order was carried out, send a snapshot now

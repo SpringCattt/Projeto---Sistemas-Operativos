@@ -120,10 +120,12 @@ weight in the direction that would have made the guess better (normalised least 
 per kind of task, starting from config's `W_*`). To let it learn without the window:
 
 ```
-python learn.py           # sped up x8 (python learn.py 16 for x16); Ctrl+C stops it, run it again to go on
+python learn.py 8 4       # 4 hospitals at once at x8 (one process each); Ctrl+C stops it, run it again to go on
 python charts.py          # graphs of how it's going so far (charts.png), also while learn.py runs
 ```
 
+Each hospital learns on its own copy of the brain; every simulated minute the main process averages them
+(federated averaging) and sends the average back. Don't go above x8: people couldn't move as fast as they should.
 `learn.py` saves what it learned every simulated minute in `boss_brain.json` (the game starts from it too) and adds
 a row to `learning.csv`: how wrong the guesses were, the weights, and the hospital's results (treated, gave up,
 waits by urgency). To run it without slowing the PC down: `start "" /low python learn.py`.

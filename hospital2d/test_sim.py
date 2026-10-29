@@ -10,7 +10,7 @@ import config
 config.TIME_SCALE = 8
 
 from arrivals import new_patient  # noqa: E402 (after the speed-up)
-from sim import Hospital  # noqa: E402
+from sim import JOBS, Hospital  # noqa: E402
 from world import Dispatcher, Line, Task, Theatres  # noqa: E402
 
 PATIENT_ONLY_NOT = {'bar', 'control', 'storage', 'rest', 'disinfection'}  # rooms a patient never enters
@@ -172,18 +172,77 @@ def test_stretcher():
     """A Red patient waits lying in Emergency; two nurses bring it on a stretcher to the doctor's exam bed."""
     h = Hospital(seed=7, n_doctors=1, n_surgeries=0, n_patients=0)
     p = h.add_waiting(info(2))
-    rode = set()
+    rode, nurses = set(), [a for a in h.dispatcher.staff if a.role == 'nurse']
     h.start()
     try:
         end = time.time() + 60
         while time.time() < end and not h.stats['treated']:
-            if p.on_stretcher:
-                rode.add(h.lay.room_at[p.ty][p.tx].kind if h.lay.room_at[p.ty][p.tx] else 'door')
-            time.sleep(0.005)
+            with h.world.lock:  # the three are always on tiles next to each other, and drawn together
+                if p.on_stretcher and not p.path:
+                    room = h.lay.room_at[p.ty][p.tx]
+                    rode.add(room.kind if room else 'door')
+                    pushing = [n for n in nurses if n.task is not None and n.task.kind == 'stretcher']
+                    assert len(pushing) == 2, 'two nurses push the stretcher'
+                    for n in pushing:
+                        assert abs(n.tx - p.tx) + abs(n.ty - p.ty) == 1, 'the stretcher came apart'
+                        assert abs(n.px - p.px) + abs(n.py - p.py) <= 1.01, 'the stretcher came apart (drawn)'
+            time.sleep(0.003)
     finally:
         stop(h)
     assert h.stats['treated'] == 1, h.summary()
     assert any('on a stretcher' in t for _, t in h.events) and 'corridor' in rode, rode
+
+
+def test_admin():
+    """The admin tablet's orders: pause stops the clock, speed changes it, staff come and go, patients appear."""
+    h = Hospital(seed=8, n_doctors=2, n_surgeries=0, n_patients=0)
+    h.start()
+    try:
+        h.command(('pause',))
+        t0 = h.clock()
+        time.sleep(0.3)
+        assert h.clock() == t0 and h.speed == 0
+        h.command(('pause',))
+        h.command(('speed', -1))
+        assert h.rate == 4 and h.speed == 4
+        h.command(('patient', 2, False, 3, True))
+        assert sum(1 for p in h.patients() if p.rank == 2) == 3
+        doctors = len(h.working(JOBS['Doctor']))
+        h.command(('fire', 'Doctor'))
+        assert len(h.working(JOBS['Doctor'])) == doctors - 1
+        h.command(('hire', 'Doctor'))
+        h.command(('hire', 'Doctor'))  # no third room: refused
+        assert len(h.working(JOBS['Doctor'])) == doctors
+        h.command(('hire', 'Cleaner'))
+        new = h.actors[-1]
+        assert until(lambda: (new.tx, new.ty) == new.commute or new.doing != 'idle', 30), 'the new cleaner never came in'
+        assert until(lambda: h.stats['treated'] >= 1, 40), h.summary()
+    finally:
+        stop(h)
+
+
+def test_overtaking():
+    """Someone running doesn't queue behind someone walking the same way: it goes round them."""
+    h = Hospital(seed=9, n_doctors=1, n_surgeries=0, n_patients=0)  # not started: we move them by hand
+    walker, runner = [a for a in h.dispatcher.staff if a.role == 'nurse'][:2]
+    corridor = max((r for r in h.lay.rooms if r.name == 'Corridor'), key=lambda r: r.w)
+    x0, y0, x1, y1 = corridor.interior
+    y = (y0 + y1) // 2
+    with h.world.lock:
+        for a, x in ((runner, x0 + 1), (walker, x0 + 3)):
+            del h.world.occupied[(a.tx, a.ty)]
+            a.tx, a.ty, a.px, a.py = x, y, x + 0.5, y + 0.5
+            h.world.occupied[(x, y)] = a
+    walker.set_path(walker.route((x1, y)))
+    runner.speed = config.RUN_SPEED[2]
+    runner.set_path(runner.route((x1 - 2, y)))
+    assert runner.path and len(set(runner.path) - {(x, y) for x in range(x0, x1 + 1)}) == 0  # straight behind it
+    dt, t = 1 / 30, 0.0
+    while runner.path and t < 30:
+        walker.step(dt)
+        runner.step(dt)
+        t += dt
+    assert not runner.path and t < 7, f'the runner took {t:.1f} s: it queued behind the walker'
 
 
 def test_reactions():

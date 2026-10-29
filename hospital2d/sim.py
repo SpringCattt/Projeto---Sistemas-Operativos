@@ -13,6 +13,9 @@ from arrivals import new_patient
 from layout import build_layout
 from patients import Patient
 from staff import Boss, Cleaner, Doctor, Receptionist, Security, TriageNurse, WardNurse
+
+SPEEDS = (0.25, 0.5, 1, 2, 4, 8)  # what the admin tablet offers
+JOBS = {c.__name__: c for c in (Doctor, WardNurse, TriageNurse, Receptionist, Security, Cleaner)}
 from world import Dispatcher, Line, Task, Theatres, Transfer, World
 
 
@@ -24,7 +27,8 @@ class Hospital:
         self.rng = random.Random(seed)
         self.world = World()
         self.stop = threading.Event()
-        self.started = time.perf_counter()
+        self.rate, self.paused = config.TIME_SCALE, False
+        self._clock = (time.perf_counter(), 0.0, self.rate)  # (real time, simulated time, speed) at the last change
         self.line = Line()
         self.triage_queue = queue.Queue()
         self.dispatcher = Dispatcher(self.clock, self.lay.walk_distance)
@@ -58,6 +62,7 @@ class Hospital:
             for a in group:
                 a.area = area
         self.dispatcher.staff = doctors + security + cleaners + nurses
+        self.areas = {WardNurse: medical, Security: public, Cleaner: everywhere}
         boss = Boss(self, lay.control_seat, rng)
         self.actors = [boss] + staff + doctors + nurses + security + cleaners
 
@@ -67,8 +72,19 @@ class Hospital:
 
     # ---- running ------------------------------------------------------------------------------------------------
     def clock(self):
-        """Simulated seconds since the start."""
-        return (time.perf_counter() - self.started) * config.TIME_SCALE
+        """Simulated seconds since the start. Stops while paused; runs faster or slower with the speed."""
+        real, sim, speed = self._clock
+        return sim + (time.perf_counter() - real) * speed
+
+    @property
+    def speed(self):
+        """Simulated seconds per real second (0 while paused)."""
+        return self._clock[2]
+
+    def set_speed(self, rate=None, paused=None):
+        self.rate = self.rate if rate is None else rate
+        self.paused = self.paused if paused is None else paused
+        self._clock = (time.perf_counter(), self.clock(), 0.0 if self.paused else self.rate)  # one assignment: atomic
 
     def start(self):
         self.running = True
@@ -123,6 +139,95 @@ class Hospital:
         if self.running:
             self._spawn(p.run, (), f'patient-{p.id}')
         return p
+
+    # ---- the admin tablet ---------------------------------------------------------------------------------------
+    def command(self, cmd):
+        """An order from the admin tablet (UI process)."""
+        kind, *args = cmd
+        if kind == 'pause':
+            self.set_speed(paused=not self.paused)
+            self.log('Admin: ' + ('pause' if self.paused else 'resume'))
+        elif kind == 'speed':
+            i = min(range(len(SPEEDS)), key=lambda i: abs(SPEEDS[i] - self.rate))
+            self.set_speed(rate=SPEEDS[max(0, min(len(SPEEDS) - 1, i + args[0]))])
+            self.log(f'Admin: speed x{self.rate:g}')
+        elif kind == 'patient':  # urgency, surgery, how many, already triaged
+            urgency, surgery, n, triaged = args
+            for _ in range(n):
+                info = new_patient(self.rng, urgency, surgery)
+                self.add_waiting(info) if triaged else self.admit(info)
+            self.log(f'Admin: {n} {config.URGENCY_NAMES[urgency]} patient(s)' + (' (surgery)' if surgery else ''))
+        elif kind == 'surge':
+            self.surge(config.SURGE_SECONDS)
+            for _ in range(8):
+                self.admit(new_patient(self.rng))
+        elif kind in ('fight', 'vomit'):
+            waiting = [p for p in self.patients() if p.stage == 'waiting for a doctor' and not p.provoke]
+            if waiting:
+                self.rng.choice(waiting).provoke = kind
+            else:
+                self.log(f'Admin: nobody waiting who could {kind}')
+        elif kind == 'hire':
+            self.hire(JOBS[args[0]])
+        elif kind == 'fire':
+            self.fire(JOBS[args[0]])
+
+    def working(self, job):
+        with self.actors_lock:
+            return [a for a in self.actors if type(a) is job and not a.quitting]
+
+    def places(self, job):
+        """Desks, rooms or seats a job needs one of each (None: no limit)."""
+        lay = self.lay
+        return {Doctor: lay.rooms_of('doctor'), Receptionist: lay.reception_desks,
+                TriageNurse: lay.triage_desks}.get(job)
+
+    def hire(self, job):
+        """A new member of staff walks in from the street to its place."""
+        lay, rng = self.lay, self.rng
+        places = self.places(job)
+        if places is not None:
+            taken = {getattr(a, 'room', None) if job is Doctor else a.seat for a in self.working(job)}
+            free = [p for p in places if (p if job is Doctor else p[0] if job is Receptionist else p[1]) not in taken]
+            if not free:
+                return self.log(f'Admin: no free place for another {job.__name__}')
+            a = job(self, free[0], rng) if job is Doctor else job(self, *free[0], rng)
+            home = a.seat or (a.tx, a.ty) if job is Doctor else a.seat
+        else:
+            a = job(self, self.areas[job], rng)
+            a.area, home = self.areas[job], (a.tx, a.ty)
+        door = [t for r in lay.rooms if r.name == 'Exit' for t in lay.free_tiles(r) if t not in self.world.occupied]
+        with self.world.lock:  # it appears at the door, not at its place
+            if self.world.occupied.get((a.tx, a.ty)) is a:
+                del self.world.occupied[(a.tx, a.ty)]
+            a.tx, a.ty = rng.choice(door) if door else lay.street_edge[0]
+            a.px, a.py = a.tx + 0.5, a.ty + 0.5
+            self.world.occupied.setdefault((a.tx, a.ty), a)
+        a.commute = home
+        with self.actors_lock:
+            self.actors.append(a)
+        if job in (Doctor, WardNurse, Security, Cleaner):  # they get their work from the dispatcher
+            with self.dispatcher.cond:
+                self.dispatcher.staff.append(a)
+        if self.running:
+            self._spawn(a.run, (), f'{a.role}-{a.id}')
+        self.log(f'Admin: {a.label()} starts a shift')
+
+    def fire(self, job):
+        """Sends one home (an idle one if possible): it finishes what it's doing and walks out."""
+        staff = self.working(job)
+        if not staff:
+            return
+        a = min(staff, key=lambda a: (a.task is not None, a.doing != 'idle'))
+        a.quitting = True
+        with self.dispatcher.cond:
+            if a in self.dispatcher.staff:
+                self.dispatcher.staff.remove(a)  # no more tasks for it
+        self.log(f'Admin: {a.label()} goes home')
+
+    def staff_counts(self):
+        return {name: (len(self.working(job)), None if self.places(job) is None else len(self.places(job)))
+                for name, job in JOBS.items()}
 
     def surge(self, seconds):
         self.surge_until = self.clock() + seconds
@@ -210,6 +315,7 @@ class Hospital:
             events = list(self.events)
         return {'actors': [a.snapshot() for a in actors], 'messes': messes, 'events': events, 'stats': stats,
                 'time': self.clock(), 'surge': self.clock() < self.surge_until, 'sim_hz': self.sim_hz,
+                'speed': self.rate, 'paused': self.paused, 'staff': self.staff_counts(),
                 'keep_up': self.keep_up,
                 'line': len(self.line), 'triage': self.triage_queue.qsize(),
                 'patients': sum(1 for a in actors if a.role == 'patient')}
@@ -232,9 +338,10 @@ class Hospital:
         return '\n'.join(lines)
 
 
-def run_simulation(snapshots, commands, arrivals, log_out, seed=None):
-    """Process body. snapshots: Queue -> UI. commands: Queue <- UI ('quit'). arrivals: Queue <- arrivals process.
-    log_out: Queue -> log process."""
+def run_simulation(snapshots, commands, arrivals, log_out, seed=None, speed=None):
+    """Process body. snapshots: Queue -> UI. commands: Queue <- UI ('quit', or an admin tablet order).
+    arrivals: Queue <- arrivals process. log_out: Queue -> log process. speed: shared Value with the arrivals
+    process (how fast simulated time runs, 0 = paused)."""
     snapshots.cancel_join_thread()  # on exit, don't wait for the UI to read snapshots nobody needs any more
     h = Hospital(seed, log_out=log_out)
     h.log('The hospital opens')
@@ -243,8 +350,12 @@ def run_simulation(snapshots, commands, arrivals, log_out, seed=None):
     try:
         while True:
             try:  # the timeout paces the snapshots
-                if commands.get(timeout=1 / config.SNAPSHOT_HZ) == 'quit':
+                cmd = commands.get(timeout=1 / config.SNAPSHOT_HZ)
+                if cmd == 'quit':
                     break
+                h.command(cmd)
+                if speed is not None:
+                    speed.value = h.speed
             except queue.Empty:
                 pass
             while True:

@@ -33,6 +33,8 @@ PATIENT_LOOKS = [i for i in range(30) if all(i not in v for v in STAFF_LOOKS.val
 
 
 STEP_ASIDE_AFTER = 3.0  # simulated seconds blocked before giving way
+AROUND_RADIUS = 8  # going round people: only those this close count (the far ones will have moved by then)
+LOOK_AHEAD = 4  # tiles a runner looks ahead for someone slower in its way
 
 
 class Stopped(Exception):
@@ -41,6 +43,10 @@ class Stopped(Exception):
 
 class Interrupted(Exception):
     """A clearly more urgent task arrived while doing a pre-emptable one."""
+
+
+class OffShift(Exception):
+    """Sent home from the admin tablet: it walks out and its thread ends."""
 
 
 class Actor:
@@ -78,8 +84,8 @@ class Actor:
         self.speed = 1.0  # x ACTOR_SPEED (running)
         self.lying = self.on_stretcher = False
         self.action = None  # animation while working: 'typing', 'mopping'
-        self.pushing = None  # the nurse behind, while it leads an empty stretcher
-        self.prev = None  # the last tile it left: whoever follows it walks onto it (see follow)
+        self.pushing = None  # the empty stretcher, while it drives one (staff.WardNurse)
+        self.commute, self.quitting = None, False  # hired / sent home from the admin tablet
 
     def label(self):
         return f'{ROLE_LABEL[self.role]} {self.name}'
@@ -89,7 +95,13 @@ class Actor:
         """Thread body."""
         self._last = time.perf_counter()
         try:
-            self.life()
+            try:
+                if self.commute:  # just hired: walks in from the street first
+                    self.go(self.commute, timeout=240)
+                self.life()
+            except OffShift:
+                self.doing = 'going home'
+                self.walk_out()
         except Stopped:
             pass
         except Exception:
@@ -114,7 +126,7 @@ class Actor:
         if self.h.stop.wait(max(0.0, delay)):
             raise Stopped
         now = time.perf_counter()
-        dt = min(now - self._last, 0.1) * config.TIME_SCALE
+        dt = min(now - self._last, 0.1) * self.h.speed  # 0 while the world is paused
         self._last = now
         self.ticks += 1
         self.planned += period  # if it keeps up, this grows as fast as the clock (see Hospital.measure)
@@ -163,13 +175,27 @@ class Actor:
         return frozenset()
 
     def route(self, goal, around_people=False):
+        """around_people: also around everyone close by (they'd be in the way), not just walls and furniture."""
         blocked = set(self.no_go())
         with self.world.lock:
             if self.role != 'cleaner':  # everyone walks around a mess, except whoever comes to clean it
                 blocked |= self.world.messes.keys()
             if around_people:
-                blocked |= {t for t, a in self.world.occupied.items() if a is not self}
+                blocked |= {t for t, a in self.world.occupied.items() if a is not self and t != goal
+                            and abs(t[0] - self.tx) + abs(t[1] - self.ty) <= AROUND_RADIUS}
         return self.lay.path((self.tx, self.ty), goal, self.avoid(), blocked)
+
+    def in_my_way(self, other):
+        """Not worth waiting for: standing still, or slower than me."""
+        return not getattr(other, 'path', None) or getattr(other, 'speed', 0) < self.speed
+
+    def detour(self, extra):
+        """Takes a way round the people nearby if it's at most `extra` tiles longer than the current one."""
+        if not self.path:
+            return
+        r = self.route(self.path[-1], around_people=True)
+        if r and len(r) <= len(self.path) + extra:
+            self.set_path(r)
 
     def set_path(self, path):
         """Follow `path` from now on. If it was half-way into a tile the new path doesn't use, it gives that tile
@@ -193,14 +219,15 @@ class Actor:
             free = w.occupied.setdefault(nxt, self) is self
             if free and nxt != (self.tx, self.ty):
                 self.reserved = nxt
-        if not free:  # someone is there: wait a moment, then try to go around
+        if not free:  # someone is there: wait a moment (no time at all if it's in my way), then go round
+            other = w.occupied.get(nxt)
             self.blocked_for += dt
             self.stuck_for += dt
             if self.stuck_for > STEP_ASIDE_AFTER:
                 self.step_aside(nxt)
-            elif self.blocked_for > self.give_way_after:
+            elif self.blocked_for > (0.1 if self.in_my_way(other) else self.give_way_after):
                 self.blocked_for, self.give_way_after = 0.0, self.rng.uniform(0.4, 1.2)
-                self.set_path(self.route(self.path[-1], around_people=True))
+                self.detour(extra=12)
             return
         self.blocked_for = self.stuck_for = 0.0
         nx, ny = nxt
@@ -212,13 +239,16 @@ class Actor:
             with w.lock:  # leave the old tile and stand on the new one atomically
                 if nxt != (self.tx, self.ty) and w.occupied.get((self.tx, self.ty)) is self:
                     del w.occupied[(self.tx, self.ty)]
-                if nxt != (self.tx, self.ty):
-                    self.prev = (self.tx, self.ty)
                 self.tx, self.ty, self.reserved = nx, ny, None
             self.px, self.py = nx + 0.5, ny + 0.5
             self.path.pop(0)
             if not self.path:
                 self.settle()
+            elif self.speed > 1:  # running: overtakes whoever slower is just ahead instead of catching up on them
+                with w.lock:
+                    ahead = [w.occupied.get(t) for t in self.path[:LOOK_AHEAD]]
+                if any(a is not None and a is not self and self.in_my_way(a) for a in ahead):
+                    self.detour(extra=4)
         else:
             self.px += dx / dist * stride
             self.py += dy / dist * stride
@@ -260,20 +290,6 @@ class Actor:
                 return False
         return True
 
-    def follow(self, leader, done, gap=1):
-        """Walks in the steps of `leader()`, `gap` tiles behind, until done(). Out of its way if it turns back."""
-        while not done():
-            lead = leader()
-            if lead.path[:1] == [(self.tx, self.ty)]:
-                self.step_aside(None)
-            elif not self.path:
-                g = gap() if callable(gap) else gap
-                trail = lead.prev if lead.prev and lead.prev != (self.tx, self.ty) else None
-                r = self.route(trail) + [(lead.tx, lead.ty)] if trail else self.route((lead.tx, lead.ty))
-                if len(r) > g:
-                    self.set_path(r[:min(2, len(r) - g)])
-            self.step(self.tick())
-
     def lie_on(self, spot):
         """Climbs onto a bed / table centred at `spot` (in tiles); the tile it stands on stays its own."""
         self.lying = True
@@ -289,6 +305,17 @@ class Actor:
             dx, dy = to[0] - self.px, to[1] - self.py
             d, stride = math.hypot(dx, dy), speed * self.tick()
             self.px, self.py = to if d <= stride else (self.px + dx / d * stride, self.py + dy / d * stride)
+
+    def walk_out(self, timeout=120):
+        """Leaves by the nearest way out (the street in front, or the exits at both ends of the corridor)."""
+        end = self.h.clock() + timeout
+        while self.h.clock() < end:
+            free = [t for t in self.lay.exits if t not in self.world.occupied]
+            near = self.lay.distances_from((self.tx, self.ty))
+            if not free:
+                self.tick()
+            elif self.walk_to(min(free, key=lambda t: near.get(t, 10 ** 6))):
+                return
 
     def settle(self):
         if (self.tx, self.ty) in self.lay.seats:
@@ -328,5 +355,5 @@ class Actor:
                 'room': room.name if room else 'doorway', 'bubble': self.bubble, 'mark': None,
                 'speech': self.speech if self.h.clock() < self.speech_until else None,
                 'lying': self.lying, 'stretcher': self.on_stretcher, 'action': self.action,
-                'cart': ((self.px + self.pushing.px) / 2, (self.py + self.pushing.py) / 2) if self.pushing else None,
+                'cart': (self.pushing.px, self.pushing.py, self.pushing.facing) if self.pushing else None,
                 'card': [('Doing', self.doing)] + self.card()}

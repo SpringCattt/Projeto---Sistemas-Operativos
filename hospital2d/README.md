@@ -25,7 +25,12 @@ it into `assets/third_party/`:
 
 **Controls:** WASD / arrows or right-drag to move · mouse wheel to zoom · click a person for their card, or any tile
 of a room to see who is inside (the list is clickable) · `L` event log on/off · `B` what the Boss is doing
-(also shown when you click the Boss) · `ESC` closes the card.
+(also shown when you click the Boss) · `ESC` closes the card · `Tab` admin tablet · `Space` pause · `+`/`-` speed.
+
+**Admin tablet** (`Tab`): pause and speed (x0.25 to x8), send patients of any urgency (with or without surgery, at
+the door or already triaged, 1/5/20 at a time), trigger a surge, a fight or someone throwing up, and hire or send
+home staff while it runs (doctors, receptionists and triage nurses up to their rooms/desks; new staff walk in from
+the street, and whoever is sent home finishes what it's doing and walks out).
 
 ## The building
 
@@ -121,7 +126,10 @@ straight instead of zig-zagging.
   room (semaphore) and only then goes in, from the disinfection room — never straight from the corridor.
 * **Red patients** wait lying in a bed in **Emergency**. When a doctor takes one, two ward nurses run to storage,
   wait for each other there, bring the stretcher, and push the patient (lying on it) to the doctor's exam bed or
-  straight to surgery. Staff run to tasks in other rooms, faster the more urgent (`RUN_SPEED`).
+  straight to surgery. Nurse, stretcher and nurse are one block of three tiles that moves together, like a train:
+  the lead nurse's thread moves all three at once, so they can never come apart (it can also turn round).
+* **Running:** staff run to tasks in other rooms, faster the more urgent (`RUN_SPEED`). Someone running never queues
+  behind someone slower or standing still: it looks a few tiles ahead and goes round them.
 * **Fatigue** goes up with every task and down with rest; tired people work slower and get fewer tasks, and when
   they're exhausted they go to the rest room.
 

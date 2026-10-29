@@ -28,6 +28,7 @@ class Patient(Actor):
         self.gone = self.complaining = False
         self.waiting_room, self.waiting_since, self.triaged_at = None, None, None
         self.triaged = triaged
+        self.provoke = None  # 'fight' / 'vomit': ordered from the admin tablet (done by its own thread)
 
     def label(self):
         return f'{self.name} ({config.URGENCY_NAMES[self.rank]})' if self.rank is not None else self.name
@@ -159,6 +160,11 @@ class Patient(Actor):
                 self.stage = 'waiting for a doctor'
 
     def waiting_upkeep(self, dt):
+        if self.provoke == 'vomit':
+            self.provoke = None
+            self.vomit()
+        elif self.provoke == 'fight':
+            self.provoke, self.temperament, self.patience = None, 'aggressive', 0.0
         self.wander(dt)
         self.patience = max(0.0, self.patience - self.patience_loss * dt)
         now = self.h.clock()
@@ -238,14 +244,7 @@ class Patient(Actor):
             self.h.dispatcher.cancel(self.task)
         self.h.line.leave(self)
         self.stage, self.allowed = 'leaving', BASE_ROOMS | {'corridor', 'doctor', 'surgery'}
-        end = self.h.clock() + 120
-        while self.h.clock() < end:  # out by the nearest way out (corridor exits for whoever saw a doctor)
-            free = [t for t in self.lay.exits if t not in self.world.occupied]
-            near = self.lay.distances_from((self.tx, self.ty))
-            if not free:
-                self.tick()
-            elif self.walk_to(min(free, key=lambda t: near.get(t, 10 ** 6))):
-                break
+        self.walk_out()  # corridor exits for whoever saw a doctor
         # the thread ends here; the hospital removes it
 
     # ---- calls from staff -----------------------------------------------------------------------------------
@@ -289,15 +288,16 @@ class Patient(Actor):
         if call.stretcher:
             t = call.transfer
             self.stage = 'waiting for the stretcher'
-            if not self.wait_until(lambda: t.at_patient.is_set() or call.cancelled):
+            if not self.wait_until(lambda: t.at_patient.is_set() or t.aborted()) or t.aborted():
                 return None
             self.get_up()
-            self.lying = self.on_stretcher = True
+            self.lying = True  # the nurses put it on the stretcher (and on_stretcher)
             t.mounted.set()
             self.stage = f'on a stretcher, {call.stage}'
             self.allowed |= {'corridor', 'doctor', 'surgery', 'emergency'}
-            self.follow(lambda: t.lead, lambda: t.arrived.is_set() or call.cancelled)
-            if call.cancelled:
+            while not t.arrived.is_set():  # the nurses move it (and its tile) until it's there
+                self.tick()
+            if t.failed or call.cancelled:
                 return None
         while (self.tx, self.ty) != call.tile:
             if call.cancelled:

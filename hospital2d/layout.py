@@ -124,6 +124,8 @@ class Layout:
         ex, ey = rec.x + rec.w // 2, rec.y + rec.h
         by_distance = sorted(self.free_tiles(street), key=lambda t: abs(t[0] - ex) + abs(t[1] - ey))
         self.street_line, self.street_edge = by_distance[:20], by_distance[20:]
+        # Ways out: the far side of the street in front, and the exits at both ends of the corridor
+        self.exits = self.street_edge + [t for r in self.rooms if r.name == 'Exit' for t in self.free_tiles(r)]
 
         self.triage_desks = [(r, (f.x, f.y), (f.x + 1, f.y + 2))  # (room, nurse seat, patient chair)
                              for r in self.rooms_of('triage') for f in furniture_in(r, 'office_chair')]
@@ -162,11 +164,12 @@ class Layout:
 
     def walk_distance(self, a, b):
         """Tiles to walk from a to b, around walls and furniture (not people)."""
-        d = self._distances_from(a).get(b)
+        d = self.distances_from(a).get(b)
         return d if d is not None else 10 * (abs(a[0] - b[0]) + abs(a[1] - b[1]))
 
     @functools.lru_cache(maxsize=512)
-    def _distances_from(self, start):  # breadth-first search over the whole plan, cached per start tile
+    def distances_from(self, start):
+        """Walking distance from `start` to every tile: breadth-first search over the plan, cached per start."""
         dist, todo = {start: 0}, deque([start])
         while todo:
             x, y = todo.popleft()
@@ -247,19 +250,9 @@ def surgery_blocks(n):
     return blocks
 
 
-def round_doors(r):
-    """A door on each side of a round room (north, south, west, east), where the circle meets the axes."""
-    xs = (r.x + r.w // 2 - 1, r.x + r.w // 2)
-    ys = (r.y + r.h // 2 - 1, r.y + r.h // 2)
-    column = [y for y in range(r.y, r.y + r.h) if r.contains(xs[0], y)]
-    row = [x for x in range(r.x, r.x + r.w) if r.contains(x, ys[0])]
-    return [(xs[0], min(column) - 1, 2, 'h'), (xs[0], max(column) + 1, 2, 'h'),
-            (min(row) - 1, ys[0], 2, 'v'), (max(row) + 1, ys[0], 2, 'v')]
-
-
 def build_layout(n_doctors=config.MAX_DOCTORS, n_surgeries=config.N_SURGERIES):
     """The hospital is built around its centre: the Main Hall, with the dispatcher's round Control Room in the
-    middle. The main corridor runs through the hall (y 0..4) and out to both sides. Under the hall, the base
+    middle (sealed: no doors, the Boss is in there from the start and nobody else goes in). The main corridor runs through the hall (y 0..4) and out to both sides. Under the hall, the base
     block (always the same): street -> reception -> triage -> waiting rooms, with the bar. Every other room is
     added around the centre, each to whichever side is shortest so far: on top of the hall, or along the
     corridor (above or below it, left or right), so the hospital grows evenly around the control room."""
@@ -272,16 +265,17 @@ def build_layout(n_doctors=config.MAX_DOCTORS, n_surgeries=config.N_SURGERIES):
     w2 = Room('waiting', 'Waiting Room 2', 34, 4, 20, 14)
     street = Room('street', 'Street', 15, 23, 24, 4, walls=False)
     t1.partner, t2.partner = w1, w2
-    hall = Room('corridor', 'Main Hall', 12, -16, 30, 21)  # its bottom rows are the main corridor
-    control = Room('control', 'Control Room', 21, -12, 12, 12, round=True)
+    # Odd sizes, so the circle has a centre tile (where the Boss sits) and sits in the exact middle of the hall
+    hall = Room('corridor', 'Main Hall', 12, -16, 31, 21)  # its bottom rows are the main corridor
+    control = Room('control', 'Control Room', 21, -13, 13, 13, round=True)
     rooms = [w1, t1, bar, rec, t2, w2, street, hall, control]
-    doors = [door_top(w1), door_top(bar), door_top(w2),  # to the corridor / hall
+    wide = lambda r: (r.x + r.w // 2 - 1, r.y, 3, 'h')  # waiting rooms: lots of people in and out
+    doors = [wide(w1), door_top(bar), wide(w2),  # to the corridor / hall
              door_between(t1, rec), door_between(rec, t2),  # reception -> triage
              door_top(t1), door_top(t2),  # triage -> waiting room
              (rec.x, rec.y + 4, 2, 'v'), (rec.x + rec.w - 1, rec.y + 4, 2, 'v'),  # waiting room -> reception (way out)
              (rec.x + rec.w // 2 - 1, rec.y + rec.h - 1, 3, 'h'),  # big main entrance
              (hall.x, 1, 3, 'v'), (hall.x + hall.w - 1, 1, 3, 'v')]  # the corridor goes through the hall
-    doors += round_doors(control)
 
     # Where new rooms go. pos: x of the wall the next room leans on; step: +1 grows right, -1 left;
     # wall: y the rooms rest on (top rows: above it, door at the bottom) or hang from (bottom rows)
@@ -324,6 +318,10 @@ def build_layout(n_doctors=config.MAX_DOCTORS, n_surgeries=config.N_SURGERIES):
     right = max([w2.x + w2.w - 1] + [r.x + r.w - 1 for r in rooms if r.x > hall.x])
     rooms.append(Room('corridor', 'Corridor', left, 0, hall.x - left + 1, 5))
     rooms.append(Room('corridor', 'Corridor', hall.x + hall.w - 1, 0, right - hall.x - hall.w + 2, 5))
+    # ...and end in an exit to the street, so people who are done leave that way and don't walk back against
+    # the ones coming in through reception and the waiting rooms
+    rooms += [Room('street', 'Exit', left - 4, 0, 4, 5, walls=False), Room('street', 'Exit', right + 1, 0, 4, 5, walls=False)]
+    doors += [(left, 1, 3, 'v'), (right, 1, 3, 'v')]
 
     # Shift everything to positive coordinates, with a grass margin
     min_x, min_y = min(r.x for r in rooms), min(r.y for r in rooms)
@@ -372,9 +370,9 @@ def furnish(r):
         for x in range(x0 + 2, x1 - 1, 4):
             f += [Furniture('table', x, y1 - 1), Furniture('chair', x - 1, y1 - 1, False), Furniture('chair', x + 1, y1 - 1, False)]
     elif k == 'control':
-        # the dispatcher's desk in the middle of the round room, facing the south door, screens all around
-        f += [Furniture('office_chair', cx, cy, False), Furniture('desk', cx, cy + 1, w=2), Furniture('pc', cx, cy + 1),
-              Furniture('books', cx + 1, cy + 1), Furniture('tv', cx - 2, y0 + 1), Furniture('tv', cx + 3, y0 + 1),
+        # the dispatcher's desk in the middle of the round room, screens all around
+        f += [Furniture('office_chair', cx, cy, False), Furniture('desk', cx, cy + 1), Furniture('pc', cx, cy + 1),
+              Furniture('tv', cx - 2, y0 + 1), Furniture('tv', cx + 2, y0 + 1),
               Furniture('cabinet', x0 + 1, y1 - 2), Furniture('cabinet', x1 - 1, y1 - 2),
               Furniture('plant', x0 + 1, y0 + 2), Furniture('plant', x1 - 1, y0 + 2)]
     elif k == 'doctor':

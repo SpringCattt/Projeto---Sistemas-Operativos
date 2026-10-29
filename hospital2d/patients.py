@@ -146,6 +146,7 @@ class Patient(Actor):
             self.rank += 1  # the consultation task reads this, so the dispatcher sees it straight away
             self.waiting_since = now
             self.h.count('got_worse')
+            self.talk('worse')
             self.h.log(f'{self.name} is getting worse: now {config.URGENCY_NAMES[self.rank]}')
         if not self.path and self.rng.random() < config.VOMIT_CHANCE_PER_S[self.rank] * dt:
             self.vomit()
@@ -160,6 +161,10 @@ class Patient(Actor):
                     continue
                 self.world.messes[tile] = self.h.clock()
             self.say('~', 4)
+            self.talk('vomit')
+            for other in self.h.patients():  # the people around react
+                if other is not self and abs(other.tx - x) + abs(other.ty - y) <= 4 and self.rng.random() < 0.6:
+                    other.talk('eww', 2.5)
             self.patience = max(0.0, self.patience - 10)
             self.h.count('vomits')
             self.h.log(f'{self.label()} threw up')
@@ -169,6 +174,7 @@ class Patient(Actor):
     def out_of_patience(self):
         """'left', a doctor's call that came during a complaint, or None (calmed down, keeps waiting)."""
         if self.temperament == 'passive':
+            self.talk('give_up')
             self.h.count('gave_up')
             self.h.log(f'{self.label()} gives up and leaves')
             return 'left'
@@ -183,8 +189,10 @@ class Patient(Actor):
         rival = min(rivals, key=lambda a: abs(a.tx - self.tx) + abs(a.ty - self.ty), default=None)
         self.stage = 'fighting'
         self.say('!', 60)
+        self.talk('insult', 4)
         if rival is not None:
             rival.say('!', 6)
+            rival.talk('victim', 3)
             rival.patience = max(0.0, rival.patience - 15)
         self.h.count('fights')
         self.h.log(f'{self.label()} starts a fight' + (f' with {rival.name}' if rival else ''))
@@ -209,11 +217,12 @@ class Patient(Actor):
         self.h.line.leave(self)
         self.stage, self.allowed = 'leaving', BASE_ROOMS | {'corridor', 'doctor', 'surgery'}
         end = self.h.clock() + 120
-        while self.h.clock() < end:
-            free = [t for t in self.lay.street_edge if t not in self.world.occupied]
+        while self.h.clock() < end:  # out by the nearest way out (corridor exits for whoever saw a doctor)
+            free = [t for t in self.lay.exits if t not in self.world.occupied]
+            near = self.lay.distances_from((self.tx, self.ty))
             if not free:
                 self.tick()
-            elif self.walk_to(self.rng.choice(free)):
+            elif self.walk_to(min(free, key=lambda t: near.get(t, 10 ** 6))):
                 break
         # the thread ends here; the hospital removes it
 

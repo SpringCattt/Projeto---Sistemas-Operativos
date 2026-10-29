@@ -1,0 +1,95 @@
+# What people say in their speech bubbles. One line per phrase: situation | text
+# {reason} what the patient came for, {color} its urgency, {name} someone's first name.
+# Keep them short (they're pixel text). Lines starting with # are ignored.
+
+reception_hello | Next, please!
+reception_hello | Hi! Your name?
+reception_hello | How can I help?
+reception_hello | Good morning!
+reception_hello | Name and reason?
+patient_reason | {reason}...
+patient_reason | It's {reason}.
+patient_reason | I've got {reason}.
+patient_reason | Help... {reason}!
+reception_done | Wait for triage, please.
+reception_done | A nurse will call you.
+reception_done | Over there, please.
+complain | How much longer?!
+complain | I've been here for ages!
+complain | This is a joke!
+complain | Is anyone working?!
+complain | I want a doctor NOW!
+reception_calm | Please be patient.
+reception_calm | You're next soon!
+reception_calm | We're doing our best.
+reception_calm | Sorry for the wait.
+nurse_hello | Where does it hurt?
+nurse_hello | Let's take a look.
+nurse_hello | Sit down, please.
+nurse_hello | Any pain?
+nurse_result | You're {color}. Wait inside.
+nurse_result | {color}. A doctor will call.
+nurse_result | Code {color}. In you go.
+doctor_call | {name}? Come in!
+doctor_call | Next patient!
+doctor_call | Your turn, {name}!
+doctor_hello | What brings you here?
+doctor_hello | Let me see...
+doctor_hello | Say 'aaah'.
+doctor_hello | Hmm...
+patient_thanks | Thanks, doc!
+patient_thanks | Thank you!
+patient_thanks | I feel better!
+doctor_surgery | You need surgery.
+doctor_surgery | We have to operate.
+doctor_surgery | To the theatre!
+patient_surgery | Surgery?!
+patient_surgery | Oh no...
+doctor_emergency | Emergency! Sorry!
+doctor_emergency | Back in a minute!
+doctor_emergency | Red case, I must go!
+patient_dropped | Seriously?!
+patient_dropped | But I was first!
+patient_dropped | Unbelievable!
+insult | What are you looking at?!
+insult | You cut in line!
+insult | Move it, idiot!
+insult | That's MY seat!
+insult | Shut up already!
+insult | Who do you think you are?!
+victim | Hey!
+victim | Excuse me?!
+victim | Leave me alone!
+victim | Calm down!
+security_calm | Calm down, sir!
+security_calm | That's enough!
+security_calm | Easy there!
+security_out | You're out!
+security_out | Out. Now.
+security_out | Leave the building!
+vomit | Blergh...
+vomit | Ugh...
+vomit | I don't feel good...
+eww | Eww!
+eww | Gross!
+eww | Disgusting!
+eww | Oh no...
+cleaner | Who did this?
+cleaner | Again...
+cleaner | On it!
+worse | Ouch... it's worse.
+worse | I feel worse...
+worse | It hurts!
+give_up | Forget it, I'm leaving!
+give_up | I'll go elsewhere.
+give_up | Unbelievable. Bye!
+surge | Whoa, so many people!
+surge | What happened?!
+surge | Not again...
+surge | Busy day!
+boss_red | Red case! {name}, go!
+boss_red | {name}, emergency!
+boss_red | Priority one, {name}!
+rest | I need a break...
+rest | Coffee time.
+back | Back to work!

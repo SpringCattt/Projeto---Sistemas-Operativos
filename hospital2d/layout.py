@@ -15,6 +15,10 @@ SIZES = {
 }
 MARGIN = 3  # grass tiles around the building
 SEATS = {'chair', 'office_chair', 'bench', 'sofa'}  # furniture people sit on (every tile of a bench is a seat)
+# Just for looks: left out wherever it would leave a way through only one tile wide (see Layout)
+DECOR = {'plant', 'sanitizer', 'trash_bin', 'cabinet', 'biohazard', 'iv_stand', 'bp_monitor', 'eye_chart', 'poster',
+         'clock', 'tv', 'vending', 'soda', 'snacks', 'fridge', 'bedside', 'armchair', 'coffee', 'map_stand',
+         'exit_sign', 'ultrasound', 'monitor', 'tray'}
 DIRECTIONS = ((1, 0), (-1, 0), (0, 1), (0, -1))
 TURN = 0.001  # extra cost of a turn when planning a route
 
@@ -87,6 +91,12 @@ class Layout:
         self.furniture = [f for r in rooms for f in furnish(r)
                           if all(self.room_at[t[1]][t[0]] is r and t not in near_door for t in f.tiles())]
         self.solid = {t for f in self.furniture if f.solid for t in f.tiles()}
+        while True:  # one at a time: once one goes, the one across the way may not squeeze anything any more
+            squeezing = next((f for f in self.furniture if f.kind in DECOR and f.solid and self.squeezes(f)), None)
+            if squeezing is None:
+                break
+            self.furniture.remove(squeezing)
+            self.solid = {t for f in self.furniture if f.solid for t in f.tiles()}
 
         self.seats = {t for f in self.furniture if f.kind in SEATS for t in f.tiles()}
 
@@ -99,6 +109,16 @@ class Layout:
                 behind = range(max(counter_rows) + 1, y1 + 1) if r.flipped else range(y0, min(counter_rows))
                 self.staff_only |= {(x, y) for y in behind for x in range(x0, x1 + 1)}
         self._find_spots(near_door)
+
+    def squeezes(self, f):
+        """Does `f` leave a floor tile next to it with something solid (or a wall) right across?"""
+        mine = f.tiles()
+        for x, y in mine:
+            for dx, dy in DIRECTIONS:
+                n, across = (x + dx, y + dy), (x + 2 * dx, y + 2 * dy)
+                if n not in mine and self.walkable(*n) and n not in self.doors and not self.walkable(*across):
+                    return True
+        return False
 
     def _find_spots(self, near_door):
         """Named places the actors use: desks, the reception line, where to wait, where to operate..."""

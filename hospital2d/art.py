@@ -40,7 +40,8 @@ def image(name):
 
 
 def draw_layout(lay):
-    """Draws the whole floor plan once into a Surface (the camera only crops and scales it)."""
+    """Floor, walls and doors, drawn once into a Surface (the camera only crops and scales it).
+    Furniture is drawn every frame together with the actors (furniture_sprites), so people can be behind it."""
     surf = pygame.Surface((lay.width * T, lay.height * T))
     for y in range(lay.height):
         for x in range(lay.width):
@@ -55,25 +56,33 @@ def draw_layout(lay):
             else:
                 name = f'custom/floor_{room.kind}'
             surf.blit(image(name), (x * T, y * T))
+    return surf
 
+
+def furniture_sprites(lay):
+    """[(depth, image, x, y)] in world pixels, sorted back to front. depth is where the piece meets the floor:
+    whatever has a bigger depth is drawn later and covers it. Seats use their top edge instead, so whoever
+    sits on them is drawn over them."""
     counters = {(f.x, f.y) for f in lay.furniture if f.kind == 'counter'}
-    # Back to front, so taller pieces (3/4 view) overlap what is behind them
-    for f in sorted(lay.furniture, key=lambda f: f.y + f.h):
+    out = []
+    for f in lay.furniture:
+        depth = (f.y + f.h) * T if f.solid else f.y * T
         if f.kind == 'counter':
             left, right = (f.x - 1, f.y) in counters, (f.x + 1, f.y) in counters
             piece = 'm' if left and right else 'r' if left else 'l'
-            surf.blit(image(f'custom/counter_{piece}'), (f.x * T, f.y * T))
+            out.append((depth, image(f'custom/counter_{piece}'), f.x * T, f.y * T))
         elif f.kind == 'sofa':
             for i in range(f.w):
                 piece = 'l' if i == 0 else 'r' if i == f.w - 1 else 'm'
-                surf.blit(image(f'custom/sofa_{piece}'), ((f.x + i) * T, f.y * T))
+                out.append((depth, image(f'custom/sofa_{piece}'), (f.x + i) * T, f.y * T))
         elif f.kind in STACKED:
-            for x, y in f.tiles():
-                surf.blit(image(FURNITURE[f.kind]), (x * T, y * T))
+            out += [(depth, image(FURNITURE[f.kind]), x * T, y * T) for x, y in f.tiles()]
         else:  # centred on the footprint, standing on its bottom edge
             img = image(FURNITURE[f.kind])
-            surf.blit(img, ((f.x + f.w / 2) * T - img.get_width() // 2, (f.y + f.h) * T - img.get_height() - LIFT.get(f.kind, 0)))
-    return surf
+            out.append((depth, img, (f.x + f.w / 2) * T - img.get_width() // 2,
+                        (f.y + f.h) * T - img.get_height() - LIFT.get(f.kind, 0)))
+    out.sort(key=lambda s: s[0])  # stable: things standing on a counter/desk stay after it
+    return out
 
 
 # --- Characters (Jephed's Top Down Pixel Art Characters): 4 rows (down, left, right, up) x 3 frames of 20x32 ---

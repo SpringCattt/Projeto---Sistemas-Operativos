@@ -175,7 +175,10 @@ class Layout:
         self.table_spots = {r: bed_spot(furniture_in(r, 'operating_table')[0])[1] for r in self.rooms_of('surgery')}
         self.emergency_beds = {r: [b for b in map(bed_spot, furniture_in(r, 'bed')) if b[0]]
                                for r in self.rooms_of('emergency')}
-        self.stretcher_spots = [t for r in self.rooms_of('storage') for t in self.free_tiles(r)]
+        # Stretchers are picked up and left in the open part of storage, not in the narrow aisles between shelves
+        shelf_rows = {y for f in self.furniture if f.kind == 'shelf' for _, y in f.tiles()}
+        self.stretcher_spots = [t for r in self.rooms_of('storage') for t in self.free_tiles(r)
+                                if t[1] not in shelf_rows]
         self.waiting_seats = {r: [t for t in self.free_tiles(r) if t in self.seats] for r in self.rooms_of('waiting')}
         self.control_seat = next((f.x, f.y) for r in self.rooms_of('control') for f in furniture_in(r, 'office_chair'))
         self.rest_spots = [t for r in self.rooms_of('rest') for t in self.free_tiles(r) if t in self.seats]
@@ -435,8 +438,7 @@ def furnish(r):
               Furniture('plant', x0, y1), Furniture('bedside', x1 - 2, y0 + 2), Furniture('armchair', x0, y0 + 3),
               Furniture('fridge', x1 - 1, y0), Furniture('clock', x0 + 4, y0), Furniture('tv', x0 + 2, y1)]
     elif k == 'corridor':
-        f += [Furniture('plant', x, y) for x in range(x0 + 6, x1, 12) for y in (y0, y1)]
-        f += [Furniture('sanitizer', x, y0) for x in range(x0 + 12, x1, 12)]
+        f += [Furniture('sanitizer', x, y0) for x in range(x0 + 12, x1, 12)]  # no plants: it's for walking
         f += [Furniture('bench', x, y1, False, w=3) for x in range(x0 + 1, x1 - 3, 24)]
     if r.flipped:
         for item in f:

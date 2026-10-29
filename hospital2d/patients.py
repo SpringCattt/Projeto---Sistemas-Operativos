@@ -290,8 +290,7 @@ class Patient(Actor):
             self.stage = 'waiting for the stretcher'
             if not self.wait_until(lambda: t.at_patient.is_set() or t.aborted()) or t.aborted():
                 return None
-            self.get_up()
-            self.lying = True  # the nurses put it on the stretcher (and on_stretcher)
+            self.lying = True  # it stays lying: the nurses slide it from the bed onto the stretcher (on_stretcher)
             t.mounted.set()
             self.stage = f'on a stretcher, {call.stage}'
             self.allowed |= {'corridor', 'doctor', 'surgery', 'emergency'}

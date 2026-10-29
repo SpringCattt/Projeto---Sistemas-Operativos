@@ -146,6 +146,7 @@ class Layout:
         self.street_line, self.street_edge = by_distance[:20], by_distance[20:]
         # Ways out: the far side of the street in front, and the exits at both ends of the corridor
         self.exits = self.street_edge + [t for r in self.rooms if r.name == 'Exit' for t in self.free_tiles(r)]
+        self.ambulance_bay = [t for r in self.rooms if r.name == 'Ambulance Bay' for t in self.free_tiles(r)]
 
         self.triage_desks = [(r, (f.x, f.y), (f.x + 1, f.y + 2))  # (room, nurse seat, patient chair)
                              for r in self.rooms_of('triage') for f in furniture_in(r, 'office_chair')]
@@ -344,6 +345,10 @@ def build_layout(n_doctors=config.MAX_DOCTORS, n_surgeries=config.N_SURGERIES):
             row['pos'] = x + w - 1 if row['step'] > 0 else x
             # Surgery has a corridor door (patients); doctors come in through disinfection
             doors.append(door_top(r) if r.flipped else door_bottom(r))
+            if kind == 'emergency':  # its own way in, at the back (which always faces outside): the ambulance bay
+                rooms.append(Room('street', 'Ambulance Bay', r.x, r.y + r.h if r.flipped else r.y - 4, r.w, 4,
+                                  walls=False))
+                doors.append(door_bottom(r) if r.flipped else door_top(r))
             if prev and 'disinfection' in (prev.kind, r.kind):
                 doors.append(door_between(prev, r) if row['step'] > 0 else door_between(r, prev))
                 surgery, disinfection = (prev, r) if r.kind == 'disinfection' else (r, prev)
@@ -437,6 +442,8 @@ def furnish(r):
               Furniture('coffee', x1, y0), Furniture('bed', x1 - 1, y0 + 2, h=2), Furniture('bed', x1, y0 + 2, h=2),
               Furniture('plant', x0, y1), Furniture('bedside', x1 - 2, y0 + 2), Furniture('armchair', x0, y0 + 3),
               Furniture('fridge', x1 - 1, y0), Furniture('clock', x0 + 4, y0), Furniture('tv', x0 + 2, y1)]
+    elif r.name == 'Ambulance Bay':
+        f += [Furniture('ambulance', x0 + 2, y0, w=2, h=3)]
     elif k == 'corridor':
         f += [Furniture('sanitizer', x, y0) for x in range(x0 + 12, x1, 12)]  # no plants: it's for walking
         f += [Furniture('bench', x, y1, False, w=3) for x in range(x0 + 1, x1 - 3, 24)]

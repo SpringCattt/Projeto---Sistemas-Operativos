@@ -77,7 +77,9 @@ class Boss(Actor):
     def card(self):
         d = self.h.dispatcher
         busy = sum(1 for a in d.staff if a.task is not None)
-        return [('Open tasks', len(d.open)), ('Tasks given', self.given), ('Staff busy', f'{busy}/{len(d.staff)}')]
+        error = f'{d.error_sum / d.learned:.0f} s' if d.learned else '-'
+        return [('Open tasks', len(d.open)), ('Tasks given', self.given), ('Staff busy', f'{busy}/{len(d.staff)}'),
+                ('Learned from', f'{d.learned} tasks'), ('Guess off by', error)]
 
     def snapshot(self):
         """Adds what the dispatcher is doing: each task being done (who, where), the open ones, its last decisions."""
@@ -194,9 +196,11 @@ class TaskStaff(Staff):
             here, there = self.lay.room_at[self.ty][self.tx], self.lay.room_at[task.where()[1]][task.where()[0]]
             if here is not there:  # off to another room: runs, faster the more urgent
                 self.speed = config.RUN_SPEED[task.urgency]
+            completed = False
             try:
                 if not task.cancelled:
                     self.handle(task)
+                    completed = True
             except Interrupted:
                 task.interruptions += 1
                 self.h.count('interruptions')
@@ -204,7 +208,7 @@ class TaskStaff(Staff):
                 self.h.dispatcher.submit(task)
             finally:
                 self.handling, self.doing, self.speed, self.action, self.pushing = None, 'idle', 1.0, None, None
-                self.h.dispatcher.finished(self, task)
+                self.h.dispatcher.finished(self, task, completed)
 
     def next_task(self):
         while True:
@@ -499,7 +503,8 @@ class WardNurse(TaskStaff):
             if not self.wait_until(lambda: t.formed.is_set() or t.failed, timeout=60) or t.failed:
                 return
             # The empty stretcher goes next to the patient, who climbs on
-            if not self.drive(train, *self.stop_beside((p.tx, p.ty), train)) or t.aborted():
+            # The empty stretcher goes right next to the bed the patient is lying on, who slides across onto it
+            if not self.drive(train, *self.stop_beside(self.bed((p.px, p.py)), train)) or t.aborted():
                 return
             t.at_patient.set()
             if not self.wait_until(lambda: t.mounted.is_set() or t.aborted(), timeout=30) or t.aborted():
@@ -507,9 +512,11 @@ class WardNurse(TaskStaff):
             self.swap(train, cart, p)
             self.pushing = None
             self.h.log(f'{self.label()} and {back.label()} take {p.label()} on a stretcher')
-            delivered = self.drive(train, *self.stop_beside(s.tile, train, with_patient=True), with_patient=True)
+            target = self.bed(s.lie) if s.lie else [s.tile]  # next to the exam bed / operating table
+            delivered = self.drive(train, *self.stop_beside(target, train, with_patient=True, keep_free=s.tile),
+                                   with_patient=True)
             if delivered and self.world.occupied.get(s.tile, p) is p:
-                self.swap(train, p, cart, to=s.tile)  # off the stretcher, onto its place (bed side, theatre)
+                self.swap(train, p, cart, to=s.tile, onto=s.lie)  # straight onto the bed / table
             else:  # couldn't get there: it gets off where it is, and the doctor will call it again
                 t.failed = True
                 s.cancel()
@@ -568,21 +575,28 @@ class WardNurse(TaskStaff):
                 self.tick()
         return None
 
-    def stop_beside(self, tile, train, with_patient=False):
-        """Where the front has to go so the middle of the train ends up next to `tile`: through a free tile M
-        beside it, and one more step to G. Returns (M, G); (tile, None) if there's no such room."""
+    def bed(self, spot):
+        """The tiles of the bed / table someone lies on with its middle at `spot`."""
+        t = (int(spot[0]), int(spot[1]))
+        return next((f.tiles() for f in self.lay.furniture if t in f.tiles()), [t])
+
+    def stop_beside(self, tiles, train, with_patient=False, keep_free=None):
+        """Where the front has to go so the middle of the train (the stretcher) ends up right next to `tiles` (a
+        bed): through a free tile M beside it, and one more step to G. Returns (M, G); (a tile, None) if there's
+        no such room. keep_free: a tile the stretcher mustn't stop on (where the patient will be)."""
         def ok(x):
-            if not self.lay.walkable(*x) or x in self.world.messes or self.world.occupied.get(x) not in (None, *train):
+            if not self.lay.walkable(*x) or x in self.world.messes or self.world.occupied.get(x) not in (None, *train) \
+                    or x == keep_free or x in tiles:
                 return False
             room = self.lay.room_at[x[1]][x[0]]
             return not with_patient or (x not in self.lay.staff_only and (room is None or room.kind not in PATIENT_NEVER))
         near = self.lay.distances_from((train[0].tx, train[0].ty))
-        options = [(near.get(m, 10 ** 6), m, g) for m in neighbours(tile) if ok(m)
-                   for g in neighbours(m) if g != tile and ok(g)]
+        options = [(near.get(m, 10 ** 6), m, g) for m in {n for t in tiles for n in neighbours(t)} if ok(m)
+                   for g in neighbours(m) if ok(g)]
         if options:
             _, m, g = min(options)
             return m, g
-        return tile, None
+        return (keep_free or tiles[0]), None
 
     def drive(self, train, goal, last=None, with_patient=False, timeout=180, yielding=False):
         """Moves the train (front, middle, back) until its front reaches `goal`, then `last` if given. Each step,
@@ -692,9 +706,10 @@ class WardNurse(TaskStaff):
         for m in train:
             m.path = []
 
-    def swap(self, train, old, new, to=None):
-        """`new` takes the place of `old` in the middle of the train (the patient gets on: old is the stretcher),
-        or `old` moves off it to `to` and `new` (the stretcher) stays (the patient gets off)."""
+    def swap(self, train, old, new, to=None, onto=None):
+        """`new` takes the place of `old` in the middle of the train (the patient slides from its bed onto the
+        stretcher: old is the stretcher), or `old` gets off: its tile becomes `to` and it slides across onto the
+        bed / table whose middle is `onto` (or onto `to` itself), while `new` (the stretcher) stays."""
         mid = (old.tx, old.ty)
         with self.world.lock:
             occ = self.world.occupied
@@ -711,7 +726,7 @@ class WardNurse(TaskStaff):
                 occ[mid] = new
                 old.tx, old.ty = to
                 new.tx, new.ty, new.px, new.py, new.facing = mid[0], mid[1], old.px, old.py, old.facing
-                goal = (to[0] + 0.5, to[1] + 0.5)
+                goal = (onto[0], onto[1] - 0.1) if onto else (to[0] + 0.5, to[1] + 0.5)  # as Actor.lie_on
                 mover = old
                 old.on_stretcher = False
         train[1] = new

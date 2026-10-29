@@ -54,6 +54,11 @@ for n_doctors, n_surgeries in ((1, 1), (5, 2), (100, 3)):
     assert all(t.partner.kind == 'waiting' for t in lay.rooms_of('triage')) and lay.rest_spots
     assert all(len(b) >= 2 for b in lay.emergency_beds.values()) and lay.stretcher_spots
     assert all(side for side, _ in lay.exam_spots.values())
+    # The ambulance bay leads straight into Emergency, without crossing any other room
+    em = lay.rooms_of('emergency')[0]
+    route = lay.path(lay.ambulance_bay[0], lay.emergency_beds[em][0][0])
+    assert lay.ambulance_bay and route and {lay.room_at[y][x].kind for x, y in route if lay.room_at[y][x]} <= {
+        'street', 'emergency'}
     # Decorations never leave a way through only one tile wide
     assert not [f for f in lay.furniture if f.kind in DECOR and f.solid and lay.squeezes(f)]
 print('ok')

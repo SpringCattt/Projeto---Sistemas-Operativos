@@ -1,1 +1,2 @@
 pygame-ce
+matplotlib  # only for charts.py

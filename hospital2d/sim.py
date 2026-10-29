@@ -22,8 +22,10 @@ from world import Dispatcher, Line, Task, Theatres, Transfer, World
 
 
 class Hospital:
-    def __init__(self, seed=None, n_doctors=None, n_surgeries=None, n_patients=None, log_out=None, brain=None):
-        """brain: file with what the Boss learned (learn.py), to start from instead of config's weights."""
+    def __init__(self, seed=None, n_doctors=None, n_surgeries=None, n_patients=None, log_out=None, brain=None,
+                 on_call=False):
+        """brain: file with what the Boss learned (learn.py), to start from instead of config's weights.
+        on_call: the Boss calls in staff on call when work piles up (config.ON_CALL); their doctor's rooms start empty."""
         self.lay = build_layout(n_doctors or config.MAX_DOCTORS,
                                 config.N_SURGERIES if n_surgeries is None else n_surgeries)
         self.room_kinds = frozenset(r.kind for r in self.lay.rooms)
@@ -53,7 +55,11 @@ class Hospital:
         lay, rng = self.lay, self.rng
         staff = [Receptionist(self, seat, front, rng) for seat, front in lay.reception_desks]
         staff += [TriageNurse(self, room, seat, chair, rng) for room, seat, chair in lay.triage_desks]
-        doctors = [Doctor(self, room, rng) for room in lay.rooms_of('doctor')]
+        rooms = lay.rooms_of('doctor')
+        if on_call:  # the farthest rooms wait for the doctors on call
+            rooms = rooms[:max(1, len(rooms) - config.ON_CALL.get('Doctor', 0))]
+        doctors = [Doctor(self, room, rng) for room in rooms]
+        self.on_call, self.last_call, self.quiet_since = on_call, {}, {}
         medical = [t for k in ('corridor', 'surgery', 'disinfection', 'storage')
                    for r in lay.rooms_of(k) for t in lay.free_tiles(r) if t not in lay.seats]
         public = [t for k in ('waiting', 'reception') for r in lay.rooms_of(k) for t in lay.free_tiles(r)
@@ -191,8 +197,8 @@ class Hospital:
         return {Doctor: lay.rooms_of('doctor'), Receptionist: lay.reception_desks,
                 TriageNurse: lay.triage_desks}.get(job)
 
-    def hire(self, job):
-        """A new member of staff walks in from the street to its place."""
+    def hire(self, job, on_call=False):
+        """A new member of staff walks in from the street to its place (on_call: the Boss called it in)."""
         lay, rng = self.lay, self.rng
         places = self.places(job)
         if places is not None:
@@ -220,11 +226,12 @@ class Hospital:
                 self.dispatcher.staff.append(a)
         if self.running:
             self._spawn(a.run, (), f'{a.role}-{a.id}')
-        self.log(f'Admin: {a.label()} starts a shift')
+        a.on_call = on_call
+        self.log(f'Boss calls in {a.label()} (on call)' if on_call else f'Admin: {a.label()} starts a shift')
 
-    def fire(self, job):
+    def fire(self, job, on_call=False):
         """Sends one home (an idle one if possible): it finishes what it's doing and walks out."""
-        staff = self.working(job)
+        staff = [a for a in self.working(job) if a.on_call or not on_call]  # on_call: only those called in
         if not staff:
             return
         a = min(staff, key=lambda a: (a.task is not None, a.doing != 'idle'))
@@ -232,7 +239,33 @@ class Hospital:
         with self.dispatcher.cond:
             if a in self.dispatcher.staff:
                 self.dispatcher.staff.remove(a)  # no more tasks for it
-        self.log(f'Admin: {a.label()} goes home')
+        self.log(f'Boss sends {a.label()} home: it\'s quiet again' if on_call else f'Admin: {a.label()} goes home')
+
+    def staffing(self):
+        """The Boss calls in staff on call when tasks pile up for a role, and sends them home once it has been
+        quiet for a while, like a real shift (config.ON_CALL). Called by the Boss's thread."""
+        now, d = self.clock(), self.dispatcher
+        with d.cond:
+            waiting = Counter(t.role for t in d.open)
+            free = Counter(a.role for a in d.staff if a.task is None and not a.resting)
+        for name, most in config.ON_CALL.items():
+            job = JOBS[name]
+            called = [a for a in self.working(job) if a.on_call]
+            places = self.places(job)
+            if waiting[job.role] >= free[job.role] + config.CALL_IN_AT:
+                self.quiet_since[name] = None
+                room = places is None or len(self.working(job)) < len(places)
+                if room and len(called) < most and now - self.last_call.get(name, -10 ** 9) > config.CALL_EVERY_S:
+                    self.last_call[name] = now
+                    self.hire(job, on_call=True)
+            elif waiting[job.role]:
+                self.quiet_since[name] = None
+            else:
+                if self.quiet_since.get(name) is None:
+                    self.quiet_since[name] = now
+                if called and now - self.quiet_since[name] > config.SEND_HOME_AFTER_S:
+                    self.quiet_since[name] = now
+                    self.fire(job, on_call=True)
 
     def staff_counts(self):
         return {name: (len(self.working(job)), None if self.places(job) is None else len(self.places(job)))
@@ -352,7 +385,7 @@ def run_simulation(snapshots, commands, arrivals, log_out, seed=None, speed=None
     arrivals: Queue <- arrivals process. log_out: Queue -> log process. speed: shared Value with the arrivals
     process (how fast simulated time runs, 0 = paused)."""
     snapshots.cancel_join_thread()  # on exit, don't wait for the UI to read snapshots nobody needs any more
-    h = Hospital(seed, log_out=log_out, brain=BRAIN)
+    h = Hospital(seed, log_out=log_out, brain=BRAIN, on_call=True)
     h.log('The hospital opens')
     h.start()
     quit_, poke = threading.Event(), threading.Event()  # poke: an order was carried out, send a snapshot now

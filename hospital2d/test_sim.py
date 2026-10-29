@@ -57,7 +57,7 @@ def test_dispatcher():
                                inbox=queue.Queue())
 
     def consult(rank):
-        return Task('consult', 'doctor', rank, patient=SimpleNamespace(name='P', rank=rank, tx=0, ty=0))
+        return Task('consult', 'doctor', rank, patient=SimpleNamespace(name='P', rank=rank, patience=100, tx=0, ty=0))
 
     def assign(task):
         d.submit(task)
@@ -79,6 +79,16 @@ def test_dispatcher():
     assert yellow2 in d.open  # everyone busy, and Yellow is not 2 levels above anything
     assign(red)
     assert near.task is red  # Red pre-empts the Green consultation (gap 2), not the Yellow ones
+
+
+def test_priority():
+    """Who goes first: most urgent by default; with weight on impatience, whoever is about to give up."""
+    d = Dispatcher(clock=lambda: 0)
+    calm = Task('consult', 'doctor', 0, patient=SimpleNamespace(name='Calm', rank=1, patience=100, tx=0, ty=0))
+    fed_up = Task('consult', 'doctor', 0, patient=SimpleNamespace(name='Fed up', rank=0, patience=5, tx=0, ty=0))
+    assert d.priority(calm) > d.priority(fed_up)  # Yellow before Green
+    d.policy = [10.0, 0.0, 30.0]
+    assert d.priority(fed_up) > d.priority(calm)
 
 
 def test_learning():
@@ -228,6 +238,23 @@ def test_ambulance():
     finally:
         stop(h)
     assert p.rank == 2 and rooms <= {'street', 'emergency', 'door'}, rooms
+
+
+def test_on_call():
+    """Work piles up: the Boss calls in doctors on call (rooms waiting for them); when it's quiet, it sends them home."""
+    with settings(CALL_EVERY_S=10, SEND_HOME_AFTER_S=20, CONSULT_S=[(4, 4)] * 3):
+        h = Hospital(seed=11, n_doctors=4, n_surgeries=0, n_patients=0, on_call=True)
+        doctors = lambda: len(h.working(JOBS['Doctor']))
+        assert doctors() == 1
+        for _ in range(8):
+            h.add_waiting(info(0))
+        h.start()
+        try:
+            assert until(lambda: doctors() >= 3, 30), 'nobody was called in'
+            assert any('calls in' in t for _, t in h.events)
+            assert until(lambda: doctors() == 1, 90), 'the doctors on call never went home'
+        finally:
+            stop(h)
 
 
 def test_admin():

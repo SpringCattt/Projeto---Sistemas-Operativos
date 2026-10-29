@@ -11,7 +11,6 @@ matplotlib.use('Agg')  # straight to a file, no window
 import matplotlib.pyplot as plt  # noqa: E402
 
 from learn import CSV, HERE  # noqa: E402
-from world import FEATURES  # noqa: E402
 
 OUT = os.path.join(HERE, 'charts.png')
 
@@ -31,40 +30,39 @@ def smooth(values, n=10):
 
 def main():
     if not os.path.exists(CSV):
-        sys.exit('No learning.csv yet: run python learn.py first (it writes a row every simulated minute).')
+        sys.exit('No learning.csv yet: run python learn.py first (it writes a row every round).')
     with open(CSV, encoding='utf-8') as f:
         rows = list(csv.DictReader(f))
     if not rows:
-        sys.exit('learning.csv has no data yet: wait a simulated minute.')
-    minutes = column(rows, 'minute')
+        sys.exit('learning.csv has no data yet: wait for the first round to end.')
+    rounds = column(rows, 'round')
     fig, ax = plt.subplots(2, 2, figsize=(14, 9))
-    fig.suptitle(f'How the Boss is learning ({len(rows)} simulated minutes)')
+    fig.suptitle(f'How the Boss is learning ({len(rows)} rounds)')
 
-    error = column(rows, 'error_s')
     a = ax[0][0]
-    a.plot(minutes, error, color='lightgray', label='each minute')
-    a.plot(minutes, smooth(error), color='tab:red', label='trend (last 10)')
-    a.set(title='How wrong its guesses are (lower = it learned)', xlabel='simulated minute',
-          ylabel='average error (s)')
+    a.fill_between(rounds, column(rows, 'worst'), column(rows, 'best'), color='lightgray', label='best / worst hospital')
+    a.plot(rounds, column(rows, 'reward'), color='gray', linewidth=0.8, label='average')
+    a.plot(rounds, smooth(column(rows, 'reward')), color='tab:red', label='trend (last 10)')
+    a.set(title='Score of each round (higher = better)', xlabel='round', ylabel='treated - 3 x gave up - Red waiting min')
     a.legend()
 
     a = ax[0][1]
-    for name in FEATURES:
-        a.plot(minutes, column(rows, f'consult_{name}'), label=name)
-    a.set(title='What it has learned about consultations (weights)', xlabel='simulated minute',
-          ylabel='seconds per unit')
+    for name, label in (('w_urgency', 'urgency'), ('w_waited', 'minutes waited'), ('w_impatience', 'impatience')):
+        a.plot(rounds, column(rows, name), label=label)
+    a.set(title='Who goes first: what it learned (weights)', xlabel='round', ylabel='weight')
     a.legend()
 
     a = ax[1][0]
-    for name, color in (('treated', 'tab:green'), ('gave_up', 'tab:red'), ('arrived', 'tab:blue')):
-        a.plot(minutes, smooth(column(rows, name)), color=color, label=name.replace('_', ' '))
-    a.set(title='Hospital results per minute (trend)', xlabel='simulated minute', ylabel='patients')
+    for name, color in (('treated', 'tab:green'), ('gave_up', 'tab:red'), ('red_wait_min', 'tab:purple')):
+        a.plot(rounds, smooth(column(rows, name)), color=color, label=name.replace('_', ' '))
+    a.set(title='Per round, per hospital (trend)', xlabel='round', ylabel='patients / minutes')
     a.legend()
 
     a = ax[1][1]
-    for name, color in (('wait_green', 'tab:green'), ('wait_yellow', 'goldenrod'), ('wait_red', 'tab:red')):
-        a.plot(minutes, smooth(column(rows, name)), color=color, label=name.replace('wait_', ''))
-    a.set(title='Wait to see a doctor, by urgency (trend)', xlabel='simulated minute', ylabel='seconds')
+    error = column(rows, 'error_s')
+    a.plot(rounds, error, color='lightgray', label='each round')
+    a.plot(rounds, smooth(error), color='tab:blue', label='trend (last 10)')
+    a.set(title='How wrong its guesses of task times are', xlabel='round', ylabel='average error (s)')
     a.legend()
 
     fig.tight_layout()

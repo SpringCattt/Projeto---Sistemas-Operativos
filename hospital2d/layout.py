@@ -67,6 +67,8 @@ class Furniture:
 class Layout:
     def __init__(self, rooms, doors, width, height):
         self.rooms, self.width, self.height = rooms, width, height
+        # cached per plan (a cache on the method would keep every plan ever built alive: learn.py builds hundreds)
+        self.distances_from = functools.lru_cache(maxsize=512)(self._distances_from)
         self.tiles = [[EMPTY] * width for _ in range(height)]
         self.room_at = [[None] * width for _ in range(height)]
         for r in sorted(rooms, key=lambda r: r.round):  # round rooms last: they sit inside another room
@@ -201,8 +203,7 @@ class Layout:
         d = self.distances_from(a).get(b)
         return d if d is not None else 10 * (abs(a[0] - b[0]) + abs(a[1] - b[1]))
 
-    @functools.lru_cache(maxsize=512)
-    def distances_from(self, start):
+    def _distances_from(self, start):
         """Walking distance from `start` to every tile: breadth-first search over the plan, cached per start."""
         dist, todo = {start: 0}, deque([start])
         while todo:

@@ -20,7 +20,10 @@ for n_doctors, n_surgeries in ((1, 1), (5, 2), (100, 3)):
     for r in lay.rooms:
         free = lay.free_tiles(r)
         assert free, f'{r.name} has no free floor'
-        assert set(free) <= seen, f'{r.name} has unreachable areas'
+        if r.kind == 'control':  # sealed on purpose: only the Boss is in there
+            assert not set(free) & seen, 'the control room should have no way in'
+        else:
+            assert set(free) <= seen, f'{r.name} has unreachable areas'
 
     assert lay.path(start, lay.free_tiles(lay.rooms_of('doctor')[-1])[0])
 

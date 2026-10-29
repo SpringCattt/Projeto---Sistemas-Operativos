@@ -95,3 +95,29 @@ def character(index):
     sheet = image(f'third_party/characters/{index:03d}')
     return {d: [sheet.subsurface((c * CHAR_W, r * CHAR_H, CHAR_W, CHAR_H)) for c in range(3)]
             for r, d in enumerate(DIRECTIONS)}
+
+
+# --- Speech bubbles: PNGs in assets/custom. Words go in the smallest bubble_s/m/l/xl/xxl they fit in; an icon
+# bubble (bubble_alert, ...) is used as it is.
+TEXT_BUBBLES = ['bubble_s', 'bubble_m', 'bubble_l', 'bubble_xl', 'bubble_xxl']
+ICONS = {'!': 'bubble_alert', '?': 'bubble_surprise', '~': 'bubble_sick', 'z': 'bubble_sleep', '<3': 'bubble_heart'}
+BUBBLE_PAD = 4  # pixels between the side of a bubble and its words
+BUBBLE_TEXT_H = 18  # height of the white part of the text bubbles (the tail is below it)
+BUBBLE_TAIL_X = 3  # x of the tail's tip in every bubble PNG
+
+
+def icon_bubble(kind):
+    return image(f'custom/{ICONS[kind]}')
+
+
+def text_bubble(font, text):
+    words = font.render(text, False, (24, 24, 28))  # no antialiasing: pixel text, scaled like the rest
+    for name in TEXT_BUBBLES:
+        if words.get_width() + 2 * BUBBLE_PAD <= image(f'custom/{name}').get_width():
+            break
+    surf = image(f'custom/{name}').copy()
+    room = surf.get_width() - 2 * BUBBLE_PAD
+    if words.get_width() > room:  # longer than the biggest bubble: cut (keep the lines in dialogue.txt short)
+        words = words.subsurface((0, 0, room, words.get_height()))
+    surf.blit(words, ((surf.get_width() - words.get_width()) // 2, (BUBBLE_TEXT_H - words.get_height()) // 2))
+    return surf

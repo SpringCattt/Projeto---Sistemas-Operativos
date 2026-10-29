@@ -9,6 +9,7 @@ import time
 import traceback
 
 import config
+import dialogue
 
 DATA = os.path.join(os.path.dirname(__file__), 'data')
 
@@ -71,7 +72,9 @@ class Actor:
         self.fatigue, self.resting = 0.0, False
         self.task = None  # what it's committed to (set by the dispatcher for doctors, security and cleaners)
         self.doing = 'idle'  # shown on the info card
-        self.bubble, self.bubble_until = None, 0.0  # icon over the head: '!' fight, '?' complaint, '~' sick, 'z' rest
+        self.bubble, self.bubble_until = None, 0.0  # icon over the head: '!' fight, '?' surprise, '~' sick, 'z' rest,
+        # '<3' thankful
+        self.speech, self.speech_until = None, 0.0  # what it's saying (a speech bubble with text)
 
     def label(self):
         return f'{ROLE_LABEL[self.role]} {self.name}'
@@ -135,6 +138,15 @@ class Actor:
 
     def say(self, bubble, seconds):
         self.bubble, self.bubble_until = bubble, self.h.clock() + seconds
+
+    def talk(self, situation, seconds=3.0, **values):
+        """Says a random line for that situation (data/dialogue.txt) in a speech bubble."""
+        text = dialogue.pick(self.rng, situation, **values)
+        if text:
+            self.speech, self.speech_until = text, self.h.clock() + seconds
+
+    def first_name(self):
+        return self.name.split()[0]
 
     # ---- movement -------------------------------------------------------------------------------------------
     def avoid(self):
@@ -275,4 +287,5 @@ class Actor:
                 'px': self.px, 'py': self.py, 'tx': self.tx, 'ty': self.ty, 'facing': self.facing,
                 'anim_t': self.anim_t, 'path': list(self.path), 'state': self.state(),
                 'room': room.name if room else 'doorway', 'bubble': self.bubble, 'mark': None,
+                'speech': self.speech if self.h.clock() < self.speech_until else None,
                 'card': [('Doing', self.doing)] + self.card()}

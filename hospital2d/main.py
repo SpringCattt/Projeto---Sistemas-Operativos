@@ -14,7 +14,8 @@ import pygame
 import config
 from actors import ROLE_LABEL
 from arrivals import run_arrivals
-from art import CHAR_H, CHAR_W, character, draw_layout, furniture_sprites, image
+from art import BUBBLE_TAIL_X, CHAR_H, CHAR_W, character, draw_layout, furniture_sprites, icon_bubble, image, \
+    text_bubble
 from eventlog import run_log
 from layout import build_layout
 from sim import run_simulation
@@ -26,7 +27,6 @@ WALK_CYCLE = [0, 1, 2, 1]  # sheet columns: step, idle, step, idle
 CARD_W, ROW_H, LIST_ROWS = 320, 20, 12  # info card width, row height, people listed at once
 TEXT, MUTED, HOVER, HIGHLIGHT = (240, 240, 240), (150, 160, 175), (60, 66, 80), (250, 220, 60)
 URGENCY_COLORS = [(70, 200, 90), (240, 200, 50), (235, 70, 70)]
-BUBBLE_COLORS = {'!': (235, 70, 70), '?': (240, 190, 40), '~': (120, 170, 50), 'z': (90, 140, 230)}
 
 
 def card_panel(screen, n_rows):
@@ -92,16 +92,21 @@ def draw_panel(screen, font, title, lines, topright, width=CARD_W):
 
 def draw_dispatcher(screen, font, boss, to_screen, by_id):
     """On the map: a line from each busy member of staff to its task (urgency colour), and a pulsing ring on
-    every task still waiting for someone."""
+    every task still waiting for someone. When a task is about a person, it follows that person smoothly."""
     pulse = 6 + 3 * abs((pygame.time.get_ticks() // 60) % 10 - 5) / 5
-    for actor_id, (tx, ty), urgency, _ in boss['working']:
+
+    def where(about_id, tile):
+        who = by_id.get(about_id)
+        return to_screen(who.px, who.py) if who is not None else to_screen(tile[0] + 0.5, tile[1] + 0.5)
+
+    for actor_id, about_id, tile, urgency, _ in boss['working']:
         a = by_id.get(actor_id)
         if a is not None:
-            start, end = to_screen(a.px, a.py), to_screen(tx + 0.5, ty + 0.5)
-            pygame.draw.line(screen, URGENCY_COLORS[urgency], start, end, 3)
+            end = where(about_id, tile)
+            pygame.draw.line(screen, URGENCY_COLORS[urgency], to_screen(a.px, a.py), end, 3)
             pygame.draw.circle(screen, URGENCY_COLORS[urgency], end, 6)
-    for (tx, ty), urgency, _ in boss['open']:
-        pygame.draw.circle(screen, URGENCY_COLORS[urgency], to_screen(tx + 0.5, ty + 0.5), pulse * 2, 3)
+    for about_id, tile, urgency, _ in boss['open']:
+        pygame.draw.circle(screen, URGENCY_COLORS[urgency], where(about_id, tile), pulse * 2, 3)
 
 
 def draw_events(screen, font, events):
@@ -122,9 +127,10 @@ def run_ui(snapshots):
     clock = pygame.time.Clock()
     font = pygame.font.SysFont('consolas', 15)
     small = pygame.font.SysFont('consolas', 13)
-    bold = pygame.font.SysFont('consolas', 14, bold=True)
     banner_font = pygame.font.SysFont('consolas', 28, bold=True)
     room_font = pygame.font.SysFont('consolas', 13, bold=True)
+    bubble_font = pygame.font.Font(None, 14)  # rendered without antialiasing and scaled up: pixel text
+    bubbles = {}  # what's said (or an icon) -> its speech bubble
 
     lay = build_layout()  # same config as the simulation process, so the same plan
     floor_map = draw_layout(lay)
@@ -258,12 +264,13 @@ def run_ui(snapshots):
                                         [(hx, hy - 3 * r), (hx + r, hy - 2 * r), (hx, hy - r), (hx - r, hy - 2 * r)])
                     pygame.draw.polygon(screen, (30, 30, 30),
                                         [(hx, hy - 3 * r), (hx + r, hy - 2 * r), (hx, hy - r), (hx - r, hy - 2 * r)], 1)
-                if a.bubble:
-                    bx, by = int(hx + 4 * zoom), int(hy - 2 * zoom)
-                    pygame.draw.circle(screen, (250, 250, 250), (bx, by), 9)
-                    pygame.draw.circle(screen, BUBBLE_COLORS[a.bubble], (bx, by), 9, 2)
-                    glyph = bold.render(a.bubble, True, BUBBLE_COLORS[a.bubble])
-                    screen.blit(glyph, glyph.get_rect(center=(bx, by)))
+                key = ('say', a.speech) if a.speech else ('icon', a.bubble) if a.bubble else None
+                if key is not None:  # words win over an icon
+                    if key not in bubbles:
+                        bubbles[key] = text_bubble(bubble_font, a.speech) if a.speech else icon_bubble(a.bubble)
+                    img = bubbles[key]
+                    # the tail's tip just above the head (and its urgency mark), a little to the right
+                    blit_scaled(img, hx + (2 - BUBBLE_TAIL_X) * zoom, hy - (img.get_height() + 3) * zoom)
             for r, label in room_labels:
                 screen.blit(label, to_screen(r.x + 1.2, r.y + 1.1))
 
@@ -285,8 +292,8 @@ def run_ui(snapshots):
         if watching_boss:  # what it's juggling and why it decided what it did
             top = hits[0][0].bottom + 6 if hits else 10
             working = [(f'{label}  <- {next((a.name for a in actors if a.id == i), "?")}',
-                        URGENCY_COLORS[u]) for i, _, u, label in boss.boss['working']]
-            waiting = [(label, URGENCY_COLORS[u]) for _, u, label in boss.boss['open']] or [('nothing', MUTED)]
+                        URGENCY_COLORS[u]) for i, _, _, u, label in boss.boss['working']]
+            waiting = [(label, URGENCY_COLORS[u]) for _, _, u, label in boss.boss['open']] or [('nothing', MUTED)]
             decisions = [(text, TEXT)
                          for t, text in boss.boss['decisions'][::-1]] or [('nothing yet', MUTED)]
             def first(lines, n):  # keeps the panels on screen

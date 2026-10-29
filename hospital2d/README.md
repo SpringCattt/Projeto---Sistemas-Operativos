@@ -30,7 +30,9 @@ of a room to see who is inside (the list is clickable) · `L` event log on/off �
 ## The building
 
 The hospital is built around its centre: the **Main Hall**, with the Boss's round **Control Room** in the middle
-(a door on each side). The main corridor runs through the hall and out to both sides. Under the hall is the base
+(sealed: no doors; the Boss sits in the exact centre and nobody else goes in). The main corridor runs through the
+hall and out to both sides, and ends in an exit at each end: whoever has seen a doctor leaves that way, so they
+don't walk back against the people coming in through reception and the waiting rooms. Under the hall is the base
 block, always the same: street → reception → a triage room on each side (two nurses each) → the two waiting rooms,
 plus the bar. Every other room — doctors' rooms first, then the surgery groups (surgery | disinfection |
 surgery), storage and rest — goes to whichever side is shortest so far (on top of the hall, or along the corridor,
@@ -133,8 +135,15 @@ straight instead of zig-zagging.
 | `eventlog.py` | the log process |
 | `layout.py` | builds the plan from `config.py`: rooms, doors, furniture, named spots |
 | `art.py` | loads the PNGs and draws the plan |
-| `tools/make_assets.py` | generated our own PNGs (`assets/custom/`) in the hospital pack's palette |
-| `data/` | names and complaints, one per line |
+| `dialogue.py` | picks what people say from `data/dialogue.txt` |
+| `tools/make_assets.py` | generated some of our own PNGs (`assets/custom/`) in the hospital pack's palette |
+| `data/` | names, complaints and dialogue lines, one per line |
+
+**Speech bubbles.** People talk when they interact (registration, triage, the doctor's call, complaints, fights,
+security, someone throwing up, a surge, the Boss shouting orders…). The lines are in `data/dialogue.txt`
+(`situation | text`) — add or change them freely, keep them short. The bubbles are PNGs in `assets/custom/`:
+`bubble_s/m/l/xl/xxl` for words (the smallest one that fits is used) and `bubble_alert`, `bubble_surprise`,
+`bubble_heart`, `bubble_sick`, `bubble_sleep` for icons.
 
 ## Tests
 

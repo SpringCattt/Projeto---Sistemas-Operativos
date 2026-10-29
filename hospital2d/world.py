@@ -149,8 +149,8 @@ class Dispatcher:
             task.preemptable = value
 
     def assign(self):
-        """Hands out what it can. Call it holding self.cond. Returns how many tasks it gave."""
-        given = 0
+        """Hands out what it can. Call it holding self.cond. Returns [(task, actor)] it gave."""
+        given = []
         for task in sorted(self.open, key=lambda t: (-t.urgency, t.created)):
             scored = sorted((s, a.id, a) for a in self.staff if (s := self.score(a, task)) is not None)
             if not scored:
@@ -165,7 +165,7 @@ class Dispatcher:
             self.open.remove(task)
             actor.task = task  # if it was busy, it notices the inbox, drops its task and that one is re-submitted
             actor.inbox.put(task)
-            given += 1
+            given.append((task, actor))
         return given
 
     def score(self, actor, task):

@@ -43,6 +43,12 @@ class Staff(Actor):
         return True
 
 
+def about(task):
+    """Id of the person a task is about (the patient, or whoever started a fight), if any."""
+    who = task.patient or task.target
+    return who.id if who is not None else None
+
+
 class Boss(Actor):
     """The dispatcher in person. Sits in the control room for the whole shift; its thread is the one that runs
     the dispatcher (world.Dispatcher.assign): it wakes up whenever a task is submitted or someone finishes one
@@ -59,7 +65,11 @@ class Boss(Actor):
         while not self.h.stop.is_set():
             with d.cond:
                 d.cond.wait(timeout=1 / config.ACTOR_HZ)
-                self.given += d.assign()
+                given = d.assign()
+            self.given += len(given)
+            for task, actor in given:
+                if task.urgency == 2 and self.h.clock() > self.speech_until:
+                    self.talk('boss_red', name=actor.first_name())
             self.ticks += 1
             self.planned += 1 / config.ACTOR_HZ
         raise Stopped
@@ -74,9 +84,10 @@ class Boss(Actor):
         s = super().snapshot()
         d = self.h.dispatcher
         with d.cond:
-            s['boss'] = {
-                'working': [(a.id, a.task.where(), a.task.urgency, a.task.label()) for a in d.staff if a.task],
-                'open': [(t.where(), t.urgency, t.label()) for t in d.open],
+            s['boss'] = {  # (who is doing it, who it's about or None, tile, urgency, label)
+                'working': [(a.id, about(a.task), a.task.where(), a.task.urgency, a.task.label())
+                            for a in d.staff if a.task],
+                'open': [(about(t), t.where(), t.urgency, t.label()) for t in d.open],
                 'decisions': list(d.decisions),
             }
         return s
@@ -103,7 +114,16 @@ class Receptionist(Staff):
         if not self.call(p, s):
             return
         self.doing = f'{"listening to" if complaint else "registering"} {p.name}'
-        self.work(self.rng.uniform(*(config.COMPLAINT_S if complaint else config.REGISTER_S)))
+        seconds = self.rng.uniform(*(config.COMPLAINT_S if complaint else config.REGISTER_S))
+        if complaint:
+            p.talk('complain')
+            self.wait(1.5)
+            self.talk('reception_calm')
+        else:
+            self.talk('reception_hello')
+            self.wait(1.5)
+            p.talk('patient_reason', reason=p.reason.lower())
+        self.work(max(0.5, seconds - 1.5))
         if complaint:
             p.patience = 60.0
             self.h.log(f'{self.label()} calms {p.label()} down')
@@ -111,6 +131,7 @@ class Receptionist(Staff):
             self.tire(config.FATIGUE_PER_TASK['complaint'])
         else:
             self.h.log(f'{self.label()} registers {p.name}: "{p.reason}"')
+            self.talk('reception_done')
             self.h.triage_queue.put(p)  # producer of the triage queue
             self.tire(config.FATIGUE_PER_TASK['register'])
         s.finish('ok')
@@ -141,9 +162,13 @@ class TriageNurse(Staff):
                 self.h.triage_queue.put(p)  # it'll be called again
             return
         self.doing = f'triaging {p.name}'
-        self.work(self.rng.uniform(*config.TRIAGE_S))
+        self.talk('nurse_hello')
+        self.wait(1.5)
+        p.talk('patient_reason', reason=p.reason.lower())
+        self.work(max(0.5, self.rng.uniform(*config.TRIAGE_S) - 1.5))
         p.rank = p.base_urgency  # the urgency comes from what the patient told reception
         p.waiting_room = self.room.partner
+        self.talk('nurse_result', color=config.URGENCY_NAMES[p.rank])
         self.h.log(f'{self.label()} triages {p.label()}: {p.reason}')
         self.h.queue_for_doctor(p)
         self.tire(config.FATIGUE_PER_TASK['triage'])
@@ -184,11 +209,13 @@ class TaskStaff(Staff):
         elif self.resting:
             if self.fatigue <= config.RESTED_AT:
                 self.resting, self.bubble, self.doing = False, None, 'idle'
+                self.talk('back')
                 self.h.log(f'{self.label()} is back at work')
         elif self.fatigue >= config.REST_AT and self.lay.rest_spots:
             free = [t for t in self.lay.rest_spots if t not in self.world.occupied]
             if free:
                 self.resting, self.bubble, self.doing = True, 'z', 'resting'
+                self.talk('rest')
                 self.h.log(f'{self.label()} is exhausted and goes to rest')
                 self.set_path(self.route(self.rng.choice(free)))
         else:
@@ -229,6 +256,7 @@ class Doctor(TaskStaff):
             return
         self.go(self.seat)
         s = Summons(self, self.chair, 'consult', allow={'corridor', 'doctor'}, stage=f'going to {self.room.name}')
+        self.talk('doctor_call', name=p.first_name())
         try:
             if not self.call(p, s, timeout=120):
                 if not p.gone:
@@ -236,18 +264,26 @@ class Doctor(TaskStaff):
                 return
             self.h.log(f'{self.label()} sees {p.label()}')
             self.h.consult_started(p)
+            self.talk('doctor_hello')
             self.work(self.rng.uniform(*config.CONSULT_S[p.rank]))
         except Interrupted:
+            self.talk('doctor_emergency')
             if s.arrived.is_set():
+                p.talk('patient_dropped')
                 s.finish('back')  # back to the waiting room; the task goes back to the dispatcher
             else:
                 s.cancel()
             raise
         self.tire(config.FATIGUE_PER_TASK['consult'][p.rank])
         if p.needs_surgery and self.lay.surgery_spots:
+            self.talk('doctor_surgery')
+            p.talk('patient_surgery')
+            p.say('?', 4)
             s.finish('surgery')
             self.operate(task, p)
         else:
+            p.talk('patient_thanks')
+            p.say('<3', 4)
             s.finish('done')
             self.h.treated(p)
 
@@ -306,8 +342,11 @@ class Security(TaskStaff):
         while not (target.gone or task.done.is_set() or task.cancelled) and self.h.clock() < end:
             if abs(self.tx - target.tx) + abs(self.ty - target.ty) <= 1:
                 self.h.log(f'{self.label()} steps in')
+                self.talk('security_calm')
                 self.work(self.rng.uniform(*config.CALM_DOWN_S))
                 task.result = 'expelled' if self.rng.random() < config.EXPEL_CHANCE else 'calmed'
+                if task.result == 'expelled':
+                    self.talk('security_out')
                 task.done.set()
                 self.tire(config.FATIGUE_PER_TASK['fight'])
                 return
@@ -326,6 +365,7 @@ class Cleaner(TaskStaff):
             if spot is None or not self.go(spot, timeout=30):
                 self.h.dispatcher.submit(task)  # couldn't get there: someone else (or later)
                 return
+        self.talk('cleaner')
         self.work(self.rng.uniform(*config.CLEAN_S))
         with self.world.lock:
             self.world.messes.pop(task.tile, None)

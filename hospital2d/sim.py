@@ -49,7 +49,8 @@ class Hospital:
                    for r in lay.rooms_of(k) for t in lay.free_tiles(r) if t not in lay.seats]
         public = [t for k in ('waiting', 'reception') for r in lay.rooms_of(k) for t in lay.free_tiles(r)
                   if t not in lay.seats and t not in lay.staff_only]
-        everywhere = [t for r in lay.rooms if r.kind != 'street' for t in lay.free_tiles(r) if t not in lay.seats]
+        everywhere = [t for r in lay.rooms if r.kind not in ('street', 'control')
+                      for t in lay.free_tiles(r) if t not in lay.seats]
         nurses = [WardNurse(self, medical, rng) for _ in range(config.N_NURSES)]
         security = [Security(self, public, rng) for _ in range(config.N_SECURITY)]
         cleaners = [Cleaner(self, everywhere, rng) for _ in range(config.N_CLEANERS)]
@@ -122,6 +123,9 @@ class Hospital:
     def surge(self, seconds):
         self.surge_until = self.clock() + seconds
         self.count('surges')
+        for p in self.rng.sample(self.patients(), min(6, len(self.patients()))):
+            p.talk('surge')
+            p.say('?', 3)
         self.log(f'SURGE! Lots of patients arriving for the next {seconds:.0f} s')
 
     def queue_for_doctor(self, p):

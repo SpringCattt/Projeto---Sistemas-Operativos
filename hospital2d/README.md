@@ -153,6 +153,10 @@ straight instead of zig-zagging.
   room (semaphore) and only then goes in, from the disinfection room — never straight from the corridor.
 * **Ambulances:** patients who need surgery arrive by ambulance, already triaged as Red, through Emergency's own
   door at the back (the ambulance bay), so they never walk through the hospital.
+* **Stretchers** (`config.STRETCHERS`) are parked at the back of storage. The dispatcher hands out the two nurses of
+  a stretcher together or not at all: giving one now and the other later would leave nurses waiting in storage for a
+  partner who's busy with another half-started stretcher (hold and wait). Trains returning a stretcher claim their
+  parking spot first, so two never head for the same one.
 * **Red patients** wait lying in a bed in **Emergency**. When a doctor takes one, two ward nurses run to storage,
   wait for each other there, bring the stretcher right next to the patient's bed (it slides across onto it) and push
   it to the doctor's exam bed or straight to surgery, where it slides across onto the bed or table. Nurse, stretcher and nurse are one block of three tiles that moves together, like a train:

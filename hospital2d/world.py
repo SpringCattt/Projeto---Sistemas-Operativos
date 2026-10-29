@@ -26,6 +26,7 @@ class World:
         self.lock = threading.Lock()
         self.occupied = {}  # tile -> actor standing on it (or stepping into it): nobody walks through anybody
         self.messes = {}  # tile -> sim time it appeared (vomit): people walk around it until it's cleaned
+        self.bay_claims = set()  # stretcher parking spots a train is on its way to (so two don't pick the same)
 
 
 class Line:
@@ -122,6 +123,7 @@ class Task:
         self.interruptions = 0
         self.target, self.result = None, None  # fights: who started it, and how security ended it
         self.guess = None  # (actor, features, seconds it should take, when) while someone is on it
+        self.team = None  # tasks that are handed out together or not at all (the two nurses of a stretcher)
 
     @property
     def urgency(self):  # a patient's condition can get worse while they wait
@@ -185,11 +187,10 @@ class Dispatcher:
             json.dump(data, f, indent=1)
         os.replace(path + '.tmp', path)  # never a half-written file, even if it's stopped right then
 
-    def submit(self, task):
-        with self.cond:
-            if not task.cancelled:
-                self.open.append(task)
-                self.cond.notify()
+    def submit(self, *tasks):
+        with self.cond:  # all at once: the dispatcher never sees half of a team
+            self.open += [t for t in tasks if not t.cancelled]
+            self.cond.notify()
 
     def cancel(self, task):
         with self.cond:
@@ -226,23 +227,40 @@ class Dispatcher:
     def assign(self):
         """Hands out what it can. Call it holding self.cond. Returns [(task, actor)] it gave."""
         given = []
-        for task in sorted(self.open, key=lambda t: (-self.priority(t), t.created)):
-            scored = sorted((s, a.id, a) for a in self.staff if (s := self.score(a, task)) is not None)
-            if not scored:
+        for first in sorted(self.open, key=lambda t: (-self.priority(t), t.created)):
+            team = first.team or [first]
+            if first not in self.open or any(t not in self.open for t in team):
                 continue
-            best, _, actor = scored[0]
-            why = f'{task.label()} -> {actor.name}: {best:.0f}'
-            if len(scored) > 1:
-                why += f' (next {scored[1][2].name}: {scored[1][0]:.0f})'
-            if actor.task is not None:
-                why += f', interrupting {actor.task.label()}'
-            self.decisions.append((self.clock(), why))
-            self.open.remove(task)
-            task.guess = (actor, self.features(actor, task), best, self.clock())
-            actor.task = task  # if it was busy, it notices the inbox, drops its task and that one is re-submitted
-            actor.inbox.put(task)
-            given.append((task, actor))
+            # A team gets all its people at once or nobody: handing out half of it would leave someone holding a
+            # nurse and waiting for a partner who's busy in another half-handed team (hold and wait: deadlock)
+            picks, taken = [], set()
+            for task in team:
+                scored = sorted((s, a.id, a) for a in self.staff if a.id not in taken
+                                and (s := self.score(a, task)) is not None)
+                if not scored:
+                    break
+                picks.append((task, scored))
+                taken.add(scored[0][1])
+            if len(picks) < len(team):
+                continue
+            for task, scored in picks:
+                given.append(self.give(task, scored))
         return given
+
+    def give(self, task, scored):
+        """Hands `task` to the best of `scored` [(score, id, actor)]. Call it holding self.cond."""
+        best, _, actor = scored[0]
+        why = f'{task.label()} -> {actor.name}: {best:.0f}'
+        if len(scored) > 1:
+            why += f' (next {scored[1][2].name}: {scored[1][0]:.0f})'
+        if actor.task is not None:
+            why += f', interrupting {actor.task.label()}'
+        self.decisions.append((self.clock(), why))
+        self.open.remove(task)
+        task.guess = (actor, self.features(actor, task), best, self.clock())
+        actor.task = task  # if it was busy, it notices the inbox, drops its task and that one is re-submitted
+        actor.inbox.put(task)
+        return task, actor
 
     def priority(self, task):
         """How soon a task is handed out (highest first): its urgency, how long it has been waiting and, for a

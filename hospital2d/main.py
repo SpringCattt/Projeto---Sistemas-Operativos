@@ -348,7 +348,8 @@ def run_ui(snapshots, commands=None):
         if not snap['paused']:  # the little work animations freeze too
             beat = time.perf_counter()
         bodies = sorted((((a.py + (1.7 if a.lying else FEET)) * T, None, a) for a in actors), key=lambda s: s[0])
-        extras = []  # stretchers, keyboards, buckets: drawn in depth order too
+        extras = [centred(stretcher[facing in ('left', 'right')], x, y, (y + 0.5) * T)  # parked in storage
+                  for x, y, facing in snap.get('parked', [])]  # stretchers, keyboards, buckets: in depth order too
         for a in actors:
             if a.stretcher:
                 extras.append(centred(stretcher[a.facing in ("left", "right")], a.px, a.py, (a.py + 1.7) * T - 1))

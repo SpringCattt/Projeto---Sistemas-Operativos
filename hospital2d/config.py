@@ -73,6 +73,8 @@ CALL_IN_AT = 3
 CALL_EVERY_S = 30
 SEND_HOME_AFTER_S = 90
 
+STRETCHERS = 4  # parked at the back of storage: with all of them out, a Red patient waits for one to come back
+
 # Fatigue (0-100)
 FATIGUE_PER_TASK = {'consult': (6, 9, 13), 'surgery': 25, 'fight': 10, 'clean': 6,
                     'register': 2, 'stretcher': 8, 'complaint': 3, 'triage': 3}

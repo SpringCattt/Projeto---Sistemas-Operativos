@@ -4,6 +4,7 @@
 #                          -- commands ->                                              -- events ->  log (hospital.log)
 # Controls: WASD/arrows or right-drag = move camera | wheel = zoom | click an NPC or a room = info card
 #           L = event log on/off | B = what the dispatcher (Boss) is doing | ESC = close the card
+#           Tab = admin tablet (events, patients, staff) | Space = pause | +/- = speed
 import heapq
 import multiprocessing as mp
 import os
@@ -122,7 +123,74 @@ def draw_events(screen, font, events):
     screen.blit(panel, (10, screen.get_height() - 36 - panel.get_height()))
 
 
-def run_ui(snapshots):
+JOB_LABELS = [('Doctor', 'Doctors'), ('WardNurse', 'Ward nurses'), ('TriageNurse', 'Triage nurses'),
+              ('Receptionist', 'Receptionists'), ('Security', 'Security'), ('Cleaner', 'Cleaners')]
+TABLET_W = 340
+
+
+def button(screen, font, rect, text, color=(58, 64, 80), on=False):
+    pygame.draw.rect(screen, HIGHLIGHT if on else color, rect, border_radius=4)
+    label = font.render(text, True, (20, 22, 28) if on else TEXT)
+    screen.blit(label, label.get_rect(center=rect.center))
+    return rect
+
+
+def draw_tablet(screen, font, small, snap, opts, top):
+    """The admin tablet: changes the world while it runs. Returns the clickable areas as [(rect, action)]."""
+    x0, w = 10, TABLET_W
+    frame = pygame.Rect(x0, top, w, 36 + 4 * 26 + 5 * 28 + 22 + len(JOB_LABELS) * 28 + 6)  # headings, rows, lines
+    pygame.draw.rect(screen, (12, 13, 17), frame.inflate(10, 10), border_radius=14)  # the tablet's bezel
+    pygame.draw.rect(screen, (28, 31, 39), frame, border_radius=8)
+    hits = [(frame.inflate(10, 10), ('card',))]
+    screen.blit(font.render('Admin tablet', True, HIGHLIGHT), (x0 + 12, top + 8))
+    y = top + 36
+
+    def heading(text):
+        nonlocal y
+        screen.blit(small.render(text, True, MUTED), (x0 + 12, y + 6))
+        y += 26
+
+    def row(*buttons):  # (text, action, colour, on): side by side, sharing the width
+        nonlocal y
+        bw = (w - 24 - 6 * (len(buttons) - 1)) // len(buttons)
+        for i, (text, action, color, on) in enumerate(buttons):
+            r = button(screen, small, pygame.Rect(x0 + 12 + i * (bw + 6), y, bw, 22), text, color, on)
+            hits.append((r, action))
+        y += 28
+
+    grey = (58, 64, 80)
+    heading('World')
+    paused = snap['paused']
+    row(('Resume' if paused else 'Pause', ('cmd', ('pause',)), (190, 60, 60) if paused else grey, False),
+        ('Slower', ('cmd', ('speed', -1)), grey, False), ('Faster', ('cmd', ('speed', 1)), grey, False))
+    screen.blit(small.render(f'speed x{snap["speed"]:g}' + ('  (paused)' if paused else ''), True, TEXT),
+                (x0 + 14, y))
+    y += 22
+    heading('Patients (click to send)')
+    row(*((f'x{n}', ('opt', 'count', n), grey, opts['count'] == n) for n in (1, 5, 20)))
+    row(('At the door', ('opt', 'triaged', False), grey, not opts['triaged']),
+        ('Already triaged', ('opt', 'triaged', True), grey, opts['triaged']))
+    send = lambda u, s: ('cmd', ('patient', u, s, opts['count'], opts['triaged']))
+    dark = [tuple(c // 2 for c in col) for col in URGENCY_COLORS]
+    row(('Green', send(0, False), dark[0], False), ('Yellow', send(1, False), dark[1], False),
+        ('Red', send(2, False), dark[2], False), ('Red+surg.', send(2, True), dark[2], False))
+    heading('Events')
+    row(('Surge', ('cmd', ('surge',)), grey, False), ('Fight', ('cmd', ('fight',)), grey, False),
+        ('Vomit', ('cmd', ('vomit',)), grey, False))
+    heading('Staff (on shift / places)')
+    for job, label in JOB_LABELS:
+        n, most = snap['staff'].get(job, (0, None))
+        screen.blit(small.render(label, True, TEXT), (x0 + 14, y + 4))
+        screen.blit(small.render(f'{n}' + (f' / {most}' if most is not None else ''), True, TEXT), (x0 + 200, y + 4))
+        hits.append((button(screen, small, pygame.Rect(x0 + 150, y, 34, 22), '-'), ('cmd', ('fire', job))))
+        hits.append((button(screen, small, pygame.Rect(x0 + 260, y, 34, 22), '+'), ('cmd', ('hire', job))))
+        y += 28
+    return hits
+
+
+def run_ui(snapshots, commands=None):
+    """commands: Queue -> simulation, for the admin tablet (None: the tablet does nothing)."""
+    send = commands.put if commands is not None else (lambda cmd: None)
     pygame.init()
     screen = pygame.display.set_mode((1280, 720), pygame.RESIZABLE)
     pygame.display.set_caption('Hospital')
@@ -168,7 +236,9 @@ def run_ui(snapshots):
     cam_x = (centre.x + centre.w / 2) * T - screen.get_width() / zoom / 2
     cam_y = (centre.y + centre.h / 2) * T - screen.get_height() / zoom / 2
     snap = {'actors': [], 'messes': [], 'events': [], 'stats': {}, 'time': 0.0, 'surge': False, 'sim_hz': 0.0,
-            'line': 0, 'triage': 0, 'patients': 0, 'keep_up': 1.0}
+            'line': 0, 'triage': 0, 'patients': 0, 'keep_up': 1.0, 'speed': config.TIME_SCALE, 'paused': False,
+            'staff': {}}
+    show_tablet, opts, beat = False, {'count': 1, 'triaged': False}, 0.0
     actors, selected_id, room_sel, list_open, scroll, show_log, show_boss = [], None, None, False, 0, True, False
     dragging, cache, hits, people = False, {}, [], []
 
@@ -195,6 +265,14 @@ def run_ui(snapshots):
                 show_log = not show_log
             elif ev.type == pygame.KEYDOWN and ev.key == pygame.K_b:
                 show_boss = not show_boss
+            elif ev.type == pygame.KEYDOWN and ev.key == pygame.K_TAB:
+                show_tablet = not show_tablet
+            elif ev.type == pygame.KEYDOWN and ev.key == pygame.K_SPACE:
+                send(('pause',))
+            elif ev.type == pygame.KEYDOWN and ev.key in (pygame.K_PLUS, pygame.K_EQUALS, pygame.K_KP_PLUS):
+                send(('speed', 1))
+            elif ev.type == pygame.KEYDOWN and ev.key in (pygame.K_MINUS, pygame.K_KP_MINUS):
+                send(('speed', -1))
             elif ev.type == pygame.MOUSEWHEEL:
                 mx, my = pygame.mouse.get_pos()
                 if room_sel and list_open and any(r.collidepoint(mx, my) for r, _ in hits):  # scroll the list
@@ -214,6 +292,12 @@ def run_ui(snapshots):
                 action = next((act for r, act in hits if r.collidepoint(ev.pos)), None)
                 if action and action[0] == 'toggle':
                     list_open, scroll = not list_open, 0
+                elif action and action[0] == 'cmd':
+                    send(action[1])
+                elif action and action[0] == 'opt':
+                    opts[action[1]] = action[2]
+                elif action and action[0] == 'tablet':
+                    show_tablet = not show_tablet
                 elif action and action[0] == 'pick':
                     selected_id, room_sel = action[1], None
                 elif not action:  # a click on the map: an NPC first, else the room under the mouse
@@ -261,14 +345,16 @@ def run_ui(snapshots):
                 pygame.draw.rect(screen, HIGHLIGHT, (x - zoom, y - zoom, 2 * zoom, 2 * zoom))
 
         # Furniture and people together, back to front: whoever is behind something is covered by it
-        beat = time.perf_counter()
+        if not snap['paused']:  # the little work animations freeze too
+            beat = time.perf_counter()
         bodies = sorted((((a.py + (1.7 if a.lying else FEET)) * T, None, a) for a in actors), key=lambda s: s[0])
         extras = []  # stretchers, keyboards, buckets: drawn in depth order too
         for a in actors:
             if a.stretcher:
                 extras.append(centred(stretcher[a.facing in ("left", "right")], a.px, a.py, (a.py + 1.7) * T - 1))
             if a.cart:
-                extras.append(centred(stretcher[a.facing in ('left', 'right')], *a.cart, (a.cart[1] + 0.5) * T))
+                x, y, facing = a.cart  # the empty stretcher it's moving
+                extras.append(centred(stretcher[facing in ('left', 'right')], x, y, (y + 0.5) * T))
             if a.action == 'typing':  # on the counter, beside its screen (the patient stands in front of the screen)
                 extras.append(centred(keyboard[int(beat * 8) % 2], a.px + 0.9, a.ty + 1.35, (a.ty + 2) * T + 1))
             if a.action == 'mopping':
@@ -349,33 +435,41 @@ def run_ui(snapshots):
             box = text.get_rect(midtop=(sw // 2, 44)).inflate(24, 10)
             pygame.draw.rect(screen, (200, 40, 40), box, border_radius=6)
             screen.blit(text, text.get_rect(center=box.center))
-        if show_log:
+        if show_log and not show_tablet:
             draw_events(screen, small, snap['events'])
+        if show_tablet:
+            hits += draw_tablet(screen, font, small, snap, opts, 46)
+        else:
+            hits.append((button(screen, small, pygame.Rect(10, 38, 150, 22), 'Admin tablet (Tab)'), ('tablet',)))
 
         fps, st, t = clock.get_fps(), snap['stats'], snap['time']
         hud = (f'FPS {fps:4.0f}   sim {100 * snap["keep_up"]:3.0f}%   time {int(t // 60):02d}:{int(t % 60):02d}'
                f'   patients {snap["patients"]}   treated {st.get("treated", 0)}   gave up {st.get("gave_up", 0)}'
-               f'   line {snap["line"]}   triage {snap["triage"]}   zoom x{zoom}')
+               f'   line {snap["line"]}   triage {snap["triage"]}   zoom x{zoom}'
+               f'   {"PAUSED" if snap["paused"] else "speed x" + format(snap["speed"], "g")}')
         slow = 0 < fps < config.MIN_FPS or snap['keep_up'] < 0.8
         screen.blit(font.render(hud, True, (240, 90, 90) if slow else TEXT, (20, 22, 28)), (10, 10))
-        screen.blit(font.render('WASD/right-drag: move   wheel: zoom   click: NPC or room info   L: log   B: boss   ESC: close',
+        screen.blit(font.render('WASD/right-drag: move   wheel: zoom   click: NPC or room info   L: log   B: boss   '
+                                'Tab: admin   Space: pause   +/-: speed   ESC: close',
                                 True, (200, 200, 200), (20, 22, 28)), (10, sh - 26))
         pygame.display.flip()
 
 
 def main():
     snapshots, commands = mp.Queue(maxsize=2), mp.Queue()
+    speed = mp.Value('d', config.TIME_SCALE)  # simulated seconds per real second: the simulation sets it (pause, speed)
     arrivals, log_queue, arrivals_stop = mp.Queue(), mp.Queue(), mp.Event()
     processes = [
         mp.Process(target=run_log, args=(log_queue,), name='log'),
-        mp.Process(target=run_simulation, args=(snapshots, commands, arrivals, log_queue), name='simulation'),
-        mp.Process(target=run_arrivals, args=(arrivals, arrivals_stop), name='arrivals'),
+        mp.Process(target=run_simulation, args=(snapshots, commands, arrivals, log_queue, None, speed),
+                   name='simulation'),
+        mp.Process(target=run_arrivals, args=(arrivals, arrivals_stop, None, speed), name='arrivals'),
     ]
     for p in processes:
         p.daemon = True
         p.start()
     try:
-        run_ui(snapshots)
+        run_ui(snapshots, commands)
     finally:  # closing the window (or a crash in the UI) always stops everything else too
         arrivals_stop.set()
         commands.put('quit')  # the simulation then sends the summary and closes the log

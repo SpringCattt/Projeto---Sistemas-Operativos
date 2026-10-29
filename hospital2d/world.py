@@ -83,14 +83,17 @@ class Summons:
 
 
 class Transfer:
-    """Two nurses take a stretcher from storage to a patient and push it to `summons.tile`. The first to reach
-    storage leads (pushes from the front); the other waits for it there, then follows behind."""
+    """Two nurses take a stretcher from storage to a patient and push it to `summons.tile`: nurse, stretcher,
+    nurse on three tiles in a row that always move together. The first nurse to reach storage leads and moves the
+    three of them (staff.WardNurse.drive); the other one takes its place behind the stretcher and is carried along."""
 
     def __init__(self, patient, summons):
         self.patient, self.summons = patient, summons
         self.cond = threading.Condition()
         self.ready, self.lead = [], None  # nurses waiting at storage
-        self.at_patient, self.mounted, self.arrived = threading.Event(), threading.Event(), threading.Event()
+        self.back_spot = None  # where the second nurse stands, behind the stretcher
+        self.formed, self.at_patient, self.mounted, self.arrived, self.done = (threading.Event() for _ in range(5))
+        self.failed = False
 
     def check_in(self, nurse):
         with self.cond:
@@ -100,7 +103,7 @@ class Transfer:
             self.cond.notify_all()
 
     def aborted(self):
-        return self.summons.cancelled or self.summons.done.is_set() or self.patient.gone
+        return self.failed or self.summons.cancelled or self.summons.done.is_set() or self.patient.gone
 
 
 class Task:

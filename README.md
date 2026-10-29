@@ -34,7 +34,8 @@ semaphores.
    ```
 
 **Controls:** WASD or right-drag to move · mouse wheel to zoom · click a person (or any room) to see what's going
-on · `B` see what the Boss is doing · `L` event log · `ESC` close.
+on · `B` see what the Boss is doing · `L` event log · `ESC` close · `Tab` **admin tablet** (pause, speed, send
+patients, trigger events, hire/send home staff) · `Space` pause · `+`/`-` speed.
 
 To make it calmer or bigger, change [`hospital2d/config.py`](hospital2d/config.py): `TIME_SCALE` (0.5 = half
 speed), `N_PATIENTS`, `ARRIVALS_PER_MINUTE`, `MAX_DOCTORS` (the building grows around the centre with it)…

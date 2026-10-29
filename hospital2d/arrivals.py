@@ -21,16 +21,18 @@ def read_complaints():
 COMPLAINTS = read_complaints()
 
 
-def new_patient(rng):
-    """Who walks in and what they'll tell reception."""
-    reason, urgency, _, surgery = rng.choices(COMPLAINTS, weights=[c[2] for c in COMPLAINTS])[0]
+def new_patient(rng, urgency=None, surgery=None):
+    """Who walks in and what they'll tell reception (an urgency / surgery can be asked for: admin tablet)."""
+    rows = [c for c in COMPLAINTS if urgency in (None, c[1]) and surgery in (None, c[3])] or COMPLAINTS
+    reason, urgency, _, surgery = rng.choices(rows, weights=[c[2] for c in rows])[0]
     temper = rng.choices(list(config.TEMPERAMENTS), weights=list(config.TEMPERAMENTS.values()))[0]
     return {'name': f'{rng.choice(FIRST_NAMES)} {rng.choice(LAST_NAMES)}', 'look': rng.choice(PATIENT_LOOKS),
             'reason': reason, 'urgency': urgency, 'surgery': surgery, 'temperament': temper}
 
 
-def run_arrivals(out, stop, seed=None):
-    """Process body. out: Queue -> simulation, ('patient', info) or ('surge', seconds). stop: Event."""
+def run_arrivals(out, stop, seed=None, speed=None):
+    """Process body. out: Queue -> simulation, ('patient', info) or ('surge', seconds). stop: Event.
+    speed: shared Value, simulated seconds per real second (set by the simulation: admin tablet; 0 = paused)."""
     out.cancel_join_thread()  # on exit, don't wait for the simulation to read what it no longer needs
     rng = random.Random(seed)
     step = 0.1  # real seconds between checks
@@ -38,12 +40,16 @@ def run_arrivals(out, stop, seed=None):
     next_arrival = time.monotonic()
     while not stop.wait(step):
         now = time.monotonic()
+        scale = speed.value if speed is not None else config.TIME_SCALE
+        if scale <= 0:  # paused
+            next_arrival = now
+            continue
         # Surges start at random (on average every SURGE_EVERY_S simulated seconds)
-        if now >= surge_until and rng.random() < step * config.TIME_SCALE / config.SURGE_EVERY_S:
-            surge_until = now + config.SURGE_SECONDS / config.TIME_SCALE
+        if now >= surge_until and rng.random() < step * scale / config.SURGE_EVERY_S:
+            surge_until = now + config.SURGE_SECONDS / scale
             next_arrival = now
             out.put(('surge', config.SURGE_SECONDS))
-        rate = config.ARRIVALS_PER_MINUTE / 60 * config.TIME_SCALE  # per real second
+        rate = config.ARRIVALS_PER_MINUTE / 60 * scale  # per real second
         if now < surge_until:
             rate *= config.SURGE_MULTIPLIER
         while next_arrival <= now:  # Poisson arrivals: exponential gaps between them

@@ -178,7 +178,8 @@ class Dispatcher:
             with open(path, encoding='utf-8') as f:
                 saved = json.load(f)
             self.brain, self.learned, self.error_sum = saved['brain'], saved['learned'], saved['error_sum']
-            self.policy = saved.get('policy', self.policy)
+            if len(saved.get('policy', [])) == len(self.policy):  # (an older brain weighed urgency too: not used)
+                self.policy = saved['policy']
 
     def save(self, path):
         with self.cond:
@@ -227,7 +228,7 @@ class Dispatcher:
     def assign(self):
         """Hands out what it can. Call it holding self.cond. Returns [(task, actor)] it gave."""
         given = []
-        for first in sorted(self.open, key=lambda t: (-self.priority(t), t.created)):
+        for first in sorted(self.open, key=lambda t: (-t.urgency, -self.priority(t), t.created)):
             team = first.team or [first]
             if first not in self.open or any(t not in self.open for t in team):
                 continue
@@ -263,11 +264,12 @@ class Dispatcher:
         return task, actor
 
     def priority(self, task):
-        """How soon a task is handed out (highest first): its urgency, how long it has been waiting and, for a
-        patient, how close it is to running out of patience. learn.py tunes the weights (config.PRIORITY_START)."""
-        w_urgency, w_waited, w_impatience = self.policy
+        """Who goes first within the same urgency (the most urgent always go first, like real triage): how long it
+        has been waiting and, for a patient, how close it is to running out of patience. learn.py tunes the
+        weights (config.PRIORITY_START)."""
+        w_waited, w_impatience = self.policy
         impatience = 1 - task.patient.patience / 100 if task.patient is not None else 0.0
-        return w_urgency * task.urgency + w_waited * (self.clock() - task.created) / 60 + w_impatience * impatience
+        return w_waited * (self.clock() - task.created) / 60 + w_impatience * impatience
 
     def score(self, actor, task):
         if actor.role != task.role or not actor.inbox.empty():

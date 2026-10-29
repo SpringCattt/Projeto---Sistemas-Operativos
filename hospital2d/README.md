@@ -118,8 +118,9 @@ seconds = base + distance to the task × w_distance + fatigue × w_fatigue  (+ w
 When the actor finishes, it compares the real time with its guess and nudges each weight in the direction that
 would have made the guess better (normalised least mean squares; one set of weights per kind of task).
 
-**Who goes first** when there are more patients than doctors is a priority with three weights: urgency, minutes
-waited and impatience (how close the patient is to giving up). It starts as plain "most urgent first" and
+**Who goes first** when there are more patients than doctors: always the most urgent colour first, like real triage
+(the Manchester system used in Portuguese and Spanish emergency rooms). Within a colour it's a priority with two
+weights: minutes waited and impatience (how close the patient is to giving up). It starts as arrival order and
 `learn.py` tunes it with an **evolution strategy**, in rounds of 10 simulated minutes: every hospital plays the same
 day (same seed) with the weights nudged a bit (half one way, half the opposite), each round is scored
 (treated − 3 × gave up − minutes Red patients waited) and the weights move towards the nudges that scored better.

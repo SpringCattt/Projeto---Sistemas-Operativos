@@ -2,8 +2,8 @@
 #   speed: default 8. Faster than that people can't move as fast as they should, and it would learn wrong things.
 #   hospitals: how many run at once, each in its own process (one CPU core each); default 4. At least 2 to learn.
 #
-# What it learns: who goes first when there are more patients than doctors (Dispatcher.priority: weights for
-# urgency, minutes waited and impatience). It's an evolution strategy, in rounds of ROUND_MINUTES simulated minutes:
+# What it learns: who goes first among patients of the same urgency when there are more patients than doctors
+# (the most urgent always go first, like real triage; Dispatcher.priority: weights for minutes waited and impatience). It's an evolution strategy, in rounds of ROUND_MINUTES simulated minutes:
 #   1. every hospital starts the same day (same seed: same patients arriving at the same times) with the current
 #      weights nudged a bit, half of them one way and half the opposite way (+noise / -noise)
 #   2. each scores its round: treated - 3 x gave up - minutes Red patients waited for a doctor
@@ -20,6 +20,7 @@ import os
 import queue
 import random
 import sys
+import time
 
 import config
 from arrivals import new_patient
@@ -28,7 +29,7 @@ from world import Dispatcher
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 CSV = os.path.join(HERE, 'learning.csv')
-FIELDS = ['round', 'reward', 'best', 'worst', 'w_urgency', 'w_waited', 'w_impatience', 'treated', 'gave_up',
+FIELDS = ['round', 'reward', 'best', 'worst', 'w_waited', 'w_impatience', 'treated', 'gave_up',
           'red_wait_min', 'tasks', 'error_s', 'vs_start']
 ROUND_MINUTES = 10
 NOISE = 2.0  # how big the nudges are
@@ -91,7 +92,7 @@ def main(speed, n):
             with open(CSV, 'w', newline='', encoding='utf-8') as f:
                 csv.writer(f).writerows([FIELDS] + [row + [''] for row in old[1:]])
         elif header != FIELDS:  # from an older learn.py: kept aside
-            os.replace(CSV, os.path.join(HERE, 'learning_old.csv'))
+            os.replace(CSV, os.path.join(HERE, f'learning_old_{time.strftime("%Y%m%d_%H%M%S")}.csv'))
             rnd = 0
     jobs, reports = [mp.Queue() for _ in range(n)], mp.Queue()
     procs = [mp.Process(target=hospital, args=(i, speed, jobs[i], reports), daemon=True) for i in range(n)]
@@ -156,8 +157,8 @@ def main(speed, n):
                 f.flush()  # so charts.py sees it straight away
                 keep_up = min(r['keep_up'] for r in results)
                 print(f'round {rnd}: score {mean:.1f} (best {max(rewards):.1f}, worst {min(rewards):.1f}); '
-                      f'weights urgency {boss.policy[0]:.1f}, waited {boss.policy[1]:.1f}, '
-                      f'impatience {boss.policy[2]:.1f}; vs start {vs_start}; keeping up {100 * keep_up:.0f}%'
+                      f'weights waited {boss.policy[0]:.1f}, impatience {boss.policy[1]:.1f}; '
+                      f'vs start {vs_start}; keeping up {100 * keep_up:.0f}%'
                       + ('  << too many hospitals for this PC: use fewer' if keep_up < 0.9 else ''))
     except KeyboardInterrupt:
         pass

@@ -100,13 +100,20 @@ def test_team():
 
 
 def test_priority():
-    """Who goes first: most urgent by default; with weight on impatience, whoever is about to give up."""
+    """The most urgent colour always first, however impatient the others; within a colour, the learned weights."""
     d = Dispatcher(clock=lambda: 0)
-    calm = Task('consult', 'doctor', 0, patient=SimpleNamespace(name='Calm', rank=1, patience=100, tx=0, ty=0))
-    fed_up = Task('consult', 'doctor', 0, patient=SimpleNamespace(name='Fed up', rank=0, patience=5, tx=0, ty=0))
-    assert d.priority(calm) > d.priority(fed_up)  # Yellow before Green
-    d.policy = [10.0, 0.0, 30.0]
-    assert d.priority(fed_up) > d.priority(calm)
+    doctor = SimpleNamespace(id=1, name='Dr', role='doctor', tx=0, ty=0, fatigue=0.0, resting=False, task=None,
+                             inbox=queue.Queue())
+    d.staff = [doctor]
+    patient = lambda rank, patience: SimpleNamespace(name=f'{rank}/{patience}', rank=rank, patience=patience, tx=0, ty=0)
+    green_fed_up, yellow_calm, yellow_fed_up = (Task('consult', 'doctor', 0, patient=patient(r, p))
+                                                for r, p in ((0, 1), (1, 100), (1, 5)))
+    d.policy = [0.0, 30.0]
+    d.submit(green_fed_up, yellow_calm, yellow_fed_up)
+    with d.cond:
+        (task, _), = d.assign()
+    assert task is yellow_fed_up  # Yellow before Green; of the Yellows, the one about to give up
+    assert d.priority(green_fed_up) > d.priority(yellow_calm)  # (the weights alone would have said the Green)
 
 
 def test_learning():

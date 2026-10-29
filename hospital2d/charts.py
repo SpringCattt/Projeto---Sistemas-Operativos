@@ -47,9 +47,9 @@ def main():
     a.legend()
 
     a = ax[0][1]
-    for name, label in (('w_urgency', 'urgency'), ('w_waited', 'minutes waited'), ('w_impatience', 'impatience')):
+    for name, label in (('w_waited', 'minutes waited'), ('w_impatience', 'impatience')):
         a.plot(rounds, column(rows, name), label=label)
-    a.set(title='Who goes first: what it learned (weights)', xlabel='round', ylabel='weight')
+    a.set(title='Who goes first within a colour: what it learned', xlabel='round', ylabel='weight')
     a.legend()
 
     a = ax[1][0]

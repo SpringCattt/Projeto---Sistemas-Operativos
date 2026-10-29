@@ -2,7 +2,8 @@
 
 A top-down pixel-art hospital where every person is a thread. Patients walk in, register, get triaged, wait and
 see a doctor (or go to surgery); doctors, nurses, receptionists, security and cleaners do their jobs, and a
-dispatcher — sitting in the control room — decides who does what. It is the Operating Systems project
+dispatcher — the Boss, sitting in the round control room at the centre of the hospital — decides who does
+what. It is the Operating Systems project
 (*Comunicação e Sincronização entre Processos*): processes that only talk through queues, and threads that share
 memory through locks, conditions, events and semaphores.
 
@@ -23,7 +24,17 @@ it into `assets/third_party/`:
 | `moderntown/` (with `sprites/` inside) | *Modern Town Tileset — Free Sample* by Chucky Assets |
 
 **Controls:** WASD / arrows or right-drag to move · mouse wheel to zoom · click a person for their card, or any tile
-of a room to see who is inside (the list is clickable) · `L` event log on/off · `ESC` closes the card.
+of a room to see who is inside (the list is clickable) · `L` event log on/off · `B` what the Boss is doing
+(also shown when you click the Boss) · `ESC` closes the card.
+
+## The building
+
+The hospital is built around its centre: the **Main Hall**, with the Boss's round **Control Room** in the middle
+(a door on each side). The main corridor runs through the hall and out to both sides. Under the hall is the base
+block, always the same: street → reception → a triage room on each side (two nurses each) → the two waiting rooms,
+plus the bar. Every other room — doctors' rooms first, then the surgery groups (surgery | disinfection |
+surgery), storage and rest — goes to whichever side is shortest so far (on top of the hall, or along the corridor,
+above or below, left or right), so the hospital grows evenly around the control room as `MAX_DOCTORS` grows.
 
 Everything you can tune is in [`config.py`](config.py): number of doctors (the building grows with them), surgeries,
 staff, arrivals per minute, surges, how long things take, patience, the dispatcher's weights, fatigue,
@@ -86,12 +97,19 @@ called them, or into staff rooms.
 
 ### The dispatcher ([`world.py`](world.py), [`staff.py`](staff.py))
 
-The dispatcher is a person: the boss in the control room, whose thread runs the assignment loop. For every open
+The dispatcher is a person: the Boss in the control room, whose thread runs the assignment loop. For every open
 task (consultation, fight, mess), most urgent first, it scores every actor of the right role and picks the lowest:
 
 ```
-score = distance to the task × W_DISTANCE + fatigue × W_FATIGUE  (+ W_BUSY if busy) (+ W_RESTING if resting)
+score = walking distance to the task × W_DISTANCE + fatigue × W_FATIGUE  (+ W_BUSY if busy) (+ W_RESTING if resting)
 ```
+
+The distance is the real one, walking around walls and furniture (a breadth-first search from the task, cached).
+Click the Boss (or press `B`) to watch it: a line from every busy member of staff to its task, a pulsing ring on
+every task still waiting, and its last decisions with the score of the winner and of the runner-up.
+
+Routes (A*) are always the shortest; among equally short ones people take the one with fewest turns, so they walk
+straight instead of zig-zagging.
 
 * A busy actor is only **interrupted** when the new task is at least `PREEMPT_GAP` (2) urgency levels above what
   it's doing — a Red patient takes a doctor away from a Green one, never from a Yellow one, so doctors don't keep

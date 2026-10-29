@@ -10,7 +10,7 @@ N_SURGERIES = 5
 # Actors
 N_NURSES = 4  # ward nurses (walking the medical wing); triage nurses come from TRIAGE_DESKS_PER_ROOM
 N_RECEPTIONISTS = 3
-TRIAGE_DESKS_PER_ROOM = 1  # 1 or 2 (there is one triage room beside each waiting room), one nurse each
+TRIAGE_DESKS_PER_ROOM = 2  # 1 or 2 (there is one triage room beside each waiting room), one nurse each
 N_SECURITY = 2
 N_CLEANERS = 2
 N_PATIENTS = 20  # already triaged and waiting when the simulation starts

@@ -11,6 +11,7 @@
 # Deadlock rule: a thread never holds two of these locks at the same time.
 import itertools
 import threading
+from collections import deque
 
 import config
 
@@ -107,18 +108,22 @@ class Dispatcher:
     """The 'AI' that decides who does what. For every open task, most urgent first, it scores each actor of
     the right role and gives the task to the lowest score:
 
-        score = distance to the task * W_DISTANCE + fatigue * W_FATIGUE (+ W_BUSY if busy, + W_RESTING if resting)
+        score = walking distance to the task * W_DISTANCE + fatigue * W_FATIGUE
+                (+ W_BUSY if busy, + W_RESTING if resting)
 
     An actor busy with something only gets interrupted when the new task is at least PREEMPT_GAP urgency
     levels above it (so they don't keep jumping between similar tasks), and never during a surgery.
     Holding `cond` protects `open` and every actor's `task`. The loop that calls assign() is the thread of the
     dispatcher in person, sitting in the control room (staff.Boss)."""
 
-    def __init__(self, clock):
+    def __init__(self, clock, distance=None):
         self.clock = clock
+        # tiles to walk between two tiles (the plan's real distance, around walls); straight-line if not given
+        self.distance = distance or (lambda a, b: abs(a[0] - b[0]) + abs(a[1] - b[1]))
         self.cond = threading.Condition()
         self.open = []
         self.staff = []  # actors that take tasks from here (doctors, security, cleaners)
+        self.decisions = deque(maxlen=12)  # (time, text): what it decided and why, shown on the Boss's card
 
     def submit(self, task):
         with self.cond:
@@ -147,25 +152,30 @@ class Dispatcher:
         """Hands out what it can. Call it holding self.cond. Returns how many tasks it gave."""
         given = 0
         for task in sorted(self.open, key=lambda t: (-t.urgency, t.created)):
-            scored = [(s, a.id, a) for a in self.staff if (s := self.score(a, task)) is not None]
+            scored = sorted((s, a.id, a) for a in self.staff if (s := self.score(a, task)) is not None)
             if not scored:
                 continue
-            _, _, actor = min(scored)
+            best, _, actor = scored[0]
+            why = f'{task.label()} -> {actor.name}: {best:.0f}'
+            if len(scored) > 1:
+                why += f' (next {scored[1][2].name}: {scored[1][0]:.0f})'
+            if actor.task is not None:
+                why += f', interrupting {actor.task.label()}'
+            self.decisions.append((self.clock(), why))
             self.open.remove(task)
             actor.task = task  # if it was busy, it notices the inbox, drops its task and that one is re-submitted
             actor.inbox.put(task)
             given += 1
         return given
 
-    @staticmethod
-    def score(actor, task):
+    def score(self, actor, task):
         if actor.role != task.role or not actor.inbox.empty():
             return None
         busy = actor.task
         if busy is not None and (not busy.preemptable or task.urgency - busy.urgency < config.PREEMPT_GAP):
             return None
-        tx, ty = task.where()
-        score = (abs(actor.tx - tx) + abs(actor.ty - ty)) * config.W_DISTANCE + actor.fatigue * config.W_FATIGUE
+        distance = self.distance(task.where(), (actor.tx, actor.ty))
+        score = distance * config.W_DISTANCE + actor.fatigue * config.W_FATIGUE
         if busy is not None:
             score += config.W_BUSY
         if actor.resting:

@@ -3,7 +3,7 @@
 #   UI (this one, pygame)  <- snapshots --  simulation (sim.py: one thread per actor)  <- patients, surges --  arrivals
 #                          -- commands ->                                              -- events ->  log (hospital.log)
 # Controls: WASD/arrows or right-drag = move camera | wheel = zoom | click an NPC or a room = info card
-#           L = event log on/off | ESC = close the card
+#           L = event log on/off | B = what the dispatcher (Boss) is doing | ESC = close the card
 import heapq
 import multiprocessing as mp
 import queue
@@ -78,6 +78,32 @@ def draw_room_card(screen, font, room, people, list_open, scroll):
     return hits + [(rect, ('card',))]
 
 
+def draw_panel(screen, font, title, lines, topright, width=CARD_W):
+    """A titled list of (text, colour) lines under the info card. Returns the bottom of the panel."""
+    panel = pygame.Surface((width, 30 + 18 * len(lines)), pygame.SRCALPHA)
+    panel.fill((20, 22, 28, 215))
+    panel.blit(font.render(title, True, HIGHLIGHT), (10, 6))
+    for i, (text, color) in enumerate(lines):
+        panel.blit(font.render(text[:width // 7], True, color), (10, 26 + 18 * i))
+    rect = panel.get_rect(topright=topright)
+    screen.blit(panel, rect)
+    return rect.bottom
+
+
+def draw_dispatcher(screen, font, boss, to_screen, by_id):
+    """On the map: a line from each busy member of staff to its task (urgency colour), and a pulsing ring on
+    every task still waiting for someone."""
+    pulse = 6 + 3 * abs((pygame.time.get_ticks() // 60) % 10 - 5) / 5
+    for actor_id, (tx, ty), urgency, _ in boss['working']:
+        a = by_id.get(actor_id)
+        if a is not None:
+            start, end = to_screen(a.px, a.py), to_screen(tx + 0.5, ty + 0.5)
+            pygame.draw.line(screen, URGENCY_COLORS[urgency], start, end, 3)
+            pygame.draw.circle(screen, URGENCY_COLORS[urgency], end, 6)
+    for (tx, ty), urgency, _ in boss['open']:
+        pygame.draw.circle(screen, URGENCY_COLORS[urgency], to_screen(tx + 0.5, ty + 0.5), pulse * 2, 3)
+
+
 def draw_events(screen, font, events):
     if not events:
         return
@@ -113,12 +139,12 @@ def run_ui(snapshots):
         return looks[a.look][a.facing][WALK_CYCLE[int(a.anim_t * 6) % 4] if a.path else 1]
 
     zoom = 3
-    rec = lay.rooms_of('reception')[0]
-    cam_x = (rec.x + rec.w / 2) * T - screen.get_width() / zoom / 2
-    cam_y = (rec.y + rec.h / 2) * T - screen.get_height() / zoom / 2
+    centre = lay.rooms_of('control')[0]  # the hospital is built around it
+    cam_x = (centre.x + centre.w / 2) * T - screen.get_width() / zoom / 2
+    cam_y = (centre.y + centre.h / 2) * T - screen.get_height() / zoom / 2
     snap = {'actors': [], 'messes': [], 'events': [], 'stats': {}, 'time': 0.0, 'surge': False, 'sim_hz': 0.0,
             'line': 0, 'triage': 0, 'patients': 0, 'keep_up': 1.0}
-    actors, selected_id, room_sel, list_open, scroll, show_log = [], None, None, False, 0, True
+    actors, selected_id, room_sel, list_open, scroll, show_log, show_boss = [], None, None, False, 0, True, False
     dragging, cache, hits, people = False, {}, [], []
 
     while True:
@@ -142,6 +168,8 @@ def run_ui(snapshots):
                 selected = selected_id = room_sel = None
             elif ev.type == pygame.KEYDOWN and ev.key == pygame.K_l:
                 show_log = not show_log
+            elif ev.type == pygame.KEYDOWN and ev.key == pygame.K_b:
+                show_boss = not show_boss
             elif ev.type == pygame.MOUSEWHEEL:
                 mx, my = pygame.mouse.get_pos()
                 if room_sel and list_open and any(r.collidepoint(mx, my) for r, _ in hits):  # scroll the list
@@ -239,16 +267,35 @@ def run_ui(snapshots):
             for r, label in room_labels:
                 screen.blit(label, to_screen(r.x + 1.2, r.y + 1.1))
 
+        boss = next((a for a in actors if a.role == 'dispatcher'), None)
+        watching_boss = boss is not None and (show_boss or selected is boss)
+        if watching_boss:
+            draw_dispatcher(screen, font, boss.boss, to_screen, {a.id: a for a in actors})
+
         hits = []
         if selected:
             hits = draw_card(screen, font, info_lines(selected))
-        elif room_sel:
+        if room_sel and not selected:
             x, y = to_screen(room_sel.x, room_sel.y)
             pygame.draw.rect(screen, HIGHLIGHT, (x, y, room_sel.w * T * zoom, room_sel.h * T * zoom), 2)
             people = sorted((a for a in actors if lay.room_at[a.ty][a.tx] is room_sel),
                             key=lambda a: (ROLE_LABEL[a.role], a.name))
             scroll = max(0, min(scroll, len(people) - LIST_ROWS))
             hits = draw_room_card(screen, font, room_sel, people, list_open, scroll)
+        if watching_boss:  # what it's juggling and why it decided what it did
+            top = hits[0][0].bottom + 6 if hits else 10
+            working = [(f'{label}  <- {next((a.name for a in actors if a.id == i), "?")}',
+                        URGENCY_COLORS[u]) for i, _, u, label in boss.boss['working']]
+            waiting = [(label, URGENCY_COLORS[u]) for _, u, label in boss.boss['open']] or [('nothing', MUTED)]
+            decisions = [(text, TEXT)
+                         for t, text in boss.boss['decisions'][::-1]] or [('nothing yet', MUTED)]
+            def first(lines, n):  # keeps the panels on screen
+                return lines[:n] + ([(f'... and {len(lines) - n} more', MUTED)] if len(lines) > n else [])
+
+            top = draw_panel(screen, small, 'Boss: being done now', first(working or [('nothing', MUTED)], 6),
+                             (sw - 10, top), 560) + 6
+            top = draw_panel(screen, small, 'Boss: waiting for someone', first(waiting, 6), (sw - 10, top), 560) + 6
+            draw_panel(screen, small, 'Boss: last decisions (newest first)', decisions[:5], (sw - 10, top), 560)
 
         if snap['surge']:
             text = banner_font.render('SURGE! Lots of patients arriving', True, (255, 255, 255))
@@ -264,7 +311,7 @@ def run_ui(snapshots):
                f'   line {snap["line"]}   triage {snap["triage"]}   zoom x{zoom}')
         slow = 0 < fps < config.MIN_FPS or snap['keep_up'] < 0.8
         screen.blit(font.render(hud, True, (240, 90, 90) if slow else TEXT, (20, 22, 28)), (10, 10))
-        screen.blit(font.render('WASD/right-drag: move   wheel: zoom   click: NPC or room info   L: log   ESC: close',
+        screen.blit(font.render('WASD/right-drag: move   wheel: zoom   click: NPC or room info   L: log   B: boss   ESC: close',
                                 True, (200, 200, 200), (20, 22, 28)), (10, sh - 26))
         pygame.display.flip()
 

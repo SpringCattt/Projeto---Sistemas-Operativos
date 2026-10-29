@@ -8,8 +8,9 @@
 #      weights nudged a bit, half of them one way and half the opposite way (+noise / -noise)
 #   2. each scores its round: treated - 3 x gave up - minutes Red patients waited for a doctor
 #   3. the weights move towards the nudges that scored better than the average, and the next round starts
-# With 4 or more hospitals, two of them play that same day with the current weights and with the ones it started
-# from: the fair test of whether what it learned is any better (vs_start in learning.csv, above 0 = better).
+# With 4 or more hospitals, some play other days twice, with the current weights and with the ones it started from
+# (one day; five with 20+ hospitals): the fair test of whether what it learned is any better (vs_start in
+# learning.csv: the average difference over those days, above 0 = better).
 # On top of that, as before, the Boss learns how long each task takes (who does it; averaged over the hospitals).
 # Everything is saved after every round in boss_brain.json (the game starts from it too) and learning.csv.
 # Run it again and it goes on from there. Graphs, whenever you want (even while this runs): python charts.py
@@ -110,16 +111,20 @@ def main(speed, n):
                 rnd += 1
                 seed = rng.randrange(10 ** 9)
                 # +noise / -noise in pairs (an odd one out plays the current weights as they are), and the fair test
-                compare = 2 if n >= 4 else 0
+                days = [rng.randrange(10 ** 9) for _ in range(5 if n >= 20 else 1 if n >= 4 else 0)]
+                compare = 2 * len(days)
                 noises = []
                 for _ in range((n - compare) // 2):
                     e = [rng.gauss(0, 1) for _ in boss.policy]
                     noises += [e, [-x for x in e]]
                 noises += [[0.0] * len(boss.policy)] * ((n - compare) % 2)
                 plays = [[w + NOISE * x for w, x in zip(boss.policy, e)] for e in noises]
-                plays += [list(boss.policy), list(config.PRIORITY_START)] if compare else []
-                for job, weights in zip(jobs, plays):
-                    job.put((seed, weights, boss.brain))
+                seeds = [seed] * len(plays)
+                for day in days:
+                    plays += [list(boss.policy), list(config.PRIORITY_START)]
+                    seeds += [day, day]
+                for job, weights, s in zip(jobs, plays, seeds):
+                    job.put((s, weights, boss.brain))
                 results = [None] * n
                 while None in results:
                     try:
@@ -131,7 +136,8 @@ def main(speed, n):
                 m = len(rewards)
                 mean = sum(rewards) / m
                 spread = (sum((x - mean) ** 2 for x in rewards) / m) ** 0.5
-                vs_start = round(results[-2]['reward'] - results[-1]['reward'], 1) if compare else ''
+                tests = results[len(noises):]
+                vs_start = round(sum(a['reward'] - b['reward'] for a, b in zip(tests[::2], tests[1::2])) / len(days), 1)                     if days else ''
                 if m >= 2 and spread > 0:  # towards the nudges that did better than the average
                     for k in range(len(boss.policy)):
                         move = sum((x - mean) / spread * e[k] for x, e in zip(rewards, noises)) / m

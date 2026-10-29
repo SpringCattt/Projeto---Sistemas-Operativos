@@ -19,9 +19,9 @@ it into `assets/third_party/`:
 
 | Folder | Pack |
 |---|---|
-| `hospital/` (with `Pngs/` inside) | *Top Down Hospital* (itch.io) |
-| `characters/` (`000.png` … `039.png`) | *2D Top Down Pixel Art Characters* by Jephed |
-| `moderntown/` (with `sprites/` inside) | *Modern Town Tileset — Free Sample* by Chucky Assets |
+| `hospital/` (with `Pngs/` inside) | [Hospital Top-Down Pixel Pack](https://soppycraft.itch.io/top-down-hospital) by Soppycraft |
+| `characters/` (`000.png` … `039.png`) | [2D Top-Down Pixel Art Characters](https://gamebetweenthelines.itch.io/top-down-pixel-art-characters) by Jephed |
+| `moderntown/` (with `sprites/` inside) | [Modern Town Tileset — Free Sample](https://chuckyassets.itch.io/modern-town-tileset-free-sample) by Chucky Assets |
 
 **Controls:** WASD / arrows or right-drag to move · mouse wheel to zoom · click a person for their card, or any tile
 of a room to see who is inside (the list is clickable) · `L` event log on/off · `B` what the Boss is doing
@@ -184,9 +184,9 @@ Ryzen 5 3600, Python 3.14 (one process, so all actor threads share the GIL):
 
 ## Credits
 
-* *Top Down Hospital* asset pack (itch.io).
-* *2D Top Down Pixel Art Characters* — Jephed, Game Between The Lines, https://gamebetweenthelines.com/
-* *Modern Town Tileset — Free Sample* — Chucky Assets.
+* [Hospital Top-Down Pixel Pack](https://soppycraft.itch.io/top-down-hospital) — Soppycraft
+* [2D Top-Down Pixel Art Characters](https://gamebetweenthelines.itch.io/top-down-pixel-art-characters) — Jephed, [Game Between The Lines](https://gamebetweenthelines.com/)
+* [Modern Town Tileset — Free Sample](https://chuckyassets.itch.io/modern-town-tileset-free-sample) — [Chucky Assets](https://chuckyassets.itch.io/)
 
 ## Ideas for later
 

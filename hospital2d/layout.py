@@ -189,11 +189,12 @@ class Layout:
                     todo.append(nb)
         return dist
 
-    def path(self, start, goal, avoid=(), blocked=frozenset()):
+    def path(self, start, goal, avoid=(), blocked=frozenset(), limit=None):
         """4-direction A*: the shortest route, and of all the shortest ones the one with fewest turns, so people walk
         straight instead of zig-zagging. Returns the tiles up to goal (start excluded), or [] if unreachable.
         avoid: room kinds the walker may not step into (e.g. patients and the corridor).
-        blocked: tiles it may not step on (staff-only areas, other people)."""
+        blocked: tiles it may not step on (staff-only areas, other people).
+        limit: only routes up to this many tiles (gives up much sooner when there's no such route)."""
         def ok(x, y):
             if not self.walkable(x, y) or (x, y) in blocked:
                 return False
@@ -217,6 +218,8 @@ class Layout:
                 return route[::-1]
             if g > best[(cur, d)]:
                 continue
+            if limit is not None and g + abs(cur[0] - gx) + abs(cur[1] - gy) > limit + 0.5:  # (turns cost a bit)
+                return []  # everything left is longer than that
             for nd, (ddx, ddy) in enumerate(DIRECTIONS):
                 nb = (cur[0] + ddx, cur[1] + ddy)
                 if not ok(*nb):

@@ -346,18 +346,29 @@ def run_simulation(snapshots, commands, arrivals, log_out, seed=None, speed=None
     h = Hospital(seed, log_out=log_out)
     h.log('The hospital opens')
     h.start()
+    quit_, poke = threading.Event(), threading.Event()  # poke: an order was carried out, send a snapshot now
+
+    def listen():
+        """Its own thread, always blocked on the queue: an order from the admin tablet is carried out the moment it
+        arrives, like an interrupt, whatever the rest of the process is doing (it doesn't wait for a snapshot)."""
+        while True:
+            cmd = commands.get()
+            if cmd == 'quit':
+                quit_.set()
+                return poke.set()
+            h.command(cmd)
+            if speed is not None:
+                speed.value = h.speed
+            poke.set()
+
+    threading.Thread(target=listen, name='admin-orders', daemon=True).start()
     last_measure = time.perf_counter()
     try:
         while True:
-            try:  # the timeout paces the snapshots
-                cmd = commands.get(timeout=1 / config.SNAPSHOT_HZ)
-                if cmd == 'quit':
-                    break
-                h.command(cmd)
-                if speed is not None:
-                    speed.value = h.speed
-            except queue.Empty:
-                pass
+            poke.wait(1 / config.SNAPSHOT_HZ)  # paces the snapshots (or sooner, to show an order straight away)
+            poke.clear()
+            if quit_.is_set():
+                break
             while True:
                 try:
                     kind, payload = arrivals.get_nowait()

@@ -44,23 +44,37 @@ def hospital(i, speed, jobs, reports):
             rng = random.Random(seed)  # the same patients at the same times in every hospital
             next_arrival = 0.0
             h.start()
+            h.measure()  # from here: did the actor threads keep up with their rate? (too many hospitals: no)
             try:
                 while h.clock() < ROUND_MINUTES * 60:
                     while h.clock() >= next_arrival:
                         h.admit(new_patient(rng))
                         next_arrival += rng.expovariate(config.ARRIVALS_PER_MINUTE / 60)
                     h.stop.wait(0.05)
+                h.measure()
             finally:
                 h.shutdown()
             red = sum(h.waits.get(2, [])) / 60
             reward = h.stats['treated'] - 3 * h.stats['gave_up'] - red
             reports.put((i, {'reward': reward, 'treated': h.stats['treated'], 'gave_up': h.stats['gave_up'],
-                             'red': red, 'brain': d.brain, 'tasks': d.learned, 'errors': d.error_sum}))
+                             'red': red, 'brain': d.brain, 'tasks': d.learned, 'errors': d.error_sum,
+                             'keep_up': h.keep_up}))
     except KeyboardInterrupt:
         pass
 
 
+def stay_awake_quietly():
+    """Windows: no sleeping while it learns (until it stops), and below-normal priority for it and the hospital
+    processes it starts, so the PC stays responsive if someone uses it meanwhile."""
+    if os.name == 'nt':
+        import ctypes
+        k = ctypes.windll.kernel32
+        k.SetThreadExecutionState(0x80000000 | 0x00000001)  # ES_CONTINUOUS | ES_SYSTEM_REQUIRED
+        k.SetPriorityClass(k.GetCurrentProcess(), 0x00004000)  # BELOW_NORMAL_PRIORITY_CLASS
+
+
 def main(speed, n):
+    stay_awake_quietly()
     boss = Dispatcher(clock=lambda: 0.0)  # only to hold, update and save what it learned
     boss.load(BRAIN)
     rnd = 0
@@ -122,9 +136,11 @@ def main(speed, n):
                               *[round(w, 2) for w in boss.policy], *[round(x, 1) for x in avg], tasks,
                               round(errors / tasks, 1) if tasks else ''])
                 f.flush()  # so charts.py sees it straight away
+                keep_up = min(r['keep_up'] for r in results)
                 print(f'round {rnd}: score {mean:.1f} (best {max(rewards):.1f}, worst {min(rewards):.1f}); '
                       f'weights urgency {boss.policy[0]:.1f}, waited {boss.policy[1]:.1f}, '
-                      f'impatience {boss.policy[2]:.1f}')
+                      f'impatience {boss.policy[2]:.1f}; keeping up {100 * keep_up:.0f}%'
+                      + ('  << too many hospitals for this PC: use fewer' if keep_up < 0.9 else ''))
     except KeyboardInterrupt:
         pass
     finally:

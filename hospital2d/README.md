@@ -79,6 +79,7 @@ structures ([`world.py`](world.py)):
 | `Summons` | two `Event`s | rendezvous between a member of staff and a patient: *arrived* (patient → staff), *done* (staff → patient) |
 | `Dispatcher` | monitor (`Condition`) | open tasks and who is doing what; woken up by every new task and every finished one |
 | `Theatres` | counting `Semaphore` + `Lock` | how many operating rooms are free, and which |
+| `Transfer` | `Condition` + `Event`s | two nurses meet at storage with a stretcher, then pick up and deliver a Red patient |
 | disinfection rooms | counting `Semaphore` (one per room) | as many doctors washing at once as the room has sinks |
 
 **Deadlocks.** No thread ever holds two of those locks at the same time, so there is no lock-ordering deadlock.
@@ -118,6 +119,9 @@ straight instead of zig-zagging.
   jumping between similar tasks. The interrupted patient goes back to the waiting room, keeping its place.
 * **Surgery** is never interrupted. The doctor takes a free operating room (semaphore), washes in its disinfection
   room (semaphore) and only then goes in, from the disinfection room — never straight from the corridor.
+* **Red patients** wait lying in a bed in **Emergency**. When a doctor takes one, two ward nurses run to storage,
+  wait for each other there, bring the stretcher, and push the patient (lying on it) to the doctor's exam bed or
+  straight to surgery. Staff run to tasks in other rooms, faster the more urgent (`RUN_SPEED`).
 * **Fatigue** goes up with every task and down with rest; tired people work slower and get fewer tasks, and when
   they're exhausted they go to the rest room.
 

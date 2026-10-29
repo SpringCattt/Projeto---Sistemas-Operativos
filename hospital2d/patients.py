@@ -10,7 +10,7 @@ from world import Task
 
 BASE_ROOMS = frozenset({'street', 'reception', 'waiting'})  # where a patient may walk on its own
 # When two calls arrive at once, the more important one wins and the other is declined
-CALL_RANK = {'surgery': 4, 'consult': 3, 'triage': 2, 'register': 1, 'complaint': 1}
+CALL_RANK = {'surgery': 4, 'exam': 4, 'consult': 3, 'triage': 2, 'register': 1, 'complaint': 1}
 
 
 class Patient(Actor):
@@ -39,6 +39,8 @@ class Patient(Actor):
         return self.lay.staff_only  # never behind a counter
 
     def summon(self, summons):
+        if summons.stretcher:
+            self.h.fetch_stretcher(self, summons)
         self.calls.put(summons)
 
     # ---- the visit ------------------------------------------------------------------------------------------
@@ -52,8 +54,8 @@ class Patient(Actor):
             if call is None:  # gave up or was thrown out
                 return self.leave()
             result = self.answer(call)
-            if result == 'surgery':
-                result = self.answer(self.next_call('waiting for surgery'))
+            while result in ('exam', 'surgery'):
+                result = self.answer(self.next_call('waiting for surgery' if result == 'surgery' else 'waiting'))
             if result == 'done':
                 return self.leave()
             # call cancelled, or sent back because the doctor had an emergency: back to waiting, same place in queue
@@ -103,9 +105,11 @@ class Patient(Actor):
     def go_wait(self):
         """Into (or back to) its waiting room, on a free seat if there is one."""
         room = self.waiting_room or self.lay.rooms_of('waiting')[0]
+        if room.kind == 'emergency':
+            return self.go_to_bed(room)
         seats = self.lay.waiting_seats[room]
         self.area = seats * 3 + self.lay.free_tiles(room)  # mostly sitting, sometimes standing around
-        self.stage, self.allowed = 'going to the waiting room', BASE_ROOMS | {'triage', 'corridor', 'doctor'}
+        self.stage, self.allowed = 'going to the waiting room', BASE_ROOMS | {'triage', 'corridor', 'doctor', 'emergency'}
         while True:
             free = [t for t in seats if t not in self.world.occupied] or \
                    [t for t in self.lay.free_tiles(room) if t not in self.world.occupied]
@@ -114,6 +118,22 @@ class Patient(Actor):
             elif self.walk_to(min(free, key=lambda t: abs(t[0] - self.tx) + abs(t[1] - self.ty))):
                 break
         self.allowed = BASE_ROOMS
+
+    def go_to_bed(self, room):
+        """Red: lies on a free bed in Emergency until the stretcher comes."""
+        beds = self.lay.emergency_beds[room]
+        self.area = []
+        self.stage, self.allowed = 'going to Emergency', BASE_ROOMS | {'triage', 'corridor', 'emergency', 'doctor'}
+        while True:
+            free = [b for b in beds if b[0] not in self.world.occupied or self.world.occupied[b[0]] is self]
+            if not free:  # Emergency is full: the waiting room, like everyone else
+                self.waiting_room = self.lay.rooms_of('waiting')[0]
+                return self.go_wait()
+            if self.walk_to(free[0][0]):
+                break
+        self.allowed = BASE_ROOMS | {'emergency'}
+        bed = next(b for b in beds if b[0] == (self.tx, self.ty))
+        self.lie_on(bed[1])
 
     def wait_for_doctor(self):
         """Waits for a doctor's call while patience runs down. Returns the call, or None if it's leaving."""
@@ -173,6 +193,7 @@ class Patient(Actor):
 
     def out_of_patience(self):
         """'left', a doctor's call that came during a complaint, or None (calmed down, keeps waiting)."""
+        self.get_up()
         if self.temperament == 'passive':
             self.talk('give_up')
             self.h.count('gave_up')
@@ -212,6 +233,7 @@ class Patient(Actor):
 
     def leave(self):
         self.gone = True
+        self.get_up()
         if self.task is not None:
             self.h.dispatcher.cancel(self.task)
         self.h.line.leave(self)
@@ -257,6 +279,26 @@ class Patient(Actor):
         None if the call was cancelled."""
         here = self.lay.room_at[self.ty][self.tx]
         self.stage, self.allowed = call.stage, BASE_ROOMS | call.allow | ({here.kind} if here else set())
+        try:
+            return self._answer(call)
+        finally:
+            self.get_up()
+            self.on_stretcher, self.speed = False, 1.0
+
+    def _answer(self, call):
+        if call.stretcher:
+            t = call.transfer
+            self.stage = 'waiting for the stretcher'
+            if not self.wait_until(lambda: t.at_patient.is_set() or call.cancelled):
+                return None
+            self.get_up()
+            self.lying = self.on_stretcher = True
+            t.mounted.set()
+            self.stage = f'on a stretcher, {call.stage}'
+            self.allowed |= {'corridor', 'doctor', 'surgery', 'emergency'}
+            self.follow(lambda: t.lead, lambda: t.arrived.is_set() or call.cancelled)
+            if call.cancelled:
+                return None
         while (self.tx, self.ty) != call.tile:
             if call.cancelled:
                 return None
@@ -264,6 +306,9 @@ class Patient(Actor):
                 self.set_path(self.route(call.tile) or self.route(call.tile, around_people=True))
             self.step(self.tick())
         self.settle()
+        self.on_stretcher = False
+        if call.lie:
+            self.lie_on(call.lie)
         call.arrived.set()
         while not call.done.is_set():
             if call.cancelled:

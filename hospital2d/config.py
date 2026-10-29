@@ -4,22 +4,24 @@
 TILE = 16  # tile size in pixels (before zoom)
 
 # Layout: every doctor gets their own room, so the hospital grows with MAX_DOCTORS
-MAX_DOCTORS = 7
+MAX_DOCTORS = 10
 N_SURGERIES = 5
 
 # Actors
-N_NURSES = 4  # ward nurses (walking the medical wing); triage nurses come from TRIAGE_DESKS_PER_ROOM
-N_RECEPTIONISTS = 3
-TRIAGE_DESKS_PER_ROOM = 2  # 1 or 2 (there is one triage room beside each waiting room), one nurse each
+N_NURSES = 6  # ward nurses (walking the medical wing); triage nurses come from TRIAGE_DESKS_PER_ROOM
+N_RECEPTIONISTS = 5 # max 10, then they stack in each other`s position
+TRIAGE_DESKS_PER_ROOM = 4 # max 4
 N_SECURITY = 2
 N_CLEANERS = 2
-N_PATIENTS = 20  # already triaged and waiting when the simulation starts
+N_PATIENTS = 40  # already triaged and waiting when the simulation starts
 
 # Performance: below MIN_FPS the counter turns red (the hospital's limit)
 TARGET_FPS = 144
 MIN_FPS = 30
 
 ACTOR_SPEED = 1.5  # tiles per second
+RUN_SPEED = [1.4, 1.8, 2.4]  # x ACTOR_SPEED: staff run to a task in another room, faster the more urgent
+STRETCHER_SPEED = 2.4  # the two nurses pushing a stretcher (and the patient on it)
 TIME_SCALE = 1.0  # 2.0 = everything (walking, waiting, arrivals) happens twice as fast
 
 # Concurrency: every actor is a thread in the simulation process, which sends the UI process snapshots
@@ -62,7 +64,7 @@ PREEMPT_GAP = 2  # only interrupt for a task this many urgency levels higher (Re
 
 # Fatigue (0-100)
 FATIGUE_PER_TASK = {'consult': (6, 9, 13), 'surgery': 25, 'fight': 10, 'clean': 6,
-                    'register': 2, 'complaint': 3, 'triage': 3}
+                    'register': 2, 'stretcher': 8, 'complaint': 3, 'triage': 3}
 REST_AT = 70  # idle and this tired: goes to the rest room...
 RESTED_AT = 20  # ...until it's down to this
 RECOVER_PER_S = 0.15  # idle

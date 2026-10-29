@@ -75,6 +75,11 @@ class Actor:
         self.bubble, self.bubble_until = None, 0.0  # icon over the head: '!' fight, '?' surprise, '~' sick, 'z' rest,
         # '<3' thankful
         self.speech, self.speech_until = None, 0.0  # what it's saying (a speech bubble with text)
+        self.speed = 1.0  # x ACTOR_SPEED (running)
+        self.lying = self.on_stretcher = False
+        self.action = None  # animation while working: 'typing', 'mopping'
+        self.pushing = None  # the nurse behind, while it leads an empty stretcher
+        self.prev = None  # the last tile it left: whoever follows it walks onto it (see follow)
 
     def label(self):
         return f'{ROLE_LABEL[self.role]} {self.name}'
@@ -200,13 +205,15 @@ class Actor:
         self.blocked_for = self.stuck_for = 0.0
         nx, ny = nxt
         dx, dy = nx + 0.5 - self.px, ny + 0.5 - self.py
-        dist, stride = math.hypot(dx, dy), config.ACTOR_SPEED * dt
+        dist, stride = math.hypot(dx, dy), config.ACTOR_SPEED * self.speed * dt
         if dist > 1e-6:
             self.facing = ('right' if dx > 0 else 'left') if abs(dx) > abs(dy) else ('down' if dy > 0 else 'up')
         if dist <= stride:
             with w.lock:  # leave the old tile and stand on the new one atomically
                 if nxt != (self.tx, self.ty) and w.occupied.get((self.tx, self.ty)) is self:
                     del w.occupied[(self.tx, self.ty)]
+                if nxt != (self.tx, self.ty):
+                    self.prev = (self.tx, self.ty)
                 self.tx, self.ty, self.reserved = nx, ny, None
             self.px, self.py = nx + 0.5, ny + 0.5
             self.path.pop(0)
@@ -215,7 +222,7 @@ class Actor:
         else:
             self.px += dx / dist * stride
             self.py += dy / dist * stride
-        self.anim_t += dt
+        self.anim_t += dt * self.speed
 
     def step_aside(self, blocked_tile):
         """Two actors can block each other forever in a narrow spot (each waiting for the other's tile: a
@@ -253,6 +260,36 @@ class Actor:
                 return False
         return True
 
+    def follow(self, leader, done, gap=1):
+        """Walks in the steps of `leader()`, `gap` tiles behind, until done(). Out of its way if it turns back."""
+        while not done():
+            lead = leader()
+            if lead.path[:1] == [(self.tx, self.ty)]:
+                self.step_aside(None)
+            elif not self.path:
+                g = gap() if callable(gap) else gap
+                trail = lead.prev if lead.prev and lead.prev != (self.tx, self.ty) else None
+                r = self.route(trail) + [(lead.tx, lead.ty)] if trail else self.route((lead.tx, lead.ty))
+                if len(r) > g:
+                    self.set_path(r[:min(2, len(r) - g)])
+            self.step(self.tick())
+
+    def lie_on(self, spot):
+        """Climbs onto a bed / table centred at `spot` (in tiles); the tile it stands on stays its own."""
+        self.lying = True
+        self.slide((spot[0], spot[1] - 0.1))
+
+    def get_up(self):
+        if self.lying:
+            self.slide((self.tx + 0.5, self.ty + 0.5))
+            self.lying = False
+
+    def slide(self, to, speed=2.0):
+        while (self.px, self.py) != to:
+            dx, dy = to[0] - self.px, to[1] - self.py
+            d, stride = math.hypot(dx, dy), speed * self.tick()
+            self.px, self.py = to if d <= stride else (self.px + dx / d * stride, self.py + dy / d * stride)
+
     def settle(self):
         if (self.tx, self.ty) in self.lay.seats:
             self.facing = 'down'  # everyone sits facing down
@@ -271,8 +308,10 @@ class Actor:
                 self.set_path(self.route(goal))
 
     def state(self):
+        if self.lying:
+            return 'on a stretcher' if self.on_stretcher else 'lying'
         if self.path:
-            return 'walking'
+            return 'running' if self.speed > 1 else 'walking'
         return 'seated' if (self.tx, self.ty) in self.lay.seats else 'standing'
 
     # ---- what the UI sees -----------------------------------------------------------------------------------
@@ -288,4 +327,6 @@ class Actor:
                 'anim_t': self.anim_t, 'path': list(self.path), 'state': self.state(),
                 'room': room.name if room else 'doorway', 'bubble': self.bubble, 'mark': None,
                 'speech': self.speech if self.h.clock() < self.speech_until else None,
+                'lying': self.lying, 'stretcher': self.on_stretcher, 'action': self.action,
+                'cart': ((self.px + self.pushing.px) / 2, (self.py + self.pushing.py) / 2) if self.pushing else None,
                 'card': [('Doing', self.doing)] + self.card()}

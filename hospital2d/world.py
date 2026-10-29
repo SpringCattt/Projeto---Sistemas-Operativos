@@ -5,6 +5,7 @@
 #   triage queue      queue      registered patients waiting for a triage nurse (producer-consumer)
 #   Dispatcher        monitor    open tasks and who is doing what; hands each task to the best actor
 #   Summons           events     rendezvous between a member of staff and a patient (arrived / done)
+#   Transfer          events     two nurses meet at storage and bring a stretcher (at_patient / mounted / arrived)
 #   Theatres          semaphore  how many operating rooms are free (+ a lock for which ones)
 #   disinfection      semaphore  one per disinfection room: as many doctors at once as it has sinks
 #
@@ -62,8 +63,11 @@ class Summons:
     """A member of staff calls a patient to a tile. The patient sets `arrived` when it gets there; the staff
     member sets `done` (with a `result`) when finished. Either side may `cancel` it."""
 
-    def __init__(self, by, tile, kind, allow=(), stage=''):
+    def __init__(self, by, tile, kind, allow=(), stage='', lie=None, stretcher=False):
         self.by, self.tile, self.kind = by, tile, kind
+        self.lie = lie  # where to lie down once there (a bed, in tiles), or None
+        self.stretcher = stretcher  # brought there on a stretcher (Red patients in Emergency): see Transfer
+        self.transfer = None
         self.allow = frozenset(allow)  # extra room kinds the patient may walk through to get there
         self.stage = stage
         self.arrived, self.done = threading.Event(), threading.Event()
@@ -76,6 +80,27 @@ class Summons:
     def finish(self, result):
         self.result = result
         self.done.set()
+
+
+class Transfer:
+    """Two nurses take a stretcher from storage to a patient and push it to `summons.tile`. The first to reach
+    storage leads (pushes from the front); the other waits for it there, then follows behind."""
+
+    def __init__(self, patient, summons):
+        self.patient, self.summons = patient, summons
+        self.cond = threading.Condition()
+        self.ready, self.lead = [], None  # nurses waiting at storage
+        self.at_patient, self.mounted, self.arrived = threading.Event(), threading.Event(), threading.Event()
+
+    def check_in(self, nurse):
+        with self.cond:
+            self.ready.append(nurse)
+            if self.lead is None:
+                self.lead = nurse
+            self.cond.notify_all()
+
+    def aborted(self):
+        return self.summons.cancelled or self.summons.done.is_set() or self.patient.gone
 
 
 class Task:

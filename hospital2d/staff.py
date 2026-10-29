@@ -123,7 +123,9 @@ class Receptionist(Staff):
             self.talk('reception_hello')
             self.wait(1.5)
             p.talk('patient_reason', reason=p.reason.lower())
+        self.action = None if complaint else 'typing'  # the patient's name and id into the computer
         self.work(max(0.5, seconds - 1.5))
+        self.action = None
         if complaint:
             p.patience = 60.0
             self.h.log(f'{self.label()} calms {p.label()} down')
@@ -167,7 +169,8 @@ class TriageNurse(Staff):
         p.talk('patient_reason', reason=p.reason.lower())
         self.work(max(0.5, self.rng.uniform(*config.TRIAGE_S) - 1.5))
         p.rank = p.base_urgency  # the urgency comes from what the patient told reception
-        p.waiting_room = self.room.partner
+        emergency = self.lay.rooms_of('emergency')
+        p.waiting_room = emergency[0] if p.rank == 2 and emergency else self.room.partner
         self.talk('nurse_result', color=config.URGENCY_NAMES[p.rank])
         self.h.log(f'{self.label()} triages {p.label()}: {p.reason}')
         self.h.queue_for_doctor(p)
@@ -184,6 +187,9 @@ class TaskStaff(Staff):
             task = self.next_task()
             self.resting, self.bubble = False, None
             self.handling, self.doing = task, task.label()
+            here, there = self.lay.room_at[self.ty][self.tx], self.lay.room_at[task.where()[1]][task.where()[0]]
+            if here is not there:  # off to another room: runs, faster the more urgent
+                self.speed = config.RUN_SPEED[task.urgency]
             try:
                 if not task.cancelled:
                     self.handle(task)
@@ -193,7 +199,7 @@ class TaskStaff(Staff):
                 self.h.log(f'{self.label()} leaves {task.label()} for something more urgent')
                 self.h.dispatcher.submit(task)
             finally:
-                self.handling, self.doing = None, 'idle'
+                self.handling, self.doing, self.speed, self.action, self.pushing = None, 'idle', 1.0, None, None
                 self.h.dispatcher.finished(self, task)
 
     def next_task(self):
@@ -254,18 +260,40 @@ class Doctor(TaskStaff):
         p = task.patient
         if p.gone or self.chair is None:
             return
+        emergency = p.waiting_room is not None and p.waiting_room.kind == 'emergency'
+        bed = self.lay.exam_spots.get(self.room)
+        if emergency and p.needs_surgery and self.lay.surgery_spots:  # straight to the theatre on a stretcher
+            self.h.consult_started(p)
+            self.talk('doctor_surgery')
+            return self.operate(task, p)
         self.go(self.seat)
-        s = Summons(self, self.chair, 'consult', allow={'corridor', 'doctor'}, stage=f'going to {self.room.name}')
+        if emergency and bed:  # the nurses bring it on a stretcher, straight onto the exam bed
+            s = Summons(self, bed[0], 'consult', allow={'corridor', 'doctor'}, stage=f'going to {self.room.name}',
+                        lie=bed[1], stretcher=True)
+        else:
+            s = Summons(self, self.chair, 'consult', allow={'corridor', 'doctor'}, stage=f'going to {self.room.name}')
         self.talk('doctor_call', name=p.first_name())
         try:
-            if not self.call(p, s, timeout=120):
+            if not self.call(p, s, timeout=240 if s.stretcher else 120):
                 if not p.gone:
                     self.h.dispatcher.submit(task)  # didn't come in time: try again later
                 return
             self.h.log(f'{self.label()} sees {p.label()}')
             self.h.consult_started(p)
             self.talk('doctor_hello')
-            self.work(self.rng.uniform(*config.CONSULT_S[p.rank]))
+            seconds = self.rng.uniform(*config.CONSULT_S[p.rank])
+            if bed and not s.stretcher:  # a chat at the desk, then onto the exam bed
+                self.work(seconds / 2)
+                exam = Summons(self, bed[0], 'exam', allow={'doctor'}, stage='on the exam bed', lie=bed[1])
+                s.finish('exam')
+                s = exam
+                if not self.call(p, s, timeout=30):
+                    return self.h.dispatcher.submit(task)
+                beside = self.next_to(bed[0])
+                if beside:
+                    self.go(beside, timeout=10)
+                seconds /= 2
+            self.work(seconds)
         except Interrupted:
             self.talk('doctor_emergency')
             if s.arrived.is_set():
@@ -275,6 +303,8 @@ class Doctor(TaskStaff):
                 s.cancel()
             raise
         self.tire(config.FATIGUE_PER_TASK['consult'][p.rank])
+        if self.seat:
+            self.go(self.seat, timeout=10)
         if p.needs_surgery and self.lay.surgery_spots:
             self.talk('doctor_surgery')
             p.talk('patient_surgery')
@@ -302,12 +332,14 @@ class Doctor(TaskStaff):
             self.disinfect(room.partner)
             self.doing = f'surgery: {p.name}'
             patient_spot, doctor_spot = self.lay.surgery_spots[room]
-            s = Summons(self, patient_spot, 'surgery', allow={'corridor', 'surgery'}, stage=f'going to {room.name}')
+            s = Summons(self, patient_spot, 'surgery', allow={'corridor', 'surgery'}, stage=f'going to {room.name}',
+                        lie=self.lay.table_spots[room],
+                        stretcher=p.waiting_room is not None and p.waiting_room.kind == 'emergency')
             p.summon(s)
             self.extra_avoid = ('corridor',)  # from disinfection straight into the theatre
             self.go(doctor_spot, timeout=120)
             self.extra_avoid = ()
-            if self.wait_until(lambda: s.arrived.is_set() or p.gone, timeout=180) and not p.gone:
+            if self.wait_until(lambda: s.arrived.is_set() or p.gone, timeout=300) and not p.gone:
                 self.work(self.rng.uniform(*config.SURGERY_S))
                 self.tire(config.FATIGUE_PER_TASK['surgery'])
                 self.h.count('surgeries')
@@ -366,6 +398,7 @@ class Cleaner(TaskStaff):
                 self.h.dispatcher.submit(task)  # couldn't get there: someone else (or later)
                 return
         self.talk('cleaner')
+        self.facing, self.action = 'down', 'mopping'
         self.work(self.rng.uniform(*config.CLEAN_S))
         with self.world.lock:
             self.world.messes.pop(task.tile, None)
@@ -374,5 +407,45 @@ class Cleaner(TaskStaff):
 
 
 class WardNurse(TaskStaff):
+    """Walks the medical wing. Two of them bring Red patients from Emergency on a stretcher (world.Transfer)."""
     role = 'nurse'
     pace = (2, 5, 0.8)
+
+    def handle(self, task):
+        t = task.transfer
+        self.speed = config.STRETCHER_SPEED
+        end = self.h.clock() + 90
+        while getattr(self.lay.room_at[self.ty][self.tx], 'kind', None) != 'storage':  # any free spot in storage
+            if t.aborted() or self.h.clock() > end:
+                return
+            free = [x for x in self.lay.stretcher_spots if x not in self.world.occupied]
+            near = self.lay.distances_from((self.tx, self.ty))
+            if free:
+                self.walk_to(min(free, key=lambda x: near.get(x, 10 ** 6)))
+            else:
+                self.tick()
+        t.check_in(self)
+        self.doing = 'waiting for a partner with the stretcher'
+        if not self.wait_until(lambda: len(t.ready) >= 2 or t.aborted(), timeout=120) or t.aborted():
+            return
+        p, s = t.patient, t.summons
+        self.doing = f'stretcher for {p.name}'
+        if t.lead is not self:  # behind: the empty stretcher between them, then the patient on it
+            self.follow(lambda: p if t.mounted.is_set() else t.lead, lambda: t.arrived.is_set() or t.aborted(),
+                        gap=lambda: 1 if t.mounted.is_set() else 2)
+            return
+        self.pushing = next(n for n in t.ready if n is not self)
+        if not self.go(self.next_to((p.tx, p.ty)) or (p.tx, p.ty), timeout=90):
+            return s.cancel()
+        self.pushing = None
+        t.at_patient.set()
+        if not self.wait_until(lambda: t.mounted.is_set() or t.aborted(), timeout=30) or t.aborted():
+            return
+        p.speed = self.speed
+        self.h.log(f'{self.label()} and {t.ready[1].label()} take {p.label()} on a stretcher')
+        self.go(self.next_to(s.tile) or s.tile, timeout=120)
+        t.arrived.set()
+        aside = self.next_to((self.tx, self.ty))  # out of the way, so the patient can get onto the bed
+        if aside:
+            self.walk_to(aside)
+        self.tire(config.FATIGUE_PER_TASK['stretcher'])

@@ -87,6 +87,9 @@ class Actor:
         self.pushing = None  # the empty stretcher, while it drives one (staff.WardNurse)
         self.commute, self.quitting = None, False  # hired / sent home from the admin tablet
         self.detour_after = 0.0  # sim time: after a detour that found nothing better, it doesn't look for a while
+        self.make_way = False  # a stretcher needs its tile: it steps aside at its next tick (unless it can't)
+        self.yield_until, self.aside = 0.0, None  # making way for a stretcher: its step aside, then stays put a moment
+        self.driver = None  # (nurse, train) while it's part of a stretcher train (staff.WardNurse.drive)
 
     def label(self):
         return f'{ROLE_LABEL[self.role]} {self.name}'
@@ -134,6 +137,10 @@ class Actor:
         if self.bubble and self.bubble_until and self.h.clock() > self.bubble_until:
             self.bubble, self.bubble_until = None, 0.0
         self.upkeep(dt)
+        if self.make_way:
+            self.make_way = False
+            if not self.lying and self.driver is None and (self.tx, self.ty) not in self.lay.seats:
+                self.give_way()
         return dt
 
     def upkeep(self, dt):
@@ -218,6 +225,8 @@ class Actor:
         """One tick along self.path: reserve the next tile (or wait / go around whoever is on it) and move."""
         if not self.path:
             return
+        if self.path != self.aside and not self.reserved and self.h.clock() < self.yield_until:
+            return  # letting a stretcher by
         w = self.world
         nxt = self.path[0]
         with w.lock:  # check and reserve in one step, so two threads can never take the same tile
@@ -228,7 +237,11 @@ class Actor:
             other = w.occupied.get(nxt)
             self.blocked_for += dt
             self.stuck_for += dt
-            if self.stuck_for > STEP_ASIDE_AFTER:
+            if self.stuck_for > 1 and hasattr(other, 'make_way') and not other.path:
+                other.make_way = True  # someone just standing in the way: "excuse me" (it steps aside if it can)
+            if getattr(other, 'driver', None) is not None and self.driver is None:
+                self.give_way(nxt)
+            elif self.stuck_for > STEP_ASIDE_AFTER:
                 self.step_aside(nxt)
             elif self.blocked_for > (0.1 if self.speed > 1 and self.in_my_way(other) else self.give_way_after):
                 self.blocked_for, self.give_way_after = 0.0, self.rng.uniform(0.4, 1.2)
@@ -258,6 +271,11 @@ class Actor:
             self.px += dx / dist * stride
             self.py += dy / dist * stride
         self.anim_t += dt * self.speed
+
+    def give_way(self, blocked_tile=None):
+        """A stretcher always goes first: out of its way (even mid-route) and stay there a moment."""
+        self.step_aside(blocked_tile)
+        self.aside, self.yield_until = list(self.path), self.h.clock() + 1.5
 
     def step_aside(self, blocked_tile):
         """Two actors can block each other forever in a narrow spot (each waiting for the other's tile: a

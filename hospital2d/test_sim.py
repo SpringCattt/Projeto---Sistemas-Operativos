@@ -178,9 +178,10 @@ def test_stretcher():
         end = time.time() + 60
         while time.time() < end and not h.stats['treated']:
             with h.world.lock:  # the three are always on tiles next to each other, and drawn together
-                if p.on_stretcher and not p.path:
+                if p.on_stretcher:
                     room = h.lay.room_at[p.ty][p.tx]
                     rode.add(room.kind if room else 'door')
+                if p.on_stretcher and not p.path:  # between two steps of the train
                     pushing = [n for n in nurses if n.task is not None and n.task.kind == 'stretcher']
                     assert len(pushing) == 2, 'two nurses push the stretcher'
                     for n in pushing:

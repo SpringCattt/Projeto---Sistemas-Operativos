@@ -30,7 +30,9 @@ of a room to see who is inside (the list is clickable) Â· `L` event log on/off Â
 **Admin tablet** (`Tab`): pause and speed (x0.25 to x8), send patients of any urgency (with or without surgery, at
 the door or already triaged, 1/5/20 at a time), trigger a surge, a fight or someone throwing up, and hire or send
 home staff while it runs (doctors, receptionists and triage nurses up to their rooms/desks; new staff walk in from
-the street, and whoever is sent home finishes what it's doing and walks out).
+the street, and whoever is sent home finishes what it's doing and walks out). Its orders go to the simulation through the
+commands queue and are carried out by a thread of their own that is always waiting on it, like an interrupt handler:
+they take effect at once (a few ms), whatever the actors are doing.
 
 ## The building
 

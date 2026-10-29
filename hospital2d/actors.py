@@ -86,6 +86,7 @@ class Actor:
         self.action = None  # animation while working: 'typing', 'mopping'
         self.pushing = None  # the empty stretcher, while it drives one (staff.WardNurse)
         self.commute, self.quitting = None, False  # hired / sent home from the admin tablet
+        self.detour_after = 0.0  # sim time: after a detour that found nothing better, it doesn't look for a while
 
     def label(self):
         return f'{ROLE_LABEL[self.role]} {self.name}'
@@ -174,7 +175,7 @@ class Actor:
         """Tiles it may not walk on."""
         return frozenset()
 
-    def route(self, goal, around_people=False):
+    def route(self, goal, around_people=False, limit=None):
         """around_people: also around everyone close by (they'd be in the way), not just walls and furniture."""
         blocked = set(self.no_go())
         with self.world.lock:
@@ -183,19 +184,23 @@ class Actor:
             if around_people:
                 blocked |= {t for t, a in self.world.occupied.items() if a is not self and t != goal
                             and abs(t[0] - self.tx) + abs(t[1] - self.ty) <= AROUND_RADIUS}
-        return self.lay.path((self.tx, self.ty), goal, self.avoid(), blocked)
+        return self.lay.path((self.tx, self.ty), goal, self.avoid(), blocked, limit)
 
     def in_my_way(self, other):
         """Not worth waiting for: standing still, or slower than me."""
         return not getattr(other, 'path', None) or getattr(other, 'speed', 0) < self.speed
 
     def detour(self, extra):
-        """Takes a way round the people nearby if it's at most `extra` tiles longer than the current one."""
-        if not self.path:
+        """Takes a way round the people nearby if it's at most `extra` tiles longer than the current one.
+        The search gives up early (a route that long can't be far off), and after a failed one it waits a second
+        before looking again: a crowd would otherwise have everyone searching every tick."""
+        if not self.path or self.h.clock() < self.detour_after:
             return
-        r = self.route(self.path[-1], around_people=True)
+        r = self.route(self.path[-1], around_people=True, limit=len(self.path) + extra)
         if r and len(r) <= len(self.path) + extra:
             self.set_path(r)
+        else:
+            self.detour_after = self.h.clock() + 1.0
 
     def set_path(self, path):
         """Follow `path` from now on. If it was half-way into a tile the new path doesn't use, it gives that tile
@@ -225,7 +230,7 @@ class Actor:
             self.stuck_for += dt
             if self.stuck_for > STEP_ASIDE_AFTER:
                 self.step_aside(nxt)
-            elif self.blocked_for > (0.1 if self.in_my_way(other) else self.give_way_after):
+            elif self.blocked_for > (0.1 if self.speed > 1 and self.in_my_way(other) else self.give_way_after):
                 self.blocked_for, self.give_way_after = 0.0, self.rng.uniform(0.4, 1.2)
                 self.detour(extra=12)
             return

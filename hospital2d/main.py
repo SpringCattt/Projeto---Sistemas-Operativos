@@ -117,7 +117,7 @@ def run_ui(snapshots):
     cam_x = (rec.x + rec.w / 2) * T - screen.get_width() / zoom / 2
     cam_y = (rec.y + rec.h / 2) * T - screen.get_height() / zoom / 2
     snap = {'actors': [], 'messes': [], 'events': [], 'stats': {}, 'time': 0.0, 'surge': False, 'sim_hz': 0.0,
-            'line': 0, 'triage': 0, 'patients': 0}
+            'line': 0, 'triage': 0, 'patients': 0, 'keep_up': 1.0}
     actors, selected_id, room_sel, list_open, scroll, show_log = [], None, None, False, 0, True
     dragging, cache, hits, people = False, {}, [], []
 
@@ -259,10 +259,10 @@ def run_ui(snapshots):
             draw_events(screen, small, snap['events'])
 
         fps, st, t = clock.get_fps(), snap['stats'], snap['time']
-        hud = (f'FPS {fps:4.0f}   sim {snap["sim_hz"]:4.1f}/{config.ACTOR_HZ} Hz   time {int(t // 60):02d}:{int(t % 60):02d}'
+        hud = (f'FPS {fps:4.0f}   sim {100 * snap["keep_up"]:3.0f}%   time {int(t // 60):02d}:{int(t % 60):02d}'
                f'   patients {snap["patients"]}   treated {st.get("treated", 0)}   gave up {st.get("gave_up", 0)}'
                f'   line {snap["line"]}   triage {snap["triage"]}   zoom x{zoom}')
-        slow = 0 < fps < config.MIN_FPS or 0 < snap['sim_hz'] < config.ACTOR_HZ * 0.8
+        slow = 0 < fps < config.MIN_FPS or snap['keep_up'] < 0.8
         screen.blit(font.render(hud, True, (240, 90, 90) if slow else TEXT, (20, 22, 28)), (10, 10))
         screen.blit(font.render('WASD/right-drag: move   wheel: zoom   click: NPC or room info   L: log   ESC: close',
                                 True, (200, 200, 200), (20, 22, 28)), (10, sh - 26))

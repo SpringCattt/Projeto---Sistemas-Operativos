@@ -36,7 +36,7 @@ class Hospital:
         self.waits = defaultdict(list)  # urgency at triage -> seconds from triage to the doctor
         self.errors = []
         self.surge_until = -1.0
-        self.sim_hz, self._hz_mark = 0.0, (time.perf_counter(), 0)
+        self.sim_hz, self.keep_up, self._hz_mark = 0.0, 1.0, (time.perf_counter(), 0, 0.0)
         self.actors, self.actors_lock, self.threads = [], threading.Lock(), []
         self.running = False
 
@@ -166,14 +166,16 @@ class Hospital:
         self.log(f'ERROR in {actor.label()}: {trace.strip().splitlines()[-1]}')
 
     def measure(self):
-        """Average updates per second each actor thread really managed since the last call (target ACTOR_HZ)."""
+        """Since the last call: updates per second each actor thread really got (sim_hz), and how well the threads
+        keep up with the rate they ask for (keep_up: 1.0 = every tick on time; below 0.8 the hospital is too big)."""
         with self.actors_lock:
             actors = list(self.actors)
-        now, ticks = time.perf_counter(), sum(a.ticks for a in actors)
-        then, before = self._hz_mark
+        now, ticks, planned = time.perf_counter(), sum(a.ticks for a in actors), sum(a.planned for a in actors)
+        then, ticks_before, planned_before = self._hz_mark
         if actors and now > then:
-            self.sim_hz = max(0.0, (ticks - before) / (now - then) / len(actors))
-        self._hz_mark = (now, ticks)
+            self.sim_hz = max(0.0, (ticks - ticks_before) / (now - then) / len(actors))
+            self.keep_up = max(0.0, min(1.0, (planned - planned_before) / (now - then) / len(actors)))
+        self._hz_mark = (now, ticks, planned)
 
     def snapshot(self):
         with self.actors_lock:
@@ -186,6 +188,7 @@ class Hospital:
             events = list(self.events)
         return {'actors': [a.snapshot() for a in actors], 'messes': messes, 'events': events, 'stats': stats,
                 'time': self.clock(), 'surge': self.clock() < self.surge_until, 'sim_hz': self.sim_hz,
+                'keep_up': self.keep_up,
                 'line': len(self.line), 'triage': self.triage_queue.qsize(),
                 'patients': sum(1 for a in actors if a.role == 'patient')}
 
@@ -201,7 +204,7 @@ class Hospital:
         for rank, waits in sorted(self.waits.items()):
             lines.append(f'Average wait to see a doctor, {config.URGENCY_NAMES[rank]}: '
                          f'{sum(waits) / len(waits):.0f} s ({len(waits)} patients)')
-        lines.append(f'Actor updates per second (target {config.ACTOR_HZ}): {self.sim_hz:.1f}')
+        lines.append(f'Actor threads keeping up: {100 * self.keep_up:.0f} % ({self.sim_hz:.1f} updates/s each)')
         if self.errors:
             lines.append(f'ERRORS: {len(self.errors)}')
         return '\n'.join(lines)

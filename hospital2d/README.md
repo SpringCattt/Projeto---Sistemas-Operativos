@@ -136,7 +136,6 @@ straight instead of zig-zagging.
 | `layout.py` | builds the plan from `config.py`: rooms, doors, furniture, named spots |
 | `art.py` | loads the PNGs and draws the plan |
 | `dialogue.py` | picks what people say from `data/dialogue.txt` |
-| `tools/make_assets.py` | generated some of our own PNGs (`assets/custom/`) in the hospital pack's palette |
 | `data/` | names, complaints and dialogue lines, one per line |
 
 **Speech bubbles.** People talk when they interact (registration, triage, the doctor's call, complaints, fights,

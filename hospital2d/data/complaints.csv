@@ -1,0 +1,20 @@
+# What patients tell reception. One per line: reason,urgency (0 Green, 1 Yellow, 2 Red),how common,needs surgery (0/1)
+# Lines starting with # are ignored.
+Sore throat,0,10,0
+Fever,0,10,0
+Sprained ankle,0,8,0
+Earache,0,6,0
+Skin rash,0,5,0
+Back pain,0,6,0
+Deep cut,1,6,0
+Broken arm,1,5,0
+Abdominal pain,1,6,0
+High fever,1,5,0
+Asthma attack,1,4,0
+Head injury,1,3,0
+Chest pain,2,3,0
+Difficulty breathing,2,2,0
+Stroke symptoms,2,1,0
+Appendicitis,2,2,1
+Car accident,2,1,1
+Internal bleeding,2,1,1

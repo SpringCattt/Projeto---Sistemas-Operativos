@@ -38,4 +38,14 @@ for n_doctors, n_surgeries in ((1, 1), (5, 2), (100, 3)):
         to_triage = lay.path(start, lay.free_tiles(t)[-1], ('corridor',), staff)
         to_waiting = lay.path(to_triage[-1], lay.free_tiles(w)[0], ('corridor',), staff)
         assert to_triage and to_waiting and not set(to_triage + to_waiting) & staff
+
+    # Named spots: every one is walkable, and patients' ones are on the patients' side
+    patient_spots = [front for _, front in lay.reception_desks] + lay.line_spots + lay.lobby
+    patient_spots += [chair for _, _, chair in lay.triage_desks] + [c for _, c in lay.doctor_desks.values()]
+    assert len(lay.reception_desks) == 3 and len(lay.line_spots) >= 10 and lay.lobby and lay.street_line
+    assert len(lay.doctor_desks) == n_doctors and len(lay.triage_desks) >= 2
+    assert all(lay.walkable(*t) and t not in staff for t in patient_spots)
+    assert all(p and d for p, d in lay.surgery_spots.values()) and all(lay.sink_spots.values())
+    assert all(s.partner and s.partner.kind == 'disinfection' for s in lay.rooms_of('surgery'))
+    assert all(t.partner.kind == 'waiting' for t in lay.rooms_of('triage')) and lay.rest_spots
 print('ok')

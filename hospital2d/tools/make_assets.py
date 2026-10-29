@@ -15,9 +15,15 @@ PAL = {
     'w': (62, 39, 49), 'd': (115, 62, 57), 'D': (184, 111, 80), 'l': (228, 166, 114),
     'b': (18, 78, 137), 'B': (35, 105, 174), 'c': (0, 153, 219), 'W': (241, 246, 240),
     'k': (20, 35, 58), 'g': (48, 56, 67), 'r': (140, 40, 52), 'R': (196, 64, 70), 'y': (236, 196, 84),
+    'v': (112, 128, 46), 'V': (170, 186, 72), 'u': (214, 222, 128),
 }
 
 SPRITES = {
+    'vomit': [  # a mess on the floor, until a cleaner deals with it
+        "................", "................", "................", "................", "......vvvv......",
+        "....vvVVVVvv....", "...vVVVuVVVVv...", "..vVVVVVVVuVVv..", "..vVuVVVVVVVVv..", "...vVVVVVuVVv...",
+        "....vvVVVVvvv...", "......vvvv......",
+    ],
     # Reception/bar counter, 3/4 view: wooden top, front panel facing the patients
     'counter_m': [
         "wwwwwwwwwwwwwwww", "llllllllllllllll", "DDDDDDDDDDDDDDDD", "DDDDDDDDDDDDDDDD", "DDDDDDDDDDDDDDDD",
@@ -129,7 +135,7 @@ def main():
     floors = {
         'waiting': ((205, 213, 224), (187, 195, 208), 'tiles'), 'reception': ((236, 220, 196), (214, 196, 170), 'tiles'),
         'corridor': ((214, 220, 228), (187, 195, 208), 'tiles'), 'doctor': ((206, 228, 216), (180, 206, 194), 'tiles'),
-        'surgery': ((186, 216, 226), (150, 190, 206), 'tiles'), 'triage': ((224, 214, 236), (200, 188, 218), 'tiles'), 'disinfection': ((226, 238, 242), (196, 214, 222), 'tiles'),
+        'surgery': ((186, 216, 226), (150, 190, 206), 'tiles'), 'triage': ((224, 214, 236), (200, 188, 218), 'tiles'), 'control': ((176, 186, 204), (150, 160, 182), 'tiles'), 'disinfection': ((226, 238, 242), (196, 214, 222), 'tiles'),
         'storage': ((160, 164, 168), (138, 142, 148), 'specks'), 'rest': ((204, 140, 98), (184, 111, 80), 'planks'),
         'bar': ((184, 111, 80), (115, 62, 57), 'planks'), 'street': ((96, 100, 110), (84, 88, 98), 'specks'),
         'grass': ((96, 156, 84), (78, 134, 70), 'specks'),

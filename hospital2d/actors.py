@@ -1,12 +1,12 @@
-# actors.py - Hospital actors. Each one runs in its own thread inside the simulation process (sim.py).
-# Phase 1 behaviour: they only wander their area; decisions (AI) arrive in phase 3.
-# No pygame here: the simulation process never draws, it only sends snapshots to the UI process.
+# actors.py - What every actor has in common. Each actor runs its own script (`life`) in its own thread inside
+# the simulation process: plain sequential code ("walk there, wait for this, do that") that advances one tick at a
+# time and blocks on the shared structures in world.py. No pygame here: the simulation never draws.
 import itertools
 import math
 import os
 import random
-import threading
 import time
+import traceback
 
 import config
 
@@ -22,159 +22,256 @@ def read_names(filename):
 FIRST_NAMES = read_names('first_names.txt')
 LAST_NAMES = read_names('last_names.txt')
 
-ROLE_LABEL = {'doctor': 'Doctor', 'nurse': 'Nurse', 'receptionist': 'Receptionist',
-              'security': 'Security', 'cleaner': 'Cleaner', 'patient': 'Patient'}
-# (min pause, max pause in seconds, chance of walking when the pause ends)
-PACE = {'doctor': (3, 8, 0.5), 'nurse': (2, 5, 0.8), 'receptionist': (4, 10, 0.0),  # receptionists stay seated
-        'security': (2, 6, 0.8), 'cleaner': (2, 5, 0.9), 'patient': (5, 15, 0.3)}
-
+ROLE_LABEL = {'doctor': 'Doctor', 'nurse': 'Nurse', 'receptionist': 'Receptionist', 'security': 'Security',
+              'cleaner': 'Cleaner', 'patient': 'Patient', 'dispatcher': 'Dispatcher'}
 # Which character sheets (assets/third_party/characters/NNN.png) each role may look like
 STAFF_LOOKS = {'doctor': [17, 21, 23], 'nurse': [2, 13, 22], 'receptionist': [4, 14, 18],
-               'security': [6, 7], 'cleaner': [24, 25]}
+               'security': [6, 7], 'cleaner': [24, 25], 'dispatcher': [5]}  # 5: bald, shades: the boss
 # 30-39 are fantasy (angel, zombie, devils...) so they stay out of the hospital for now
 PATIENT_LOOKS = [i for i in range(30) if all(i not in v for v in STAFF_LOOKS.values())]
-URGENCIES = ['Green', 'Yellow', 'Red']
 
 
-class World:
-    """What the actor threads share. Every read-modify-write of `occupied` happens holding `lock`."""
+STEP_ASIDE_AFTER = 3.0  # simulated seconds blocked before giving way
 
-    def __init__(self):
-        self.lock = threading.Lock()
-        self.occupied = {}  # tile -> actor standing on it (or stepping into it): nobody walks through anybody
+
+class Stopped(Exception):
+    """The simulation is shutting down: unwinds whatever the actor was doing."""
+
+
+class Interrupted(Exception):
+    """A clearly more urgent task arrived while doing a pre-emptable one."""
 
 
 class Actor:
     _ids = itertools.count(1)
+    role = None
+    pace = (3, 8, 0.5)  # idle wandering: (min pause, max pause in seconds, chance of walking when it ends)
 
-    def __init__(self, role, area, rng, world):
+    def __init__(self, h, candidates, rng, name=None, look=None):
+        """h: the Hospital. candidates: tiles it may appear on (the first free one is taken)."""
+        self.h, self.lay, self.world = h, h.lay, h.world
         self.id = next(Actor._ids)
-        self.role = role
         self.rng = random.Random(rng.random())  # its own generator, since it runs in its own thread
-        self.name = f"{self.rng.choice(FIRST_NAMES)} {self.rng.choice(LAST_NAMES)}"
-        self.area = area  # tiles it may wander to
-        self.world = world
-        # Actors are created before any thread starts, so no lock is needed here.
-        # shortcut: if the area is already full they share a tile; fine until crowds get that big
-        self.tx, self.ty = self.rng.choice([t for t in area if t not in world.occupied] or area)
-        world.occupied[(self.tx, self.ty)] = self
+        self.name = name or f'{self.rng.choice(FIRST_NAMES)} {self.rng.choice(LAST_NAMES)}'
+        self.look = look if look is not None else self.rng.choice(STAFF_LOOKS[self.role])
+        candidates = list(candidates)
+        self.rng.shuffle(candidates)
+        with self.world.lock:
+            # shortcut: if every candidate is taken they share a tile; only happens in absurdly full rooms
+            self.tx, self.ty = next((t for t in candidates if t not in self.world.occupied), candidates[0])
+            self.world.occupied[(self.tx, self.ty)] = self
         self.px, self.py = self.tx + 0.5, self.ty + 0.5  # continuous position, in tiles
-        self.path = []
+        self.path, self.reserved = [], None
         self.blocked_for, self.give_way_after = 0.0, self.rng.uniform(0.4, 1.2)
-        self.pause = self.rng.uniform(0, PACE[role][1])
-        self.anim_t = 0.0
-        self.fatigue = 0
-        if role == 'patient':
-            self.called = False  # set when a doctor calls them; only then may they use the corridor
-            self.patience = 100
-            self.urgency = self.rng.choices(URGENCIES, weights=[0.6, 0.3, 0.1])[0]
-        self.look = self.rng.choice(PATIENT_LOOKS if role == 'patient' else STAFF_LOOKS[role])
-        self.facing = 'down'
+        self.stuck_for = 0.0  # blocked without moving, in total: after a while it steps aside (see step)
+        self.facing, self.anim_t = 'down', 0.0
+        self.pause = self.rng.uniform(0, self.pace[1])
+        self.area = []  # where it wanders when idle
+        self.ticks, self._last, self._next = 0, None, None
+        self.fatigue, self.resting = 0.0, False
+        self.task = None  # what it's committed to (set by the dispatcher for doctors, security and cleaners)
+        self.doing = 'idle'  # shown on the info card
+        self.bubble, self.bubble_until = None, 0.0  # icon over the head: '!' fight, '?' complaint, '~' sick, 'z' rest
 
-    def run(self, lay, stop):
-        """Thread body: keep updating until the simulation sets `stop`."""
-        last = time.perf_counter()
-        while not stop.wait(1 / config.ACTOR_HZ):
-            now = time.perf_counter()
-            self.update(min(now - last, 0.1), lay)
-            last = now
+    def label(self):
+        return f'{ROLE_LABEL[self.role]} {self.name}'
 
-    def update(self, dt, lay):
+    # ---- thread ---------------------------------------------------------------------------------------------
+    def run(self):
+        """Thread body."""
+        self._last = time.perf_counter()
+        try:
+            self.life()
+        except Stopped:
+            pass
+        except Exception:
+            self.h.error(self, traceback.format_exc())
+        finally:
+            self.h.retire(self)
+
+    def life(self):
+        raise NotImplementedError
+
+    # ---- time -----------------------------------------------------------------------------------------------
+    def tick(self):
+        """Waits one tick (1/ACTOR_HZ s) and returns how much simulated time passed. Raises Stopped at shutdown,
+        and whatever upkeep() raises (Interrupted)."""
+        # Wait until the next deadline rather than a fixed time: Windows rounds waits up to ~15.6 ms, and this way
+        # a long wait is followed by a shorter one, so the average stays at ACTOR_HZ
+        period = 1 / config.ACTOR_HZ
+        self._next = (self._next or self._last) + period
+        delay = self._next - time.perf_counter()
+        if delay < -period:  # far behind (overloaded): don't try to catch up in a burst
+            self._next, delay = time.perf_counter(), 0.0
+        if self.h.stop.wait(max(0.0, delay)):
+            raise Stopped
+        now = time.perf_counter()
+        dt = min(now - self._last, 0.1) * config.TIME_SCALE
+        self._last = now
+        self.ticks += 1
+        if self.bubble and self.bubble_until and self.h.clock() > self.bubble_until:
+            self.bubble, self.bubble_until = None, 0.0
+        self.upkeep(dt)
+        return dt
+
+    def upkeep(self, dt):
+        """Per-tick housekeeping of each role (fatigue, interruptions...)."""
+
+    def wait(self, seconds):
+        """Stays put for `seconds` of simulated time."""
+        end = self.h.clock() + seconds
+        while self.h.clock() < end:
+            self.step(self.tick())
+
+    def wait_until(self, condition, timeout=None):
+        """Ticks until condition() holds (True) or `timeout` simulated seconds pass (False)."""
+        end = None if timeout is None else self.h.clock() + timeout
+        while not condition():
+            if end is not None and self.h.clock() >= end:
+                return False
+            self.step(self.tick())
+        return True
+
+    def say(self, bubble, seconds):
+        self.bubble, self.bubble_until = bubble, self.h.clock() + seconds
+
+    # ---- movement -------------------------------------------------------------------------------------------
+    def avoid(self):
+        """Room kinds it may not walk through."""
+        return ()
+
+    def no_go(self):
+        """Tiles it may not walk on."""
+        return frozenset()
+
+    def route(self, goal, around_people=False):
+        blocked = set(self.no_go())
+        with self.world.lock:
+            if self.role != 'cleaner':  # everyone walks around a mess, except whoever comes to clean it
+                blocked |= self.world.messes.keys()
+            if around_people:
+                blocked |= {t for t, a in self.world.occupied.items() if a is not self}
+        return self.lay.path((self.tx, self.ty), goal, self.avoid(), blocked)
+
+    def set_path(self, path):
+        """Follow `path` from now on. If it was half-way into a tile the new path doesn't use, it gives that tile
+        back and first steps back to the centre of its own."""
+        with self.world.lock:
+            if self.reserved and (not path or path[0] != self.reserved):
+                if self.world.occupied.get(self.reserved) is self:
+                    del self.world.occupied[self.reserved]
+                self.reserved = None
+                if (self.px, self.py) != (self.tx + 0.5, self.ty + 0.5):
+                    path = [(self.tx, self.ty)] + path
+        self.path = path
+
+    def step(self, dt):
+        """One tick along self.path: reserve the next tile (or wait / go around whoever is on it) and move."""
+        if not self.path:
+            return
         w = self.world
+        nxt = self.path[0]
+        with w.lock:  # check and reserve in one step, so two threads can never take the same tile
+            free = w.occupied.setdefault(nxt, self) is self
+            if free and nxt != (self.tx, self.ty):
+                self.reserved = nxt
+        if not free:  # someone is there: wait a moment, then try to go around
+            self.blocked_for += dt
+            self.stuck_for += dt
+            if self.stuck_for > STEP_ASIDE_AFTER:
+                self.step_aside(nxt)
+            elif self.blocked_for > self.give_way_after:
+                self.blocked_for, self.give_way_after = 0.0, self.rng.uniform(0.4, 1.2)
+                self.set_path(self.route(self.path[-1], around_people=True))
+            return
+        self.blocked_for = self.stuck_for = 0.0
+        nx, ny = nxt
+        dx, dy = nx + 0.5 - self.px, ny + 0.5 - self.py
+        dist, stride = math.hypot(dx, dy), config.ACTOR_SPEED * dt
+        if dist > 1e-6:
+            self.facing = ('right' if dx > 0 else 'left') if abs(dx) > abs(dy) else ('down' if dy > 0 else 'up')
+        if dist <= stride:
+            with w.lock:  # leave the old tile and stand on the new one atomically
+                if nxt != (self.tx, self.ty) and w.occupied.get((self.tx, self.ty)) is self:
+                    del w.occupied[(self.tx, self.ty)]
+                self.tx, self.ty, self.reserved = nx, ny, None
+            self.px, self.py = nx + 0.5, ny + 0.5
+            self.path.pop(0)
+            if not self.path:
+                self.settle()
+        else:
+            self.px += dx / dist * stride
+            self.py += dy / dist * stride
+        self.anim_t += dt
+
+    def step_aside(self, blocked_tile):
+        """Two actors can block each other forever in a narrow spot (each waiting for the other's tile: a
+        deadlock). Whoever has waited too long gives way: it moves to a free tile next to it, and its caller works
+        out a new route from there."""
+        x, y = self.tx, self.ty
+        no_go, avoid = self.no_go(), self.avoid()
+        with self.world.lock:
+            options = [t for t in ((x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1))
+                       if t != blocked_tile and self.lay.walkable(*t) and t not in self.world.occupied
+                       and t not in no_go and t not in self.world.messes
+                       and (self.lay.room_at[t[1]][t[0]] is None or self.lay.room_at[t[1]][t[0]].kind not in avoid)]
+        self.stuck_for = 0.0
+        self.set_path([self.rng.choice(options)] if options else [])
+
+    def walk_to(self, goal, around_people=False):
+        """Walks to `goal` tick by tick. False if it can't get there right now (blocked or unreachable)."""
+        if (self.tx, self.ty) == goal and not self.reserved:
+            self.path = []
+            self.settle()
+            return True
+        self.set_path(self.route(goal, around_people))
+        if not self.path:
+            self.tick()  # let time pass, so callers can simply try again
+            return False
+        while self.path:
+            self.step(self.tick())
+        return (self.tx, self.ty) == goal
+
+    def go(self, goal, timeout=60):
+        """Keeps trying to reach `goal` for up to `timeout` simulated seconds."""
+        end = self.h.clock() + timeout
+        while not self.walk_to(goal, around_people=self.h.clock() > end - timeout / 2):
+            if self.h.clock() > end:
+                return False
+        return True
+
+    def settle(self):
+        if (self.tx, self.ty) in self.lay.seats:
+            self.facing = 'down'  # everyone sits facing down
+
+    def wander(self, dt):
+        """One tick of idling: keep walking, or now and then pick somewhere in `area` to go."""
         if self.path:
-            nxt = self.path[0]
-            with w.lock:  # check and reserve in one step, so two threads can never take the same tile
-                free = w.occupied.setdefault(nxt, self) is self
-            if not free:  # someone is on the next tile: wait, then go around
-                self.blocked_for += dt
-                if self.blocked_for > self.give_way_after:
-                    self.blocked_for, self.give_way_after = 0.0, self.rng.uniform(0.4, 1.2)
-                    self.path = self.route(lay, self.path[-1], around_people=True)
-                    if not self.path:  # no way around: stay here
-                        self.settle(lay)
-                return
-            self.blocked_for = 0.0
-            nx, ny = nxt
-            dx, dy = nx + 0.5 - self.px, ny + 0.5 - self.py
-            dist, step = math.hypot(dx, dy), config.ACTOR_SPEED * dt
-            if dist > 1e-6:
-                self.facing = ('right' if dx > 0 else 'left') if abs(dx) > abs(dy) else ('down' if dy > 0 else 'up')
-            if dist <= step:
-                with w.lock:  # leave the old tile and stand on the new one atomically
-                    if w.occupied.get((self.tx, self.ty)) is self:
-                        del w.occupied[(self.tx, self.ty)]
-                    self.tx, self.ty = nx, ny
-                self.px, self.py = nx + 0.5, ny + 0.5
-                self.path.pop(0)
-                if not self.path:
-                    self.settle(lay)
-            else:
-                self.px += dx / dist * step
-                self.py += dy / dist * step
-            self.anim_t += dt
+            self.step(dt)
             return
         self.pause -= dt
         if self.pause <= 0:
-            pmin, pmax, chance = PACE[self.role]
+            pmin, pmax, chance = self.pace
             self.pause = self.rng.uniform(pmin, pmax)
-            goal = self.rng.choice(self.area)
-            if self.rng.random() < chance and goal not in w.occupied:  # only a hint: stepping in re-checks
-                self.path = self.route(lay, goal)
+            goal = self.rng.choice(self.area) if self.area else None
+            if goal and self.rng.random() < chance and goal not in self.world.occupied:
+                self.set_path(self.route(goal))
 
-    def settle(self, lay):
-        if (self.tx, self.ty) in lay.seats:
-            self.facing = 'down'  # everyone sits facing down
-
-    def route(self, lay, goal, around_people=False):
-        blocked = lay.staff_only if self.role == 'patient' else frozenset()  # never behind a counter
-        if around_people:
-            with self.world.lock:
-                blocked = blocked | {t for t, a in self.world.occupied.items() if a is not self}
-        return lay.path((self.tx, self.ty), goal, self.avoid(), blocked)
-
-    def avoid(self):
-        # shortcut: the triage step of phase 2 will open 'triage' to the patient being triaged
-        return ('corridor', 'triage') if self.role == 'patient' and not self.called else ()
-
-    def state(self, lay):
+    def state(self):
         if self.path:
             return 'walking'
-        return 'seated' if (self.tx, self.ty) in lay.seats else 'standing'
+        return 'seated' if (self.tx, self.ty) in self.lay.seats else 'standing'
 
-    def snapshot(self, lay):
+    # ---- what the UI sees -----------------------------------------------------------------------------------
+    def card(self):
+        """Extra lines for the info card."""
+        return []
+
+    def snapshot(self):
         """Plain data for the UI process, which can't see this object (separate memory)."""
-        room = lay.room_at[self.ty][self.tx]
-        # shortcut: patience/urgency/fatigue don't change yet; they come alive in phases 2 and 3
-        if self.role == 'patient':
-            extra = [('Urgency', self.urgency), ('Patience', f'{self.patience}/100')]
-        else:
-            extra = [('Fatigue', f'{self.fatigue}/100'), ('Busy', 'no')]
+        room = self.lay.room_at[self.ty][self.tx]
         return {'id': self.id, 'role': self.role, 'name': self.name, 'look': self.look,
                 'px': self.px, 'py': self.py, 'tx': self.tx, 'ty': self.ty, 'facing': self.facing,
-                'anim_t': self.anim_t, 'path': list(self.path), 'state': self.state(lay),
-                'room': room.name if room else 'doorway', 'extra': extra}
-
-
-def create_actors(lay, rng):
-    def free(*kinds):
-        return [t for r in lay.rooms if r.kind in kinds for t in lay.free_tiles(r)]
-
-    def desk_seats(kind):
-        return [(f.x, f.y) for f in lay.furniture if f.kind == 'office_chair' and lay.room_at[f.y][f.x].kind == kind]
-
-    waiting_seats = [t for t in lay.seats if lay.room_at[t[1]][t[0]].kind == 'waiting']
-    everywhere = free('waiting', 'triage', 'bar', 'reception', 'corridor', 'doctor', 'surgery', 'disinfection',
-                      'storage', 'rest')
-    world = World()
-
-    # Seated staff first, so their chairs are taken before anyone else spawns; one per desk, never get up
-    actors = [Actor('receptionist', [seat], rng, world) for seat in desk_seats('reception')]
-    actors += [Actor('nurse', [seat], rng, world) for seat in desk_seats('triage')]
-    actors += [Actor('doctor', lay.free_tiles(r), rng, world) for r in lay.rooms_of('doctor')]
-    actors += [Actor('nurse', free('corridor', 'surgery', 'disinfection', 'storage'), rng, world)
-               for _ in range(config.N_NURSES)]
-    actors += [Actor('security', free('waiting'), rng, world) for _ in range(config.N_SECURITY)]
-    actors += [Actor('cleaner', everywhere, rng, world) for _ in range(config.N_CLEANERS)]
-    # Patients prefer seats (weight 3) but get up now and then
-    actors += [Actor('patient', waiting_seats * 3 + free('waiting'), rng, world) for _ in range(config.N_PATIENTS)]
-    return actors
+                'anim_t': self.anim_t, 'path': list(self.path), 'state': self.state(),
+                'room': room.name if room else 'doorway', 'bubble': self.bubble, 'mark': None,
+                'card': [('Doing', self.doing)] + self.card()}

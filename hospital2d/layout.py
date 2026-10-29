@@ -178,10 +178,15 @@ class Layout:
         self.table_spots = {r: bed_spot(furniture_in(r, 'operating_table')[0])[1] for r in self.rooms_of('surgery')}
         self.emergency_beds = {r: [b for b in map(bed_spot, furniture_in(r, 'bed')) if b[0]]
                                for r in self.rooms_of('emergency')}
-        # Stretchers are picked up and left in the open part of storage, not in the narrow aisles between shelves
-        shelf_rows = {y for f in self.furniture if f.kind == 'shelf' for _, y in f.tiles()}
-        self.stretcher_spots = [t for r in self.rooms_of('storage') for t in self.free_tiles(r)
-                                if t[1] not in shelf_rows]
+        # Stretchers park against the back wall of storage (the one away from its door), with room between them;
+        # the nurses meet anywhere else in there
+        self.stretcher_bay, self.stretcher_spots = [], []
+        for r in self.rooms_of('storage'):
+            x0, y0, x1, y1 = r.interior
+            back = y1 if r.flipped else y0
+            self.stretcher_bay += [(x, back) for x in range(x0 + 1, x1, 3) if self.walkable(x, back)]
+            # (not right in front of the stretchers either: that's the lane to push them in and out)
+            self.stretcher_spots += [t for t in self.free_tiles(r) if abs(t[1] - back) > 1]
         self.waiting_seats = {r: [t for t in self.free_tiles(r) if t in self.seats] for r in self.rooms_of('waiting')}
         self.control_seat = next((f.x, f.y) for r in self.rooms_of('control') for f in furniture_in(r, 'office_chair'))
         self.rest_spots = [t for r in self.rooms_of('rest') for t in self.free_tiles(r) if t in self.seats]
@@ -435,9 +440,9 @@ def furnish(r):
     elif k == 'disinfection':
         f += [Furniture('sink', x, y0, w=2) for x in range(x0, x1, 2)]
         f += [Furniture('cabinet', x0, y0 + 2), Furniture('biohazard', x1, y1), Furniture('sanitizer', x0, y1)]
-    elif k == 'storage':
-        f += [Furniture('shelf', x, y0, h=5) for x in range(x0 + 1, x1, 3)]
-        f += [Furniture('fridge', x1, y0), Furniture('fridge', x1, y0 + 1), Furniture('biohazard', x0, y1)]
+    elif k == 'storage':  # shelves along the side walls; the back wall is for the stretchers (Layout.stretcher_bay)
+        f += [Furniture('shelf', x0, y0 + 1, h=4), Furniture('shelf', x1, y0 + 1, h=4),
+              Furniture('fridge', x0, y1 - 1), Furniture('fridge', x1, y1 - 1), Furniture('biohazard', x0, y1)]
     elif k == 'rest':
         f += [Furniture('sofa', x0 + 1, y0, False, w=3), Furniture('sofa', x0 + 5, y0, False, w=3), Furniture('table', x0 + 3, y0 + 2),
               Furniture('coffee', x1, y0), Furniture('bed', x1 - 1, y0 + 2, h=2), Furniture('bed', x1, y0 + 2, h=2),

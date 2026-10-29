@@ -81,6 +81,24 @@ def test_dispatcher():
     assert near.task is red  # Red pre-empts the Green consultation (gap 2), not the Yellow ones
 
 
+def test_team():
+    """The two nurses of a stretcher are handed out together or not at all (no one waiting for a partner who's busy)."""
+    d = Dispatcher(clock=lambda: 0)
+    nurse = lambda i: SimpleNamespace(id=i, name=f'N{i}', role='nurse', tx=i, ty=0, fatigue=0.0, resting=False,
+                                      task=None, inbox=queue.Queue())
+    d.staff = [nurse(1)]
+    team = [Task('stretcher', 'nurse', 2, tile=(0, 0)) for _ in range(2)]
+    for t in team:
+        t.team = team
+    d.submit(*team)
+    with d.cond:
+        assert d.assign() == [] and len(d.open) == 2  # one nurse free: nobody goes
+    d.staff.append(nurse(2))
+    with d.cond:
+        given = d.assign()
+    assert len(given) == 2 and {a.id for _, a in given} == {1, 2}
+
+
 def test_priority():
     """Who goes first: most urgent by default; with weight on impatience, whoever is about to give up."""
     d = Dispatcher(clock=lambda: 0)
@@ -221,6 +239,9 @@ def test_stretcher():
                         assert abs(n.tx - p.tx) + abs(n.ty - p.ty) == 1, 'the stretcher came apart'
                         assert abs(n.px - p.px) + abs(n.py - p.py) <= 1.01, 'the stretcher came apart (drawn)'
             time.sleep(0.003)
+        parked = lambda: sum(1 for t, c in list(h.world.occupied.items())
+                             if type(c).__name__ == 'Cart' and c.driver is None and t in h.lay.stretcher_bay)
+        assert until(lambda: parked() == config.STRETCHERS, 30), 'the stretcher was not pushed back to its place'
     finally:
         stop(h)
     assert h.stats['treated'] == 1, h.summary()

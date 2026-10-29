@@ -493,13 +493,13 @@ class WardNurse(TaskStaff):
 
     def lead(self, t):
         p, s = t.patient, t.summons
-        cart = self.form(t)
+        cart = stretcher = self.form(t)  # (cart: in the train right now; stretcher: the one it took, always)
         back = t.ready[1]
         if cart is None:
             t.failed = True
             self.driver = back.driver = None
             return
-        self.pushing = cart
+        self.pushing, self.doing = cart, f'stretcher for {p.name}'
         train = [self, cart, back]
         for m in train:  # a train from now on: whoever walks gives way to it
             m.driver = (self, train)
@@ -528,56 +528,79 @@ class WardNurse(TaskStaff):
             self.pushing = cart
             t.arrived.set()
             self.tire(config.FATIGUE_PER_TASK['stretcher'])
-            if cart is not None:  # the stretcher back to storage, far enough in that the whole train fits
-                door = [x for x in self.lay.doors if self.lay.room_at[x[1] + 1][x[0]] is None
-                        and any(r.kind == 'storage' for r in self.lay.rooms if r.contains(x[0], x[1] - 1))]
-                inside = self.lay.distances_from(door[0]) if door else {}
-                free = [x for x in self.lay.stretcher_spots if x not in self.world.occupied and inside.get(x, 9) >= 3]
-                near = self.lay.distances_from((train[0].tx, train[0].ty))
-                if free:
-                    self.drive(train, min(free, key=lambda x: near.get(x, 10 ** 6)), timeout=120)
+            if cart is not None:  # the stretcher back to its place at the back of storage
+                self.park(train, cart)
         finally:
             t.arrived.set()
             self.pushing = None
-            for m in (self, back, p, cart):
-                if m is not None:
-                    m.driver = None
+            for m in (self, back, p, stretcher):
+                m.driver = None
             with self.world.lock:
-                for m in (cart, back):
-                    if m is cart and m is not None and self.world.occupied.get((m.tx, m.ty)) is m:
-                        del self.world.occupied[(m.tx, m.ty)]
+                cart = stretcher
+                if (cart.tx, cart.ty) not in self.lay.stretcher_bay or self.world.occupied.get((cart.tx, cart.ty)) is not cart:
+                    # shortcut: one that couldn't be pushed back (or was left with a patient) reappears in storage;
+                    # a third nurse fetching it would be the real thing
+                    if self.world.occupied.get((cart.tx, cart.ty)) is cart:
+                        del self.world.occupied[(cart.tx, cart.ty)]
+                    spot = next((m for m in self.lay.stretcher_bay if m not in self.world.occupied), None)
+                    if spot:
+                        cart.tx, cart.ty, cart.px, cart.py = spot[0], spot[1], spot[0] + 0.5, spot[1] + 0.5
+                        cart.facing = 'down'
+                        self.world.occupied[spot] = cart
                 if t.back_spot and self.world.occupied.get(t.back_spot) is back and \
                         (back.tx, back.ty) != t.back_spot:
                     del self.world.occupied[t.back_spot]
 
     def form(self, t):
-        """The train forms around the partner, who stays where it is (in the open part of storage): the stretcher
-        on a free tile next to it, and this nurse on the next one. Returns the stretcher, or None if there's no
-        room for the three of them there."""
+        """Takes a stretcher parked at the back of storage: this nurse on one side of it, the partner on another
+        (they both walk there). Returns the stretcher, or None if none is free in time (all out with patients)."""
         back = t.ready[1]
-        spots = set(self.lay.stretcher_spots)
-        back.driver = self.driver = (self, [self, back])  # whoever walks gives way to them from now on
-        for _ in range(6):
-            if t.aborted():
-                return None
-            k = (back.tx, back.ty)
-            near = self.lay.distances_from((self.tx, self.ty))
+        end = self.h.clock() + 90
+        self.doing = 'getting a stretcher'
+        while self.h.clock() < end and not t.aborted():
+            near, far = self.lay.distances_from((self.tx, self.ty)), self.lay.distances_from((back.tx, back.ty))
             with self.world.lock:
                 occ = self.world.occupied
-                options = sorted((near.get(x, 10 ** 6), m, x) for m in neighbours(k) for x in neighbours(m)
-                                 if x != k and {m, x} <= spots and m not in occ and occ.get(x) in (None, self))
-            if options:
-                _, m, x = options[0]
-                if self.go(x, timeout=20):
-                    with self.world.lock:
-                        if m not in self.world.occupied:
-                            cart = Cart(m)
-                            self.world.occupied[m] = cart
-                            t.back_spot = k
-                            return cart
-            else:
-                self.tick()
+                free = lambda x, who: self.lay.walkable(*x) and occ.get(x) in (None, who)
+                options = sorted(((near.get(x, 10 ** 6) + far.get(k, 10 ** 6), c, x, k)
+                                 for c in occ.values() if isinstance(c, Cart) and c.driver is None
+                                 for x in neighbours((c.tx, c.ty)) if free(x, self)
+                                  for k in neighbours((c.tx, c.ty)) if k != x and free(k, back)), key=lambda o: o[0])
+                if options:
+                    _, cart, x, k = options[0]
+                    cart.driver = (self, [self, cart, back])  # claimed: no other pair takes it
+                    occ.setdefault(k, back)
+                    t.back_spot = k
+            if not options:
+                self.tick()  # all out: wait for one to come back
+                continue
+            if self.go(x, timeout=30):
+                return cart
+            cart.driver = None  # couldn't get to it: this transfer fails (the doctor will call again)
+            return None
         return None
+
+    def park(self, train, cart):
+        """Back to the back wall of storage: the front goes past a free parking spot so the stretcher (the middle)
+        stops on it, where it stays."""
+        near = self.lay.distances_from((train[0].tx, train[0].ty))
+        for _ in range(len(self.lay.stretcher_bay)):
+            with self.world.lock:  # pick a free spot and claim it, in one step
+                spots = [m for m in self.lay.stretcher_bay if m not in self.world.bay_claims
+                         and self.world.occupied.get(m) in (None, *train)]
+                if not spots:
+                    return False
+                m = min(spots, key=lambda m: near.get(m, 10 ** 6))
+                self.world.bay_claims.add(m)
+            try:
+                sides = [g for g in ((m[0] - 1, m[1]), (m[0] + 1, m[1]))  # along the wall: it pulls it in sideways
+                         if self.lay.walkable(*g) and self.world.occupied.get(g) in (None, *train)]
+                if sides and self.drive(train, m, sides, timeout=60) and (cart.tx, cart.ty) == m:
+                    return True
+            finally:
+                with self.world.lock:
+                    self.world.bay_claims.discard(m)
+        return False
 
     def bed(self, spot):
         """The tiles of the bed / table someone lies on with its middle at `spot`."""
@@ -624,7 +647,7 @@ class WardNurse(TaskStaff):
                 free = self.world.occupied.setdefault(path[0], front) is front
             if not free:  # someone in the way: a moment, then round them
                 blocked_for += self.tick()
-                if path == [last] and blocked_for > 1:  # the extra step just lines the stretcher up: skip it
+                if len(path) == 1 and path[0] != goal and blocked_for > 1:  # the extra step only lines it up: skip it
                     return True
                 other = self.world.occupied.get(path[0])
                 other_train = getattr(other, 'driver', None)
@@ -675,7 +698,11 @@ class WardNurse(TaskStaff):
             start = (order[0].tx, order[0].ty)
             r = [] if start == goal else self.lay.path(start, goal, avoid, blocked | {(m.tx, m.ty) for m in order[1:]})
             if r or start == goal:
-                options.append((len(r) + (order is not train), r + ([last] if last else []), order))
+                # one more step past the goal: any of `last` except back where it came from (its own stretcher)
+                came = r[-2] if len(r) >= 2 else (order[1].tx, order[1].ty)
+                extra = next((x for x in (last if isinstance(last, list) else [last] if last else [])
+                              if x != came and x not in {(m.tx, m.ty) for m in order}), None)
+                options.append((len(r) + (order is not train), r + ([extra] if extra else []), order))
         if not options:
             return self.plan(train, goal, last, with_patient, False) if around else None
         _, path, order = min(options, key=lambda o: o[0])

@@ -13,7 +13,7 @@ import config
 from arrivals import new_patient
 from layout import build_layout
 from patients import Patient
-from staff import Boss, Cleaner, Doctor, Receptionist, Security, TriageNurse, WardNurse
+from staff import Boss, Cart, Cleaner, Doctor, Receptionist, Security, TriageNurse, WardNurse
 
 SPEEDS = (0.25, 0.5, 1, 2, 4, 8)  # what the admin tablet offers
 BRAIN = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'boss_brain.json')  # written by learn.py
@@ -53,6 +53,8 @@ class Hospital:
         self.running = False
 
         lay, rng = self.lay, self.rng
+        for spot in lay.stretcher_bay[:config.STRETCHERS]:  # parked before anyone is placed: they take a tile
+            self.world.occupied[spot] = Cart(spot)
         staff = [Receptionist(self, seat, front, rng) for seat, front in lay.reception_desks]
         staff += [TriageNurse(self, room, seat, chair, rng) for room, seat, chair in lay.triage_desks]
         rooms = lay.rooms_of('doctor')
@@ -286,10 +288,10 @@ class Hospital:
     def fetch_stretcher(self, p, summons):
         """Two nurses (two tasks for the dispatcher) bring `p` to `summons.tile` on a stretcher."""
         summons.transfer = Transfer(p, summons)
-        for _ in range(2):
-            task = Task('stretcher', 'nurse', 2, patient=p, created=self.clock())
-            task.transfer = summons.transfer
-            self.dispatcher.submit(task)
+        team = [Task('stretcher', 'nurse', 2, patient=p, created=self.clock()) for _ in range(2)]
+        for task in team:
+            task.transfer, task.team = summons.transfer, team
+        self.dispatcher.submit(*team)
 
     def consult_started(self, p):
         if p.triaged_at is not None:
@@ -351,11 +353,14 @@ class Hospital:
             actors = list(self.actors)
         with self.world.lock:
             messes = list(self.world.messes)
+            parked = [(c.px, c.py, c.facing) for c in self.world.occupied.values()
+                      if isinstance(c, Cart) and c.driver is None]
         with self.stats_lock:
             stats = dict(self.stats)
         with self.events_lock:
             events = list(self.events)
-        return {'actors': [a.snapshot() for a in actors], 'messes': messes, 'events': events, 'stats': stats,
+        return {'actors': [a.snapshot() for a in actors], 'messes': messes, 'parked': parked, 'events': events,
+                'stats': stats,
                 'time': self.clock(), 'surge': self.clock() < self.surge_until, 'sim_hz': self.sim_hz,
                 'speed': self.rate, 'paused': self.paused, 'staff': self.staff_counts(),
                 'keep_up': self.keep_up,

@@ -6,6 +6,7 @@
 #           L = event log on/off | B = what the dispatcher (Boss) is doing | ESC = close the card
 import heapq
 import multiprocessing as mp
+import os
 import queue
 from types import SimpleNamespace
 
@@ -14,7 +15,7 @@ import pygame
 import config
 from actors import ROLE_LABEL
 from arrivals import run_arrivals
-from art import BUBBLE_TAIL_X, CHAR_H, CHAR_W, character, draw_layout, furniture_sprites, icon_bubble, image, \
+from art import ASSETS, BUBBLE_TAIL_X, CHAR_H, CHAR_W, character, draw_layout, furniture_sprites, icon_bubble, image, \
     text_bubble
 from eventlog import run_log
 from layout import build_layout
@@ -129,7 +130,8 @@ def run_ui(snapshots):
     small = pygame.font.SysFont('consolas', 13)
     banner_font = pygame.font.SysFont('consolas', 28, bold=True)
     room_font = pygame.font.SysFont('consolas', 13, bold=True)
-    bubble_font = pygame.font.Font(None, 14)  # rendered without antialiasing and scaled up: pixel text
+    # m5x7 (Daniel Linssen, CC0) at its native size, without antialiasing, scaled up with the rest: pixel text
+    bubble_font = pygame.font.Font(os.path.join(ASSETS, 'fonts', 'm5x7.ttf'), 16)
     bubbles = {}  # what's said (or an icon) -> its speech bubble
 
     lay = build_layout()  # same config as the simulation process, so the same plan

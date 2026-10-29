@@ -50,7 +50,7 @@ class Boss(Actor):
     role = 'dispatcher'
 
     def __init__(self, h, seat, rng):
-        super().__init__(h, [seat], rng)
+        super().__init__(h, [seat], rng, name='Boss')
         self.given = 0
         self.doing = 'assigning tasks'
 
@@ -68,6 +68,18 @@ class Boss(Actor):
         d = self.h.dispatcher
         busy = sum(1 for a in d.staff if a.task is not None)
         return [('Open tasks', len(d.open)), ('Tasks given', self.given), ('Staff busy', f'{busy}/{len(d.staff)}')]
+
+    def snapshot(self):
+        """Adds what the dispatcher is doing: each task being done (who, where), the open ones, its last decisions."""
+        s = super().snapshot()
+        d = self.h.dispatcher
+        with d.cond:
+            s['boss'] = {
+                'working': [(a.id, a.task.where(), a.task.urgency, a.task.label()) for a in d.staff if a.task],
+                'open': [(t.where(), t.urgency, t.label()) for t in d.open],
+                'decisions': list(d.decisions),
+            }
+        return s
 
 
 class Receptionist(Staff):

@@ -53,11 +53,11 @@ def test_dispatcher():
     d = Dispatcher(clock=lambda: 0)
 
     def actor(i, x, fatigue=0):
-        return SimpleNamespace(id=i, role='doctor', tx=x, ty=0, fatigue=fatigue, resting=False, task=None,
+        return SimpleNamespace(id=i, name=f'Dr {i}', role='doctor', tx=x, ty=0, fatigue=fatigue, resting=False, task=None,
                                inbox=queue.Queue())
 
     def consult(rank):
-        return Task('consult', 'doctor', rank, patient=SimpleNamespace(rank=rank, tx=0, ty=0))
+        return Task('consult', 'doctor', rank, patient=SimpleNamespace(name='P', rank=rank, tx=0, ty=0))
 
     def assign(task):
         d.submit(task)

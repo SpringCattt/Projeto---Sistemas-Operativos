@@ -27,7 +27,7 @@ class Hospital:
         self.started = time.perf_counter()
         self.line = Line()
         self.triage_queue = queue.Queue()
-        self.dispatcher = Dispatcher(self.clock)
+        self.dispatcher = Dispatcher(self.clock, self.lay.walk_distance)
         self.theatres = Theatres(self.lay.rooms_of('surgery'))
         self.disinfection = {r: threading.Semaphore(max(1, len(spots))) for r, spots in self.lay.sink_spots.items()}
         self.log_out = log_out  # Queue to the log process (or None)
@@ -37,6 +37,7 @@ class Hospital:
         self.errors = []
         self.surge_until = -1.0
         self.sim_hz, self.keep_up, self._hz_mark = 0.0, 1.0, (time.perf_counter(), 0, 0.0)
+        self._retired_ticks, self._retired_planned = 0, 0.0  # counted by actors that already left
         self.actors, self.actors_lock, self.threads = [], threading.Lock(), []
         self.running = False
 
@@ -144,6 +145,9 @@ class Hospital:
         with self.actors_lock:
             if actor in self.actors and not self.stop.is_set():
                 self.actors.remove(actor)
+                # keep what it counted, or measure() would see the totals drop when someone leaves
+                self._retired_ticks += actor.ticks
+                self._retired_planned += actor.planned
 
     def patients(self):
         with self.actors_lock:
@@ -170,7 +174,9 @@ class Hospital:
         keep up with the rate they ask for (keep_up: 1.0 = every tick on time; below 0.8 the hospital is too big)."""
         with self.actors_lock:
             actors = list(self.actors)
-        now, ticks, planned = time.perf_counter(), sum(a.ticks for a in actors), sum(a.planned for a in actors)
+            ticks = self._retired_ticks + sum(a.ticks for a in actors)
+            planned = self._retired_planned + sum(a.planned for a in actors)
+        now = time.perf_counter()
         then, ticks_before, planned_before = self._hz_mark
         if actors and now > then:
             self.sim_hz = max(0.0, (ticks - ticks_before) / (now - then) / len(actors))

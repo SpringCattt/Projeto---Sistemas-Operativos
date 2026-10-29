@@ -61,6 +61,7 @@ class Boss(Actor):
                 d.cond.wait(timeout=1 / config.ACTOR_HZ)
                 self.given += d.assign()
             self.ticks += 1
+            self.planned += 1 / config.ACTOR_HZ
         raise Stopped
 
     def card(self):

@@ -67,7 +67,7 @@ class Actor:
         self.facing, self.anim_t = 'down', 0.0
         self.pause = self.rng.uniform(0, self.pace[1])
         self.area = []  # where it wanders when idle
-        self.ticks, self._last, self._next = 0, None, None
+        self.ticks, self.planned, self._last, self._next = 0, 0.0, None, None
         self.fatigue, self.resting = 0.0, False
         self.task = None  # what it's committed to (set by the dispatcher for doctors, security and cleaners)
         self.doing = 'idle'  # shown on the info card
@@ -98,7 +98,7 @@ class Actor:
         and whatever upkeep() raises (Interrupted)."""
         # Wait until the next deadline rather than a fixed time: Windows rounds waits up to ~15.6 ms, and this way
         # a long wait is followed by a shorter one, so the average stays at ACTOR_HZ
-        period = 1 / config.ACTOR_HZ
+        period = 1 / (config.ACTOR_HZ if self.path else config.IDLE_HZ)
         self._next = (self._next or self._last) + period
         delay = self._next - time.perf_counter()
         if delay < -period:  # far behind (overloaded): don't try to catch up in a burst
@@ -109,6 +109,7 @@ class Actor:
         dt = min(now - self._last, 0.1) * config.TIME_SCALE
         self._last = now
         self.ticks += 1
+        self.planned += period  # if it keeps up, this grows as fast as the clock (see Hospital.measure)
         if self.bubble and self.bubble_until and self.h.clock() > self.bubble_until:
             self.bubble, self.bubble_until = None, 0.0
         self.upkeep(dt)

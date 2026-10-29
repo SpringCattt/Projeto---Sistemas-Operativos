@@ -12,10 +12,10 @@ SIZES = {
     'storage': (14, 9), 'rest': (12, 9),
 }
 MARGIN = 3  # grass tiles around the building
-SEATS = {'chair', 'office_chair', 'bench'}  # furniture people sit on (every tile of a bench is a seat)
+SEATS = {'chair', 'office_chair', 'bench', 'sofa'}  # furniture people sit on (every tile of a bench is a seat)
 
 
-@dataclass
+@dataclass(eq=False)  # rooms are compared by identity (and used as dict keys)
 class Room:
     kind: str
     name: str  # shown on screen
@@ -25,6 +25,7 @@ class Room:
     h: int
     walls: bool = True
     flipped: bool = False  # door on top instead of bottom (furniture is mirrored)
+    partner: 'Room' = None  # triage -> its waiting room; surgery -> the disinfection room doctors enter through
 
     @property
     def interior(self):  # (x0, y0, x1, y1) inclusive
@@ -81,8 +82,58 @@ class Layout:
         for r in rooms:
             counter_rows = [f.y for f in self.furniture if f.kind == 'counter' and r.contains(f.x, f.y)]
             if counter_rows:
-                x0, y0, x1, _ = r.interior
-                self.staff_only |= {(x, y) for y in range(y0, min(counter_rows)) for x in range(x0, x1 + 1)}
+                x0, y0, x1, y1 = r.interior
+                behind = range(max(counter_rows) + 1, y1 + 1) if r.flipped else range(y0, min(counter_rows))
+                self.staff_only |= {(x, y) for y in behind for x in range(x0, x1 + 1)}
+        self._find_spots(near_door)
+
+    def _find_spots(self, near_door):
+        """Named places the actors use: desks, the reception line, where to wait, where to operate..."""
+        def furniture_in(room, kind):
+            return [f for f in self.furniture if f.kind == kind and room.contains(f.x, f.y)]
+
+        rec = self.rooms_of('reception')[0]
+        x0, y0, x1, y1 = rec.interior
+        # Each receptionist's seat, and the tile in front of the counter where the patient stands
+        self.reception_desks = [((f.x, f.y), (f.x, f.y + 2)) for f in furniture_in(rec, 'office_chair')]
+        fronts = {front for _, front in self.reception_desks}
+        # The line: a snake over the 3 middle columns, starting just below the counter
+        cx = (x0 + x1) // 2
+        self.line_spots = []
+        for i, x in enumerate((cx, cx + 1, cx - 1)):
+            ys = range(y0 + 4, y1) if i % 2 == 0 else range(y1 - 1, y0 + 3, -1)
+            self.line_spots += [(x, y) for y in ys if self.walkable(x, y) and (x, y) not in near_door]
+        # Registered patients wait to be called to triage anywhere else on the patients' side
+        taken = fronts | set(self.line_spots) | self.seats
+        self.lobby = [t for t in self.free_tiles(rec) if t[1] >= y0 + 3 and t not in taken and t not in near_door]
+        # Outside: the closest tiles to the entrance hold the overflow of the line; people appear/leave further away
+        street = self.rooms_of('street')[0]
+        ex, ey = rec.x + rec.w // 2, rec.y + rec.h
+        by_distance = sorted(self.free_tiles(street), key=lambda t: abs(t[0] - ex) + abs(t[1] - ey))
+        self.street_line, self.street_edge = by_distance[:20], by_distance[20:]
+
+        self.triage_desks = [(r, (f.x, f.y), (f.x + 1, f.y + 2))  # (room, nurse seat, patient chair)
+                             for r in self.rooms_of('triage') for f in furniture_in(r, 'office_chair')]
+        self.doctor_desks = {}  # room -> (doctor seat, patient chair)
+        for r in self.rooms_of('doctor'):
+            seats, chairs = furniture_in(r, 'office_chair'), furniture_in(r, 'chair')
+            if seats and chairs:
+                self.doctor_desks[r] = ((seats[0].x, seats[0].y), (chairs[0].x, chairs[0].y))
+        self.surgery_spots = {}  # room -> (patient tile, doctor tile), on each side of the operating table
+        for r in self.rooms_of('surgery'):
+            t = furniture_in(r, 'operating_table')[0]
+            mid = t.y + t.h // 2
+
+            def beside(x):
+                return next((p for p in ((x, mid), (x, mid - 1), (x, mid + 1)) if self.walkable(*p)), None)
+            self.surgery_spots[r] = (beside(t.x - 1), beside(t.x + t.w))
+        self.sink_spots = {}  # disinfection room -> tiles in front of its sinks
+        for r in self.rooms_of('disinfection'):
+            fronts = {(x, y + d) for f in furniture_in(r, 'sink') for x, y in f.tiles() for d in (1, -1)}
+            self.sink_spots[r] = sorted(t for t in fronts if r.contains(*t) and self.walkable(*t))
+        self.waiting_seats = {r: [t for t in self.free_tiles(r) if t in self.seats] for r in self.rooms_of('waiting')}
+        self.control_seat = next((f.x, f.y) for r in self.rooms_of('control') for f in furniture_in(r, 'office_chair'))
+        self.rest_spots = [t for r in self.rooms_of('rest') for t in self.free_tiles(r) if t in self.seats]
 
     def walkable(self, x, y):
         return 0 <= x < self.width and 0 <= y < self.height \
@@ -159,25 +210,29 @@ def build_layout(n_doctors=config.MAX_DOCTORS, n_surgeries=config.N_SURGERIES):
     # The main corridor spans y 0..4. Top-row rooms rest on it from above and bottom-row rooms
     # hang from it. Each new room goes to the shorter row.
     # shortcut: one floor and one corridor; when floors/wings arrive, a building becomes a list of these.
-    # Base block: street -> reception -> triage -> waiting room. Bar above reception; one small triage
-    # room under each waiting room, opening onto the patients' side of reception (never behind the counter).
+    # Base block: street -> reception -> triage -> waiting room. Above reception, the bar and the control room
+    # (where the dispatcher sits); one small triage room under each waiting room, opening onto the patients' side
+    # of reception (never behind the counter).
     w1 = Room('waiting', 'Waiting Room 1', 0, 4, 20, 14)
     t1 = Room('triage', 'Triage 1', 9, 17, 11, 6)
-    bar = Room('bar', 'Bar / Cafe', 19, 4, 16, 8)
+    bar = Room('bar', 'Bar / Cafe', 19, 4, 11, 8, flipped=True)  # door on top: counter at the back
+    control = Room('control', 'Control Room', 29, 4, 6, 8)
     rec = Room('reception', 'Entrance and Reception', 19, 11, 16, 12)
     t2 = Room('triage', 'Triage 2', 34, 17, 11, 6)
     w2 = Room('waiting', 'Waiting Room 2', 34, 4, 20, 14)
     street = Room('street', 'Street', 15, 23, 24, 4, walls=False)
-    rooms = [w1, t1, bar, rec, t2, w2, street]
-    doors = [door_top(w1), door_top(bar), door_top(w2),  # to the corridor
+    t1.partner, t2.partner = w1, w2
+    rooms = [w1, t1, bar, control, rec, t2, w2, street]
+    doors = [door_top(w1), door_top(bar), door_top(control), door_top(w2),  # to the corridor
              door_between(t1, rec), door_between(rec, t2),  # reception -> triage
              door_top(t1), door_top(t2),  # triage -> waiting room
              (rec.x, rec.y + 4, 2, 'v'), (rec.x + rec.w - 1, rec.y + 4, 2, 'v'),  # waiting room -> reception (way out)
              (rec.x + rec.w // 2 - 1, rec.y + rec.h - 1, 3, 'h')]  # big main entrance
     end = {'top': 0, 'bottom': w2.x + w2.w - 1}  # x of the right wall of each row's last room
 
-    blocks = [surgery_block(n_surgeries), [('storage', 'Storage')], [('rest', 'Rest')]]
-    blocks += [[('doctor', f'Doctor\'s Room {i + 1}')] for i in range(n_doctors)]
+    # Doctors' rooms first, so they're the closest to the waiting rooms; then surgery, storage and rest
+    blocks = [[('doctor', f'Doctor\'s Room {i + 1}')] for i in range(n_doctors)]
+    blocks += [surgery_block(n_surgeries), [('storage', 'Storage')], [('rest', 'Rest')]]
     for block in blocks:
         row = min(end, key=end.get)
         prev = None
@@ -190,6 +245,8 @@ def build_layout(n_doctors=config.MAX_DOCTORS, n_surgeries=config.N_SURGERIES):
             doors.append(door_top(r) if r.flipped else door_bottom(r))
             if prev and 'disinfection' in (prev.kind, r.kind):
                 doors.append(door_between(prev, r))
+                surgery, disinfection = (prev, r) if r.kind == 'disinfection' else (r, prev)
+                surgery.partner = disinfection
             prev = r
     rooms.append(Room('corridor', 'Corridor', 0, 0, max(end.values()) + 1, 5))
 
@@ -235,10 +292,15 @@ def furnish(r):
         f += [Furniture('counter', x, y0 + 1) for x in range(x0 + 2, x1 - 1)]
         # back wall items side by side, so the lane behind the counter stays open from both ends
         f += [Furniture('coffee', x0 + 3, y0), Furniture('fridge', x0 + 4, y0), Furniture('snacks', x0 + 5, y0),
-              Furniture('soda', x0 + 6, y0), Furniture('cake', x0 + 5, y0 + 1), Furniture('donuts', x0 + 8, y0 + 1),
+              Furniture('soda', x0 + 6, y0), Furniture('cake', x0 + 5, y0 + 1), Furniture('donuts', x0 + 3, y0 + 1),
               Furniture('plant', x0, y1), Furniture('plant', x1, y1), Furniture('trash_bin', x1, y0 + 2)]
         for x in range(x0 + 2, x1 - 1, 4):
             f += [Furniture('table', x, y1 - 1), Furniture('chair', x - 1, y1 - 1, False), Furniture('chair', x + 1, y1 - 1, False)]
+    elif k == 'control':
+        # the dispatcher's desk, facing the door, with screens on the wall behind
+        f += [Furniture('office_chair', x0 + 1, y0 + 3, False), Furniture('desk', x0 + 1, y0 + 4, w=2),
+              Furniture('pc', x0 + 1, y0 + 4), Furniture('books', x0 + 2, y0 + 4), Furniture('tv', x0, y0),
+              Furniture('tv', x1, y0), Furniture('cabinet', x1, y0 + 2), Furniture('plant', x0, y0 + 2)]
     elif k == 'doctor':
         f += [Furniture('desk', cx - 1, y0 + 1, w=2), Furniture('pc', cx - 1, y0 + 1), Furniture('office_chair', cx - 1, y0, False),
               Furniture('chair', cx, y0 + 2, False), Furniture('exam_bed', x1, y0 + 2, h=2), Furniture('plant', x0, y0),
@@ -256,7 +318,7 @@ def furnish(r):
         f += [Furniture('shelf', x, y0, h=5) for x in range(x0 + 1, x1, 3)]
         f += [Furniture('fridge', x1, y0), Furniture('fridge', x1, y0 + 1), Furniture('biohazard', x0, y1)]
     elif k == 'rest':
-        f += [Furniture('sofa', x0 + 1, y0, w=3), Furniture('sofa', x0 + 5, y0, w=3), Furniture('table', x0 + 3, y0 + 2),
+        f += [Furniture('sofa', x0 + 1, y0, False, w=3), Furniture('sofa', x0 + 5, y0, False, w=3), Furniture('table', x0 + 3, y0 + 2),
               Furniture('coffee', x1, y0), Furniture('bed', x1 - 1, y0 + 2, h=2), Furniture('bed', x1, y0 + 2, h=2),
               Furniture('plant', x0, y1), Furniture('bedside', x1 - 2, y0 + 2), Furniture('armchair', x0, y0 + 3),
               Furniture('fridge', x1 - 1, y0), Furniture('clock', x0 + 4, y0), Furniture('tv', x0 + 2, y1)]

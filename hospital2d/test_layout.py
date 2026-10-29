@@ -61,4 +61,11 @@ for n_doctors, n_surgeries in ((1, 1), (5, 2), (100, 3)):
         'street', 'emergency'}
     # Decorations never leave a way through only one tile wide
     assert not [f for f in lay.furniture if f.kind in DECOR and f.solid and lay.squeezes(f)]
+# Old plans are freed (learn.py builds a new one every round)
+import gc  # noqa: E402
+from layout import Layout  # noqa: E402
+for _ in range(3):
+    build_layout(2, 1).distances_from(lay.street_edge[0])
+gc.collect()
+assert sum(isinstance(o, Layout) for o in gc.get_objects()) <= 2, 'old plans are kept in memory'
 print('ok')

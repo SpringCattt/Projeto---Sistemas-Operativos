@@ -24,9 +24,18 @@ for n_doctors, n_surgeries in ((1, 1), (5, 2), (100, 3)):
 
     assert lay.path(start, lay.free_tiles(lay.rooms_of('doctor')[-1])[0])
 
-    # Patients not yet called go between waiting rooms without touching the corridor
+    # Patients not yet called go between waiting rooms without touching the corridor, triage or staff areas
     w1, w2 = lay.rooms_of('waiting')
-    route = lay.path(lay.free_tiles(w1)[0], lay.free_tiles(w2)[-1], avoid=('corridor',))
-    assert route and all(lay.room_at[y][x] is None or lay.room_at[y][x].kind != 'corridor' for x, y in route)
-    assert not lay.path(start, lay.free_tiles(lay.rooms_of('corridor')[0])[0], avoid=('corridor',))
+    avoid, staff = ('corridor', 'triage'), lay.staff_only
+    route = lay.path(lay.free_tiles(w1)[0], lay.free_tiles(w2)[-1], avoid, staff)
+    assert route and not set(route) & staff
+    assert all(lay.room_at[y][x] is None or lay.room_at[y][x].kind not in avoid for x, y in route)
+    assert not lay.path(start, lay.free_tiles(lay.rooms_of('corridor')[0])[0], avoid, staff)
+
+    # street -> reception -> triage -> waiting room, always on the patients' side of the counter
+    assert staff and lay.seats
+    for t, w in zip(lay.rooms_of('triage'), (w1, w2)):
+        to_triage = lay.path(start, lay.free_tiles(t)[-1], ('corridor',), staff)
+        to_waiting = lay.path(to_triage[-1], lay.free_tiles(w)[0], ('corridor',), staff)
+        assert to_triage and to_waiting and not set(to_triage + to_waiting) & staff
 print('ok')

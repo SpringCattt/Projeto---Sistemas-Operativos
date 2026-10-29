@@ -12,6 +12,7 @@ SIZES = {
     'storage': (14, 9), 'rest': (12, 9),
 }
 MARGIN = 3  # grass tiles around the building
+SEATS = {'chair', 'office_chair', 'bench'}  # furniture people sit on (every tile of a bench is a seat)
 
 
 @dataclass
@@ -73,6 +74,16 @@ class Layout:
                           if all(r.contains(*t) and t not in near_door for t in f.tiles())]
         self.solid = {t for f in self.furniture if f.solid for t in f.tiles()}
 
+        self.seats = {t for f in self.furniture if f.kind in SEATS for t in f.tiles()}
+
+        # Behind a counter (reception, bar) is staff only: patients never walk there
+        self.staff_only = set()
+        for r in rooms:
+            counter_rows = [f.y for f in self.furniture if f.kind == 'counter' and r.contains(f.x, f.y)]
+            if counter_rows:
+                x0, y0, x1, _ = r.interior
+                self.staff_only |= {(x, y) for y in range(y0, min(counter_rows)) for x in range(x0, x1 + 1)}
+
     def walkable(self, x, y):
         return 0 <= x < self.width and 0 <= y < self.height \
             and self.tiles[y][x] in (FLOOR, DOOR) and (x, y) not in self.solid
@@ -84,11 +95,12 @@ class Layout:
         x0, y0, x1, y1 = room.interior
         return [(x, y) for y in range(y0, y1 + 1) for x in range(x0, x1 + 1) if self.walkable(x, y)]
 
-    def path(self, start, goal, avoid=()):
+    def path(self, start, goal, avoid=(), blocked=frozenset()):
         """4-direction A*. Returns the tiles up to goal (start excluded), or [] if unreachable.
-        avoid: room kinds the walker may not step into (e.g. patients and the corridor)."""
+        avoid: room kinds the walker may not step into (e.g. patients and the corridor).
+        blocked: tiles it may not step on (staff-only areas, other people)."""
         def ok(x, y):
-            if not self.walkable(x, y):
+            if not self.walkable(x, y) or (x, y) in blocked:
                 return False
             room = self.room_at[y][x]  # None on door tiles
             return room is None or room.kind not in avoid
@@ -147,13 +159,20 @@ def build_layout(n_doctors=config.MAX_DOCTORS, n_surgeries=config.N_SURGERIES):
     # The main corridor spans y 0..4. Top-row rooms rest on it from above and bottom-row rooms
     # hang from it. Each new room goes to the shorter row.
     # shortcut: one floor and one corridor; when floors/wings arrive, a building becomes a list of these.
-    w1 = Room('waiting', 'Waiting Room 1', 0, 4, 20, 15)
+    # Base block: street -> reception -> triage -> waiting room. Bar above reception; one small triage
+    # room under each waiting room, opening onto the patients' side of reception (never behind the counter).
+    w1 = Room('waiting', 'Waiting Room 1', 0, 4, 20, 14)
+    t1 = Room('triage', 'Triage 1', 9, 17, 11, 6)
     bar = Room('bar', 'Bar / Cafe', 19, 4, 16, 8)
-    rec = Room('reception', 'Entrance and Reception', 19, 11, 16, 8)
-    w2 = Room('waiting', 'Waiting Room 2', 34, 4, 20, 15)
-    street = Room('street', 'Street', 15, 19, 24, 4, walls=False)
-    rooms = [w1, bar, rec, w2, street]
-    doors = [door_top(w1), door_top(bar), door_top(w2), door_between(w1, rec), door_between(rec, w2),
+    rec = Room('reception', 'Entrance and Reception', 19, 11, 16, 12)
+    t2 = Room('triage', 'Triage 2', 34, 17, 11, 6)
+    w2 = Room('waiting', 'Waiting Room 2', 34, 4, 20, 14)
+    street = Room('street', 'Street', 15, 23, 24, 4, walls=False)
+    rooms = [w1, t1, bar, rec, t2, w2, street]
+    doors = [door_top(w1), door_top(bar), door_top(w2),  # to the corridor
+             door_between(t1, rec), door_between(rec, t2),  # reception -> triage
+             door_top(t1), door_top(t2),  # triage -> waiting room
+             (rec.x, rec.y + 4, 2, 'v'), (rec.x + rec.w - 1, rec.y + 4, 2, 'v'),  # waiting room -> reception (way out)
              (rec.x + rec.w // 2 - 1, rec.y + rec.h - 1, 3, 'h')]  # big main entrance
     end = {'top': 0, 'bottom': w2.x + w2.w - 1}  # x of the right wall of each row's last room
 
@@ -204,9 +223,14 @@ def furnish(r):
             x = x0 + 2 + (2 * i + 1) * (x1 - x0 - 3) // (2 * n)
             f += [Furniture('office_chair', x, y0 + 1, False), Furniture('pc', x, y0 + 2)]
         f += [Furniture('bell', cx, y0 + 2), Furniture('plant', x0, y1), Furniture('plant', x1, y1),
-              Furniture('trash_bin', x1, y0 + 3), Furniture('clock', cx, y0), Furniture('cabinet', x0, y0),
-              Furniture('cabinet', x1, y0), Furniture('map_stand', x0 + 1, y1 - 1, w=2), Furniture('sanitizer', x1, y1 - 1),
+              Furniture('trash_bin', x1, y0 + 5), Furniture('clock', cx, y0), Furniture('cabinet', x0, y0),
+              Furniture('cabinet', x1, y0), Furniture('map_stand', x0 + 1, y1 - 1, w=2), Furniture('sanitizer', x0, y0 + 5),
               Furniture('exit_sign', cx - 1, y1)]
+    elif k == 'triage':
+        # booths: nurse chair, desk with pc, patient chair (left booth first, right one if there are 2)
+        for x in [x0 + 1, x1 - 2][:config.TRIAGE_DESKS_PER_ROOM]:
+            f += [Furniture('office_chair', x, y0, False), Furniture('desk', x, y0 + 1, w=2),
+                  Furniture('pc', x, y0 + 1), Furniture('chair', x + 1, y0 + 2, False)]
     elif k == 'bar':
         f += [Furniture('counter', x, y0 + 1) for x in range(x0 + 2, x1 - 1)]
         # back wall items side by side, so the lane behind the counter stays open from both ends

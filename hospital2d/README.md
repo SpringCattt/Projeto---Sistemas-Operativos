@@ -265,6 +265,12 @@ straight instead of zig-zagging.
 | `dialogue.py` | picks what people say from `data/dialogue.txt` |
 | `data/` | names, complaints and dialogue lines, one per line |
 
+**Animations.** Besides the people walking (the character sheets' frames): ambulances flash their lights and open
+their back doors while the paramedics unload, the elevator's doors slide open when the car is at that floor for
+someone (`elevator_0..2`), automatic doors open while someone is at them (a double door as one), receptionists
+type, cleaners mop. All of it is PNGs in `assets/custom/` (`ambulance*`, `elevator_*`, `door`, `door_open`,
+`stretcher_v/h`, `stairs`, `road_l/r`, `wall`, `wall_v`...).
+
 **Speech bubbles.** People talk when they interact (registration, triage, the doctor's call, complaints, fights,
 security, someone throwing up, a surge, the Boss shouting orders…). The lines are in `data/dialogue.txt`
 (`situation | text`) — add or change them freely, keep them short. The bubbles are PNGs in `assets/custom/`:

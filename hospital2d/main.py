@@ -259,8 +259,26 @@ def run_ui(snapshots, commands, positions, sim=None):
         return lying_imgs[(a.look, across)]
 
     stretcher = {False: image('custom/stretcher_v'), True: image('custom/stretcher_h')}
-    van = image('custom/ambulance')  # nose up
-    vans = {'up': van, 'down': pygame.transform.rotate(van, 180)}
+    def both_ways(img):  # (drawn nose up; coming in it faces down)
+        return {'up': img, 'down': pygame.transform.rotate(img, 180)}
+    vans = {None: both_ways(image('custom/ambulance'))}  # lights off; flashing; flashing with the back doors open
+    vans.update({(kind, i): both_ways(image(f'custom/ambulance_{kind}_{i}')) for kind in ('siren', 'open') for i in (0, 1)})
+    lift_frames = [image(f'custom/elevator_{i}') for i in range(3)]  # doors closed, half open, open
+    lifts = [(i, floor, piece) for i, stops in enumerate(lay.lifts) for floor, (_, _, piece) in stops.items()]
+    lift_open = {}  # (lift, floor) -> how open its doors are drawn (0 to 2), easing towards the real state
+    door_open = image('custom/door_open')
+    doorway = {}  # door tile -> all the tiles of its doorway (a double door opens as one)
+    for t in lay.doors:
+        if t not in doorway:
+            group, todo = {t}, [t]
+            while todo:
+                x, y = todo.pop()
+                for n in ((x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)):
+                    if n in lay.doors and n not in group:
+                        group.add(n)
+                        todo.append(n)
+            for d in group:
+                doorway[d] = group
     keyboard = [image('custom/keyboard_0'), image('custom/keyboard_1')]
     mop, bucket = [image(f'custom/mop_{i}') for i in (0, 1, 2, 1)], image('custom/bucket')
 
@@ -273,7 +291,7 @@ def run_ui(snapshots, commands, positions, sim=None):
     cam_y = (centre.y + centre.h / 2) * T - screen.get_height() / zoom / 2
     snap = {'actors': [], 'messes': [], 'events': [], 'stats': {}, 'time': 0.0, 'surge': False, 'sim_hz': 0.0,
             'line': 0, 'triage': 0, 'patients': 0, 'keep_up': 1.0, 'speed': config.TIME_SCALE, 'paused': False,
-            'staff': {}, 'day': 0, 'hour': 0.0, 'closed': False, 'day_over': None, 'today': {}}
+            'staff': {}, 'day': 0, 'hour': 0.0, 'closed': False, 'day_over': None, 'today': {}, 'lifts': []}
     show_tablet, opts, beat = False, {'count': 1, 'triaged': False}, 0.0
     actors, selected_id, room_sel, list_open, scroll, show_log, show_boss = [], None, None, False, 0, True, False
     view, sel_floor = 0, None  # the floor on screen; the one the selected person was on
@@ -406,6 +424,13 @@ def run_ui(snapshots, commands, positions, sim=None):
         for tx, ty in snap['messes']:  # on the floor, under everything else
             if shown(tx):
                 blit_scaled(vomit, *to_screen(tx, ty))
+        opened = set()  # automatic doors: open while someone is at them
+        for a in here:
+            for dx in (-1, 0, 1):
+                for dy in (-1, 0, 1):
+                    opened |= doorway.get((a.tx + dx, a.ty + dy), set())
+        for tx, ty in opened:
+            blit_scaled(door_open, *to_screen(tx, ty))
 
         if selected:
             for tx, ty in (t for t in selected.path if shown(t[0])):
@@ -430,6 +455,16 @@ def run_ui(snapshots, commands, positions, sim=None):
             if a.action == 'mopping':
                 extras.append(centred(bucket, a.px + 0.8, a.py + 0.2, (a.py + FEET) * T))
                 extras.append(centred(mop[int(beat * 5) % 4], a.px - 0.35, a.py, (a.py + FEET) * T + 1))
+        for i, floor, f in lifts:  # the elevators, their doors sliding open when the car is there for someone
+            if floor == view:
+                car = snap['lifts'][i] if i < len(snap['lifts']) else (None, False)
+                target = 2.0 if car == (floor, True) else 0.0
+                now = lift_open.get((i, floor), 0.0)
+                now = min(target, now + 8 * dt) if target > now else max(target, now - 8 * dt)
+                lift_open[(i, floor)] = now
+                img = lift_frames[round(now)]
+                extras.append(((f.y + f.h) * T, img, (f.x + f.w / 2) * T - img.get_width() // 2,
+                               (f.y + f.h) * T - img.get_height()))
         extras.sort(key=lambda s: s[0])
         heads = []
         for item in heapq.merge(props[view], extras, bodies, key=lambda s: s[0]):
@@ -437,16 +472,11 @@ def run_ui(snapshots, commands, positions, sim=None):
                 blit_scaled(item[1], (item[2] - cam_x) * zoom, (item[3] - cam_y) * zoom)
                 continue
             a = item[2]
-            if a.role == 'ambulance':  # a vehicle, not a person: nose first, the lights on its roof flashing
-                img = vans[a.facing]
+            if a.role == 'ambulance':  # a vehicle, not a person: nose first, lights flashing, back doors open
+                frames = vans[(a.action, int(beat * 6) % 2) if a.action in ('siren', 'open') else None]
+                img = frames[a.facing if a.facing in frames else 'up']
                 x, y = to_screen(a.px - img.get_width() / 2 / T, a.py - img.get_height() / 2 / T)
                 blit_scaled(img, x, y)
-                if a.action == 'siren':
-                    on = int(beat * 6) % 2
-                    top = y + (img.get_height() - 13 if a.facing == 'down' else 9) * zoom
-                    for i, color in enumerate(((235, 60, 60), (70, 120, 255))):
-                        if i == on:
-                            pygame.draw.rect(screen, color, (x + (8 + 10 * i) * zoom, top, 4 * zoom, 3 * zoom))
                 if a is selected:
                     pygame.draw.rect(screen, HIGHLIGHT, (x, y, img.get_width() * zoom, img.get_height() * zoom), 2)
                 continue

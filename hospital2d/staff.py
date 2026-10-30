@@ -891,7 +891,7 @@ class Ambulance(Actor):
         try:
             self.doing = 'arriving'
             self.drive_to(self.spot.y + self.spot.h / 2)
-            self.doing = 'unloading'
+            self.doing, self.action = 'unloading', 'open'  # back doors open, lights still flashing
             train = self.unload()
             self.doing = 'taking the patient in'
             train = self.carry(train)

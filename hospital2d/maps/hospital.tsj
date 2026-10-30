@@ -8,7 +8,7 @@
  "spacing": 0,
  "tilecount": 62,
  "tilewidth": 48,
- "tileheight": 48,
+ "tileheight": 52,
  "objectalignment": "bottomleft",
  "grid": {
   "orientation": "orthogonal",
@@ -19,8 +19,8 @@
   {
    "id": 0,
    "image": "../assets/custom/ambulance.png",
-   "imagewidth": 30,
-   "imageheight": 46,
+   "imagewidth": 40,
+   "imageheight": 52,
    "properties": [
     {
      "name": "kind",

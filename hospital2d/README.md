@@ -93,22 +93,32 @@ surges, how long things take, patience, the dispatcher's weights, fatigue, `TIME
 ### Four processes
 
 ```
-                 positions (shared memory + lock, 60/s)          patients, surges (Queue)
+                 positions (shared memory, seqlock, 60/s)        patients, surges (Queue)
    UI process  <=========================  Simulation process  <-------------------------  Arrivals process
-   (main.py)   <-------------------------  (sim.py)
-               ------------------------->        |  events, summary (Queue)
-                 words (Queue, 10/s); commands   |
+   (main.py)   <-------------------------  (sim.py)            -------------------------->
+               ------------------------->        |               doors open (Event), speed (Value)
+                 words (Queue, 10/s); commands   |  events, summary (Queue)
                                                  v
                                             Log process (eventlog.py) -> hospital.log
 ```
 
 * **UI** only draws. It never touches the actors: every frame it reads where everyone is from shared memory
   (`sim.read_positions`: one fixed-size row of numbers per person, `actors.ROW`) and puts that together with the
-  latest words from the queue (names, speech, cards, stats; `WORDS_HZ` times a second). The lock that comes with
-  the shared block (`mp.Array`) is held only to copy bytes in or out, so neither side waits more than microseconds.
+  latest words from the queue (names, speech, cards, stats; `WORDS_HZ` times a second). The shared block is a
+  **seqlock** (`sim.write_positions` / `read_positions`): the simulation, its only writer, makes a counter odd
+  while it writes and even when done; the UI keeps a copy only if it saw the same even counter before and after
+  (else it copies again). The writer never waits for a reader, not even one that froze or died mid-copy (with a
+  lock, that would have blocked the simulation for good), and the counter is a version too: a frame that finds the
+  one it already has skips the copy (83 % of them, measured). Measured against the lock it replaced (`mp.Array`,
+  writer and reader as fast as they can): about 29 µs a write either way, since the lock was only held for
+  microseconds; what changed is that the writer can't be blocked, and the skipped copies. If the simulation
+  process dies, the UI says so on screen.
+  `test_seqlock` runs a writer in another process at full speed while the test reads: never a copy with rows from
+  two different writes.
 * **Simulation** owns the hospital: the plan, the shared structures and one thread per actor.
 * **Arrivals** decides when people walk in (Poisson arrivals, with random surges) and what they come with
-  (`data/complaints.csv`).
+  (`data/complaints.csv`). It follows the simulation's speed (a shared `Value`, paused too at the end of a day) and
+  sleeps on a shared `Event`, "doors open", from midnight until the next day starts.
 * **Log** writes every event to `hospital.log` and, at the end, a summary (people treated, average waits by
   urgency, fights, how well the threads kept up…).
 
@@ -284,7 +294,8 @@ still grew with the number of doctors; `bench.py` now keeps the map's staff and 
   on time, with 1034 from 64 % to 73 %: the 80 % limit moved from roughly 800 to roughly 950 threads (estimated
   between the measured sizes).
 * Moving data to the UI costs 2.1 % of a CPU core with 68 people (5.3 % when everything went through the queue
-  60 times a second): positions by shared memory, words by queue.
+  60 times a second): positions by shared memory, words by queue. Since the seqlock's version, the UI also skips
+  the copy in the 83 % of frames that have nothing new.
 * On the UI side, the FPS counter (top left) turns red below `MIN_FPS`; `TARGET_FPS` only caps it — above 60
   nothing looks smoother, since the simulation writes positions 60 times a second.
 

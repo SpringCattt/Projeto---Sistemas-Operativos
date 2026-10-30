@@ -222,8 +222,9 @@ def draw_tablet(screen, font, small, snap, opts, top):
     return hits
 
 
-def run_ui(snapshots, commands, positions):
-    """commands: Queue -> simulation, for the admin tablet (None: the tablet does nothing)."""
+def run_ui(snapshots, commands, positions, sim=None):
+    """commands: Queue -> simulation, for the admin tablet (None: the tablet does nothing). positions: the shared
+    block the simulation writes (sim.write_positions). sim: the simulation process, to notice if it stops."""
     send = commands.put if commands is not None else (lambda cmd: None)
     pygame.init()
     screen = pygame.display.set_mode((1280, 720), pygame.RESIZABLE)
@@ -274,6 +275,7 @@ def run_ui(snapshots, commands, positions):
     show_tablet, opts, beat = False, {'count': 1, 'triaged': False}, 0.0
     actors, selected_id, room_sel, list_open, scroll, show_log, show_boss = [], None, None, False, 0, True, False
     view, sel_floor = 0, None  # the floor on screen; the one the selected person was on
+    version, rows = None, {}  # the positions block's version we have, and its rows
     dragging, cache, hits, people = False, {}, [], []
 
     while True:
@@ -289,11 +291,14 @@ def run_ui(snapshots, commands, positions):
             actors = [SimpleNamespace(**d) for d in snap['actors']]
         # Where everyone is, fresh from shared memory every frame (the words above come less often). Whoever has
         # no row has just left, or has just come in and isn't written yet: not drawn this frame
-        rows = read_positions(positions)
-        actors = [a for a in actors if a.id in rows]
-        for a in actors:
-            _, a.px, a.py, a.tx, a.ty, facing, a.anim_t, a.lying, a.stretcher, action, cx, cy, cf = rows[a.id]
-            a.facing, a.action, a.cart = FACINGS[facing], ACTIONS[action], (cx, cy, FACINGS[cf]) if cf >= 0 else None
+        version, fresh = read_positions(positions, version)  # (None: nothing new since the last frame)
+        if fresh is not None or latest is not None:
+            rows = fresh if fresh is not None else rows
+            actors = [a for a in actors if a.id in rows]
+            for a in actors:
+                _, a.px, a.py, a.tx, a.ty, facing, a.anim_t, a.lying, a.stretcher, action, cx, cy, cf = rows[a.id]
+                a.facing, a.action = FACINGS[facing], ACTIONS[action]
+                a.cart = (cx, cy, FACINGS[cf]) if cf >= 0 else None
         selected = next((a for a in actors if a.id == selected_id), None)
 
         for ev in pygame.event.get():
@@ -489,6 +494,11 @@ def run_ui(snapshots, commands, positions):
             top = draw_panel(screen, small, 'Boss: waiting for someone', first(waiting, 6), (sw - 10, top), 560) + 6
             draw_panel(screen, small, 'Boss: last decisions (newest first)', decisions[:5], (sw - 10, top), 560)
 
+        if sim is not None and not sim.is_alive():  # it crashed: say so, instead of a world frozen for no reason
+            text = banner_font.render('The simulation stopped (see the terminal and hospital.log)', True, TEXT)
+            box = text.get_rect(midtop=(sw // 2, 90)).inflate(24, 10)
+            pygame.draw.rect(screen, (120, 30, 30), box, border_radius=6)
+            screen.blit(text, text.get_rect(center=box.center))
         if snap['surge']:
             text = banner_font.render('SURGE! Lots of patients arriving', True, (255, 255, 255))
             box = text.get_rect(midtop=(sw // 2, 44)).inflate(24, 10)
@@ -526,17 +536,19 @@ def main():
     speed = mp.Value('d', config.TIME_SCALE)  # simulated seconds per real second: the simulation sets it (pause, speed)
     positions = new_positions()  # where everyone is: shared memory, written by the simulation, read by the UI
     arrivals, log_queue, arrivals_stop = mp.Queue(), mp.Queue(), mp.Event()
+    open_ = mp.Event()  # the doors are open (the simulation sets it; the arrivals process sleeps on it at night)
+    open_.set()
     processes = [
         mp.Process(target=run_log, args=(log_queue,), name='log'),
-        mp.Process(target=run_simulation, args=(snapshots, commands, arrivals, log_queue, None, speed, positions),
-                   name='simulation'),
-        mp.Process(target=run_arrivals, args=(arrivals, arrivals_stop, None, speed), name='arrivals'),
+        mp.Process(target=run_simulation, args=(snapshots, commands, arrivals, log_queue, None, speed, positions,
+                                                open_), name='simulation'),
+        mp.Process(target=run_arrivals, args=(arrivals, arrivals_stop, None, speed, open_), name='arrivals'),
     ]
     for p in processes:
         p.daemon = True
         p.start()
     try:
-        run_ui(snapshots, commands, positions)
+        run_ui(snapshots, commands, positions, processes[1])
     finally:  # closing the window (or a crash in the UI) always stops everything else too
         arrivals_stop.set()
         commands.put('quit')  # the simulation then sends the summary and closes the log

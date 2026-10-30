@@ -16,7 +16,7 @@ from actors import ROW
 from arrivals import new_patient
 from layout import load_layout
 from patients import Patient
-from staff import Boss, Cart, Cleaner, Doctor, Receptionist, Security, TriageNurse, WardNurse
+from staff import Ambulance, Boss, Cart, Cleaner, Doctor, Receptionist, Security, TriageNurse, WardNurse
 
 SPEEDS = (0.25, 0.5, 1, 2, 4, 8)  # what the admin tablet offers
 BRAIN = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'boss_brain.json')  # written by learn.py
@@ -44,6 +44,8 @@ class Hospital:
             self.dispatcher.load(brain)
         self.theatres = Theatres(self.lay.rooms_of('surgery')[:n_surgeries])
         self.lifts = [Elevator(stops) for stops in self.lay.lifts]
+        self.ambulance_bay = threading.Semaphore(1)  # one ambulance there at a time
+        self.bed_claims = set()  # Emergency beds the paramedics are taking someone to (world.lock)
         self.disinfection = {r: threading.Semaphore(max(1, len(spots))) for r, spots in self.lay.sink_spots.items()}
         self.log_out = log_out  # Queue to the log process (or None)
         self.events, self.events_lock = deque(maxlen=10), threading.Lock()
@@ -133,7 +135,8 @@ class Hospital:
             if not self.closed and now - self.day_start >= config.DAY_HOURS * config.HOUR_S:
                 self.closed = True
                 self.log(f'Midnight: no more patients today. The ones inside are seen to')
-            if self.closed and self.day_over is None and not self.patients():
+            if self.closed and self.day_over is None and not self.patients() \
+                    and not any(a.role == 'ambulance' for a in self.actors):  # (still bringing someone)
                 self.end_day()
 
     def today(self):
@@ -217,8 +220,15 @@ class Hospital:
         if self.closed:
             return None
         self.count('arrived')
-        if info['urgency'] == 2 and self.lay.ambulance_bay:  # Red: by ambulance, already triaged, can't walk
-            self.log(f'{info["name"]} arrives by ambulance')
+        if info['urgency'] == 2 and self.lay.ambulance_spot is not None:  # Red: it can't walk, an ambulance brings it
+            self.log(f'An ambulance is bringing {info["name"]}')
+            a = Ambulance(self, info, self.rng)
+            with self.actors_lock:
+                self.actors.append(a)
+            if self.running:
+                self._spawn(a.run, (), f'ambulance-{a.id}')
+            return a
+        if info['urgency'] == 2:  # (a map with no ambulance: straight onto a bed in Emergency)
             return self.add_waiting(info)
         p = Patient(self, self.lay.street_edge, self.rng, info)
         with self.actors_lock:
@@ -226,6 +236,42 @@ class Hospital:
         if self.running:
             self._spawn(p.run, (), f'patient-{p.id}')
         return p
+
+    def carried_in(self, info, tile):
+        """A Red patient out of an ambulance, lying on the paramedics' stretcher at `tile`: its thread waits until
+        they've put it on a bed (delivered)."""
+        p = Patient(self, [tile], self.rng, info, triaged=True)
+        p.lying = p.on_stretcher = True
+        p.delivered, p.stage = threading.Event(), 'brought in by ambulance'
+        with self.actors_lock:
+            self.actors.append(p)
+        if self.running:
+            self._spawn(p.run, (), f'patient-{p.id}')
+        return p
+
+    def claim_bed(self, p):
+        """A free bed in Emergency for the paramedics to take p to: (room, the tile beside it, its middle), kept for
+        them until release_bed; None if they're all taken."""
+        near = self.lay.distances_from((p.tx, p.ty))
+        with self.world.lock:
+            free = [(near.get(side, 10 ** 6), room, side, middle) for room, beds in self.lay.emergency_beds.items()
+                    for side, middle in beds if side not in self.world.occupied and side not in self.bed_claims]
+            if not free:
+                return None
+            _, room, side, middle = min(free, key=lambda f: (f[0], f[2]))
+            self.bed_claims.add(side)
+            return room, side, middle
+
+    def release_bed(self, side):
+        with self.world.lock:
+            self.bed_claims.discard(side)
+
+    def delivered(self, p, room):
+        """p is on a bed in Emergency: from now on it waits there for a doctor (and the stretcher to surgery)."""
+        p.waiting_room, p.triaged_at = room, self.clock()
+        self.queue_for_doctor(p)
+        self.log(f'The paramedics leave {p.label()} in {room.name}')
+        p.delivered.set()
 
     def add_waiting(self, info, room=None, arrive=None):
         """A patient that is already triaged, sitting in a waiting room (the start of the day, and tests), or Red in

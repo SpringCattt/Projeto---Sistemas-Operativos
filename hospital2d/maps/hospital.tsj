@@ -6,7 +6,7 @@
  "columns": 0,
  "margin": 0,
  "spacing": 0,
- "tilecount": 60,
+ "tilecount": 62,
  "tilewidth": 48,
  "tileheight": 48,
  "objectalignment": "bottomleft",
@@ -744,6 +744,18 @@
   {
    "id": 59,
    "image": "../assets/custom/stairs.png",
+   "imagewidth": 16,
+   "imageheight": 16
+  },
+  {
+   "id": 60,
+   "image": "../assets/custom/road_l.png",
+   "imagewidth": 16,
+   "imageheight": 16
+  },
+  {
+   "id": 61,
+   "image": "../assets/custom/road_r.png",
    "imagewidth": 16,
    "imageheight": 16
   }

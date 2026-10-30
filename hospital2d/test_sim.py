@@ -259,16 +259,26 @@ def test_stretcher():
 
 
 def test_ambulance():
-    """Someone who needs surgery arrives by ambulance: through Emergency's own door, straight to a bed there."""
+    """A Red patient can't walk: an ambulance comes down the road, its paramedics carry the patient on their stretcher
+    to a bed in Emergency (through no other room), then get back in and the ambulance leaves."""
     h = Hospital(seed=10, n_doctors=1, n_surgeries=1, n_patients=0)
-    p = h.admit(info(2, surgery=True))
-    rooms = set()
     h.start()
+    rooms, walked = set(), []
     try:
-        assert until(lambda: rooms.add(getattr(h.lay.room_at[p.ty][p.tx], 'kind', 'door')) or p.lying, 30)
+        ambulance = h.admit(info(2, surgery=True))
+
+        def brought():
+            p = next((a for a in h.actors if a.role == 'patient'), None)
+            if p is not None and not p.delivered.is_set():
+                rooms.add(getattr(h.lay.room_at[p.ty][p.tx], 'kind', 'door'))
+                walked.append(not p.lying)
+            return p is not None and p.delivered.is_set() and ambulance not in h.actors
+
+        assert until(brought, 30), 'the ambulance never brought the patient in and left'
     finally:
         stop(h)
-    assert p.rank == 2 and rooms <= {'street', 'emergency', 'door'}, rooms
+    assert not any(walked) and rooms <= {'street', 'emergency', 'door'}, rooms
+    assert not any(a.role in ('paramedic', 'ambulance') for a in h.actors)
 
 
 def test_on_call():

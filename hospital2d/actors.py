@@ -29,13 +29,15 @@ LAST_NAMES = read_names('last_names.txt')
 # hidden (in the elevator)
 ROW = struct.Struct('<iffhhbf??bffb?')
 FACINGS = ('down', 'left', 'right', 'up')
-ACTIONS = (None, 'typing', 'mopping')
+ACTIONS = (None, 'typing', 'mopping', 'siren')
 
 ROLE_LABEL = {'doctor': 'Doctor', 'nurse': 'Nurse', 'receptionist': 'Receptionist', 'security': 'Security',
-              'cleaner': 'Cleaner', 'patient': 'Patient', 'dispatcher': 'Dispatcher'}
+              'cleaner': 'Cleaner', 'patient': 'Patient', 'dispatcher': 'Dispatcher', 'paramedic': 'Paramedic',
+              'ambulance': 'Ambulance'}
 # Which character sheets (assets/third_party/characters/NNN.png) each role may look like
 STAFF_LOOKS = {'doctor': [17, 21, 23], 'nurse': [2, 13, 22], 'receptionist': [4, 14, 18],
-               'security': [6, 7], 'cleaner': [24, 25], 'dispatcher': [5]}  # 5: bald, shades: the boss
+               'security': [6, 7], 'cleaner': [24, 25], 'dispatcher': [5],
+               'paramedic': [9, 10, 11]}  # (red and white: the ambulance crew)  # 5: bald, shades: the boss
 # 30-39 are fantasy (angel, zombie, devils...) so they stay out of the hospital for now
 PATIENT_LOOKS = [i for i in range(30) if all(i not in v for v in STAFF_LOOKS.values())]
 

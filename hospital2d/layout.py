@@ -13,7 +13,8 @@ import config
 EMPTY, WALL, FLOOR, DOOR = 0, 1, 2, 3
 
 MAPS = os.path.join(os.path.dirname(__file__), 'maps')  # the floors, drawn in the Tiled map editor (see README)
-GROUND = {'wall': WALL, 'door': DOOR, 'floor_grass': EMPTY}  # what a ground tile is; any other one is floor
+GROUND = {'wall': WALL, 'door': DOOR, 'floor_grass': EMPTY,  # what a ground tile is; any other one is floor
+          'road_l': EMPTY, 'road_r': EMPTY}  # (the ambulance's road: nobody walks on it)
 STAIRS = 'stairs'  # a stairs tile goes to the stairs tile at the same place on the floor above and below
 FLOOR_GAP = 4  # the floors lie side by side in one grid (grass between them: nobody walks across)
 SEATS = {'chair', 'office_chair', 'bench', 'sofa'}  # furniture people sit on (every tile of a bench is a seat)
@@ -271,6 +272,11 @@ class Layout:
                 shafts.setdefault((f.x % self.stride, f.y), {})[self.floor_of(f.x)] = (
                     [(f.x, f.y + f.h + i) for i in range(3)], (f.x + f.w / 2, f.y + f.h / 2))
         self.lifts = list(shafts.values())  # each one: {floor: (the column in front of it, the middle of its box)}
+        # Where ambulances park (the 'ambulance' piece: they come down the road from the top edge of the map), and the
+        # three tiles along its right side where the paramedics take the patient out (the first one: the front)
+        self.ambulance_spot = next((f for f in self.furniture if f.kind == 'ambulance'), None)
+        s = self.ambulance_spot
+        self.unload_column = [(s.x + s.w, s.y + s.h - 1 - i) for i in range(3)] if s else []
         self.waiting_seats = {r: [t for t in self.free_tiles(r) if t in self.seats] for r in self.rooms_of('waiting')}
         self.control_seat = next((f.x, f.y) for r in self.rooms_of('control') for f in furniture_in(r, 'office_chair'))
         self.rest_spots = [t for r in self.rooms_of('rest') for t in self.free_tiles(r) if t in self.seats]

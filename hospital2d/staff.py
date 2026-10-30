@@ -3,6 +3,7 @@
 #   Task staff get work from the Dispatcher (world.py): Doctor (consultations, surgery), Security (fights),
 #   Cleaner (messes). WardNurse just walks the medical wing for now.
 import queue
+import time
 
 import config
 from actors import Actor, Interrupted, OffShift, Stopped
@@ -855,3 +856,119 @@ class WardNurse(TaskStaff):
             mover.px, mover.py = goal if d <= stride else (mover.px + dx / d * stride, mover.py + dy / d * stride)
         if to is None:
             new.on_stretcher = True
+
+
+class Paramedic(WardNurse):
+    """Ambulance crew: no thread of its own and not the Boss's (the hospital doesn't pay them): its ambulance's
+    thread moves it, with the same train methods every stretcher uses."""
+    role = 'paramedic'
+
+    def __init__(self, h, candidates, rng):
+        super().__init__(h, candidates, rng)
+        self._last = time.perf_counter()  # (its clock: run() would start it, but it has no thread)
+
+
+class Ambulance(Actor):
+    """Brings one Red patient (Red patients can't walk). Waits its turn for the ambulance bay (a semaphore: one
+    ambulance there at a time), comes down the road with its siren on and parks; its two paramedics take the patient
+    out on their stretcher and carry it to a free bed in Emergency (only then is it in the doctors' queue), come back
+    and get in, and it drives off."""
+    role = 'ambulance'
+
+    def __init__(self, h, info, rng):
+        spot = h.lay.ambulance_spot
+        super().__init__(h, [(spot.x, spot.y)], rng, name='Ambulance', look=0)
+        with self.world.lock:  # (it never stands on a tile: where it parks is furniture)
+            if self.world.occupied.get((self.tx, self.ty)) is self:
+                del self.world.occupied[(self.tx, self.ty)]
+        self.info, self.spot = info, spot
+        self.px, self.py, self.facing, self.action = spot.x + spot.w / 2, -3.0, 'down', 'siren'
+        self.doing = 'waiting for the ambulance bay'
+
+    def life(self):
+        while not self.h.ambulance_bay.acquire(timeout=1 / config.ACTOR_HZ):
+            self.tick()
+        try:
+            self.doing = 'arriving'
+            self.drive_to(self.spot.y + self.spot.h / 2)
+            self.doing = 'unloading'
+            train = self.unload()
+            self.doing = 'taking the patient in'
+            train = self.carry(train)
+            self.doing = 'the paramedics are coming back'
+            self.load(train)
+            self.doing, self.action, self.facing = 'leaving', None, 'up'
+            self.drive_to(-3.0)
+        finally:
+            self.h.ambulance_bay.release()
+
+    def drive_to(self, y):
+        while abs(self.py - y) > 1e-3:
+            step = config.AMBULANCE_SPEED * self.tick()
+            self.py = y if abs(y - self.py) <= step else self.py + step * (1 if y > self.py else -1)
+            self.anim_t += step
+
+    def glide(self, movers, goals):
+        """Slides them all together, out of the back of the ambulance or back in."""
+        starts = [(m.px, m.py) for m in movers]
+        done = 0.0
+        while done < 1:
+            done = min(1.0, done + 1.5 * self.tick())
+            for m, (sx, sy), (gx, gy) in zip(movers, starts, goals):
+                m.px, m.py = sx + (gx - sx) * done, sy + (gy - sy) * done
+
+    def clear(self, tiles):
+        """True if nobody is on `tiles`; else asks whoever is there to step aside."""
+        with self.world.lock:
+            there = [self.world.occupied[t] for t in tiles if t in self.world.occupied]
+        for a in there:
+            if hasattr(a, 'make_way'):
+                a.make_way = True
+        return not there
+
+    def unload(self):
+        """Out of the back: paramedic, the patient lying on their stretcher, paramedic, onto the tiles beside it."""
+        column = self.lay.unload_column
+        self.wait_until(lambda: self.clear(column))
+        medics = [Paramedic(self.h, [column[0]], self.rng), Paramedic(self.h, [column[2]], self.rng)]
+        p = self.h.carried_in(self.info, column[1])
+        train = [medics[0], p, medics[1]]
+        for m in train:
+            m.px, m.py, m.facing = self.px, self.py, 'down'
+            m.driver = (medics[0], train)
+        with self.h.actors_lock:
+            self.h.actors += medics
+        self.glide(train, [(x + 0.5, y + 0.5) for x, y in column])
+        return train
+
+    def carry(self, train):
+        """To a free bed in Emergency (waiting for one if they're all taken), and the patient onto it."""
+        lead, p = train[0], train[1]
+        while True:
+            bed = self.h.claim_bed(p)
+            if bed is None:
+                self.doing = 'waiting for a free bed in Emergency'
+                self.tick()
+                continue
+            room, side, middle = bed
+            m, g = lead.stop_beside(lead.bed(middle), train, with_patient=True, keep_free=side)
+            if lead.drive(train, m, g, with_patient=True, timeout=60):
+                break
+            self.h.release_bed(side)  # couldn't get there: try again (maybe another bed)
+        lead.swap(train, p, Cart(side), to=side, onto=middle)
+        self.h.release_bed(side)
+        self.h.delivered(p, room)
+        return train
+
+    def load(self, train):
+        """Back to the ambulance with the empty stretcher, and in."""
+        lead = train[0]
+        lead.drive(train, self.lay.unload_column[0], timeout=60)
+        self.glide(train, [(self.px, self.py)] * 3)
+        with self.world.lock:
+            for m in train:
+                if self.world.occupied.get((m.tx, m.ty)) is m:
+                    del self.world.occupied[(m.tx, m.ty)]
+        for m in train:
+            if isinstance(m, Paramedic):
+                self.h.retire(m)

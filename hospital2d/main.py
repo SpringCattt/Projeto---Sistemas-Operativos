@@ -259,6 +259,8 @@ def run_ui(snapshots, commands, positions, sim=None):
         return lying_imgs[(a.look, across)]
 
     stretcher = {False: image('custom/stretcher_v'), True: image('custom/stretcher_h')}
+    van = image('custom/ambulance')  # nose up
+    vans = {'up': van, 'down': pygame.transform.rotate(van, 180)}
     keyboard = [image('custom/keyboard_0'), image('custom/keyboard_1')]
     mop, bucket = [image(f'custom/mop_{i}') for i in (0, 1, 2, 1)], image('custom/bucket')
 
@@ -413,7 +415,8 @@ def run_ui(snapshots, commands, positions, sim=None):
         # Furniture and people together, back to front: whoever is behind something is covered by it
         if not snap['paused']:  # the little work animations freeze too
             beat = time.perf_counter()
-        bodies = sorted((((a.py + (1.7 if a.lying else FEET)) * T, None, a) for a in here), key=lambda s: s[0])
+        depth = lambda a: (a.py + (1.5 if a.role == 'ambulance' else 1.7 if a.lying else FEET)) * T
+        bodies = sorted(((depth(a), None, a) for a in here), key=lambda s: s[0])
         extras = [centred(stretcher[facing in ('left', 'right')], x, y, (y + 0.5) * T)  # parked in storage
                   for x, y, facing in snap.get('parked', []) if shown(x)]  # stretchers, keyboards, buckets too
         for a in here:
@@ -434,6 +437,19 @@ def run_ui(snapshots, commands, positions, sim=None):
                 blit_scaled(item[1], (item[2] - cam_x) * zoom, (item[3] - cam_y) * zoom)
                 continue
             a = item[2]
+            if a.role == 'ambulance':  # a vehicle, not a person: nose first, the lights on its roof flashing
+                img = vans[a.facing]
+                x, y = to_screen(a.px - img.get_width() / 2 / T, a.py - img.get_height() / 2 / T)
+                blit_scaled(img, x, y)
+                if a.action == 'siren':
+                    on = int(beat * 6) % 2
+                    top = y + (img.get_height() - 13 if a.facing == 'down' else 9) * zoom
+                    for i, color in enumerate(((235, 60, 60), (70, 120, 255))):
+                        if i == on:
+                            pygame.draw.rect(screen, color, (x + (8 + 10 * i) * zoom, top, 4 * zoom, 3 * zoom))
+                if a is selected:
+                    pygame.draw.rect(screen, HIGHLIGHT, (x, y, img.get_width() * zoom, img.get_height() * zoom), 2)
+                continue
             # Feet a bit below the tile centre; the body sticks up over the tile behind (3/4 view)
             if a.lying:
                 img = lying_img(a)

@@ -72,11 +72,12 @@ for lay in [load_layout()]:
                                                                         (g[0], g[1] + 1), (g[0], g[1] - 1)))
                    for g in ((x - 1, y), (x + 1, y))), f'stretcher at {(x, y)}: nowhere to park it from'
     assert all(side for side, _ in lay.exam_spots.values())
-    # The ambulance bay leads straight into Emergency, without crossing any other room
+    # Where the ambulance parks, the paramedics get out beside it and have a way straight into Emergency, without
+    # crossing any other room nor taking the stairs
     em = lay.rooms_of('emergency')[0]
-    route = lay.path(lay.ambulance_bay[0], lay.emergency_beds[em][0][0])
-    assert lay.ambulance_bay and route and {lay.room_at[y][x].kind for x, y in route if lay.room_at[y][x]} <= {
-        'street', 'emergency'}
+    assert lay.ambulance_spot and all(lay.walkable(*t) for t in lay.unload_column)
+    route = lay.path(lay.unload_column[0], lay.emergency_beds[em][0][0], stairs=False)
+    assert route and {lay.room_at[y][x].kind for x, y in route if lay.room_at[y][x]} <= {'street', 'emergency'}
     # Decorations never leave a way through only one tile wide
     assert not [f for f in lay.furniture if f.kind in DECOR and f.solid and lay.squeezes(f)]
 # Old plans are freed (learn.py builds a new one every round)

@@ -60,6 +60,8 @@ def furniture_sprites(lay):
     counters = {(f.x, f.y) for f in lay.furniture if f.kind == 'counter'}
     out = []
     for f in lay.furniture:
+        if f.kind == 'ambulance':  # (only where it parks: the ambulance itself comes and goes, main.py draws it)
+            continue
         depth = (f.y + f.h) * T if f.solid else f.y * T
         if f.kind == 'counter':
             left, right = (f.x - 1, f.y) in counters, (f.x + 1, f.y) in counters

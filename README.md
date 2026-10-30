@@ -79,7 +79,8 @@ instead of showing a world frozen for no reason.
 
 > street → reception line → registration → triage (Green / Yellow) → waiting room → doctor → exit
 
-Red patients can't walk: they come by ambulance, onto a bed in Emergency, and from there on a stretcher to surgery.
+Red patients can't walk: an ambulance brings them (down its road, siren on), its two paramedics carry them on their
+stretcher to a bed in Emergency, and from there the hospital's stretcher takes them to surgery.
 
 They share the building, so they synchronise:
 
@@ -92,6 +93,7 @@ They share the building, so they synchronise:
 | Only so many operating rooms and sinks | **semaphores** |
 | Two nurses meet at storage before bringing a stretcher | **condition + events** (rendezvous) |
 | One elevator for every stretcher, between floors | a **monitor** with its own thread (the car): first come, first served, one stretcher at a time |
+| One ambulance bay | a **semaphore**: the next ambulance waits up the road until the bay is free |
 | Who handles each task | the **Boss**, a thread that scores everyone by distance, fatigue and how busy they are |
 | Two people blocking each other in a doorway | whoever has waited too long steps aside (no deadlock) |
 

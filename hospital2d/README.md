@@ -49,6 +49,13 @@ Everything you can tune is in [`config.py`](config.py): number of doctors (the b
 staff, arrivals per minute, surges, how long things take, patience, the dispatcher's weights, fatigue,
 `TIME_SCALE` to speed everything up.
 
+**Editing a room visually.** The storage room is drawn in the free [Tiled](https://www.mapeditor.org/) map editor:
+open [`rooms/storage.tmj`](rooms/storage.tmj), turn on *View → Snapping → Snap to Grid*, drag furniture from the
+`hospital` tileset (every furniture PNG is there) onto the `furniture` layer, move or delete pieces, and save. The
+`stretcher` pieces are where stretchers park. The next run of the game uses it, mirrored when the room's door is on
+top. The walls and door layer is only a guide; the map's size is the room's size, walls included. A piece that
+touches a door or sits on a wall is left out, and so is decoration that would leave a way through one tile wide.
+
 ## Architecture
 
 ### Four processes
@@ -154,7 +161,7 @@ straight instead of zig-zagging.
   room (semaphore) and only then goes in, from the disinfection room — never straight from the corridor.
 * **Ambulances:** patients who need surgery arrive by ambulance, already triaged as Red, through Emergency's own
   door at the back (the ambulance bay), so they never walk through the hospital.
-* **Stretchers** (`config.STRETCHERS`) are parked at the back of storage. The dispatcher hands out the two nurses of
+* **Stretchers** (`config.STRETCHERS`) are parked in storage, where `rooms/storage.tmj` has them. The dispatcher hands out the two nurses of
   a stretcher together or not at all: giving one now and the other later would leave nurses waiting in storage for a
   partner who's busy with another half-started stretcher (hold and wait). Trains returning a stretcher claim their
   parking spot first, so two never head for the same one.
@@ -180,6 +187,7 @@ straight instead of zig-zagging.
 | `arrivals.py` | the arrivals process |
 | `eventlog.py` | the log process |
 | `layout.py` | builds the plan from `config.py`: rooms, doors, furniture, named spots |
+| `rooms/` | rooms drawn in Tiled (`storage.tmj`) and the tileset with every furniture PNG (`hospital.tsj`) |
 | `art.py` | loads the PNGs and draws the plan |
 | `dialogue.py` | picks what people say from `data/dialogue.txt` |
 | `data/` | names, complaints and dialogue lines, one per line |

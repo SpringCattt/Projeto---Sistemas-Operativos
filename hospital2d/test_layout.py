@@ -2,7 +2,7 @@
 from collections import deque
 
 import config
-from layout import DECOR, build_layout
+from layout import DECOR, build_layout, drawn
 
 for n_doctors, n_surgeries in ((1, 1), (5, 2), (100, 3)):
     lay = build_layout(n_doctors, n_surgeries)
@@ -54,6 +54,7 @@ for n_doctors, n_surgeries in ((1, 1), (5, 2), (100, 3)):
     assert all(t.partner.kind == 'waiting' for t in lay.rooms_of('triage')) and lay.rest_spots
     assert all(len(b) >= 2 for b in lay.emergency_beds.values()) and lay.stretcher_spots
     assert len(lay.stretcher_bay) >= config.STRETCHERS and not set(lay.stretcher_bay) & set(lay.stretcher_spots)
+    assert len(lay.stretcher_bay) == sum(k == 'stretcher' for k, *_ in drawn('storage')[1])  # where Tiled has them
     assert all(side for side, _ in lay.exam_spots.values())
     # The ambulance bay leads straight into Emergency, without crossing any other room
     em = lay.rooms_of('emergency')[0]

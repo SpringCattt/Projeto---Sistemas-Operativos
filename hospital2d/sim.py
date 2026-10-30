@@ -528,6 +528,7 @@ class Hospital:
                 'speed': self.rate, 'paused': self.paused, 'staff': self.staff_counts(),
                 'keep_up': self.keep_up,
                 'day': self.day, 'hour': (self.clock() - self.day_start) / config.HOUR_S, 'closed': self.closed,
+                'lifts': [(e.floor, e.open and e.rider is not None) for e in self.lifts],  # (doors open for someone)
                 'day_over': self.day_over, 'today': {k: v for k, v in self.today().items() if k in ('income', 'wages')},
                 'line': len(self.line), 'triage': self.triage_queue.qsize(),
                 'patients': sum(1 for a in actors if a.role == 'patient')}

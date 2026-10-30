@@ -29,7 +29,7 @@ LAST_NAMES = read_names('last_names.txt')
 # hidden (in the elevator)
 ROW = struct.Struct('<iffhhbf??bffb?')
 FACINGS = ('down', 'left', 'right', 'up')
-ACTIONS = (None, 'typing', 'mopping', 'siren')
+ACTIONS = (None, 'typing', 'mopping', 'siren', 'open')  # ('open': an ambulance unloading)
 
 ROLE_LABEL = {'doctor': 'Doctor', 'nurse': 'Nurse', 'receptionist': 'Receptionist', 'security': 'Security',
               'cleaner': 'Cleaner', 'patient': 'Patient', 'dispatcher': 'Dispatcher', 'paramedic': 'Paramedic',

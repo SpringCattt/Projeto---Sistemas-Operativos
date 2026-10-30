@@ -270,8 +270,9 @@ class Layout:
         for f in self.furniture:
             if f.kind == 'elevator':
                 shafts.setdefault((f.x % self.stride, f.y), {})[self.floor_of(f.x)] = (
-                    [(f.x, f.y + f.h + i) for i in range(3)], (f.x + f.w / 2, f.y + f.h / 2))
-        self.lifts = list(shafts.values())  # each one: {floor: (the column in front of it, the middle of its box)}
+                    [(f.x, f.y + f.h + i) for i in range(3)], (f.x + f.w / 2, f.y + f.h / 2), f)
+        self.lifts = list(shafts.values())  # each one: {floor: (the column in front of it, the middle of its box,
+        #                                                       the piece)}
         # Where ambulances park (the 'ambulance' piece: they come down the road from the top edge of the map), and the
         # three tiles along its right side where the paramedics take the patient out (the first one: the front)
         self.ambulance_spot = next((f for f in self.furniture if f.kind == 'ambulance'), None)

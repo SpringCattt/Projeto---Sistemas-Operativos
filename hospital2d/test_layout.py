@@ -35,7 +35,7 @@ for lay in [load_layout()]:
     if lay.floors > 1:
         assert any(len(stops) == lay.floors for stops in lay.lifts), 'no elevator to every floor'
     for stops in lay.lifts:
-        for f, (column, _) in stops.items():
+        for f, (column, _, _) in stops.items():
             assert all(lay.walkable(*t) for t in column) and set(column) <= seen, f'elevator door, floor {f}'
 
     # Patients not yet called go between waiting rooms without touching the corridor, triage or staff areas

@@ -51,8 +51,10 @@ Red patients waited 72–79 s for a doctor instead of 101–107 s (two runs each
 the elevator two more trips.
 
 Every floor has the **Main Hall** in the same place, with **stairs** and an **elevator** in it. People walk up
-and down the stairs (a flight takes `STAIRS_S`); stretchers can't, so they take the elevator: one stretcher at a
-time, first come first served, the car moving a floor every `LIFT_FLOOR_S` (see the `Elevator` monitor).
+and down the stairs (from a stairs tile straight to the same place on the next floor; nobody idles on them);
+stretchers can't, so they take the elevator: one stretcher at a time, first come first served, the car moving a
+floor every `LIFT_FLOOR_S` (see the `Elevator` monitor). Inside it, nurses and stretcher are out of sight until they
+come out on the other floor.
 
 On the ground floor, the hall has the Boss's round **Control Room** in the middle
 (sealed: no doors; the Boss sits in the exact centre and nobody else goes in). The main corridor runs through the
@@ -150,10 +152,11 @@ been blocked too long steps aside and finds a new route.
 ### A patient's visit ([`patients.py`](patients.py))
 
 street → reception line → registration (says why it came) → waits for triage → triage nurse assigns the urgency
-(Green / Yellow / Red, from the complaint) → its waiting room → a doctor calls it → consultation
-(→ surgery) → street.
+(Green / Yellow, from the complaint) → its waiting room → a doctor calls it → consultation → street. Red patients
+can't walk: they come by ambulance, onto a bed in Emergency, and always go to surgery on a stretcher.
 
-While it waits, its **patience** runs down and its **condition can get worse** (Green → Yellow → Red), Yellow and
+While it waits, its **patience** runs down and its **condition can get worse** (Green → Yellow; never Red: it walked
+in), Yellow and
 Red patients may **throw up** (a cleaner is sent). When the patience is gone it reacts by temperament:
 **passive** leaves, **medium** goes to complain at reception, **aggressive** starts a fight (security is sent and
 either calms it down or throws it out). Patients never walk behind a counter, into the corridor unless a doctor
@@ -220,9 +223,11 @@ straight instead of zig-zagging.
   jumping between similar tasks. The interrupted patient goes back to the waiting room, keeping its place.
 * **Surgery** is never interrupted. The doctor takes a free operating room (semaphore), washes in its disinfection
   room (semaphore) and only then goes in, from the disinfection room — never straight from the corridor.
-* **Ambulances:** patients who need surgery arrive by ambulance, already triaged as Red, through Emergency's own
-  door at the back (the ambulance bay), so they never walk through the hospital.
-* **Stretchers** (`config.STRETCHERS`) are parked in storage, where the map's `stretcher` pieces are. The dispatcher hands out the two nurses of
+* **Ambulances:** every Red patient arrives by ambulance (and needs surgery), already triaged, onto a bed in
+  Emergency, through its own door at the back (the ambulance bay): they never walk.
+* **Stretchers** (`config.STRETCHERS`) are parked upright in storage, where the map's `stretcher` pieces are.
+  Whoever parks one ends up on a side it can walk away from (never a corner the stretcher would shut), idle staff
+  never stand next to the parked ones, and `test_layout.py` checks every parking spot can be used that way. The dispatcher hands out the two nurses of
   a stretcher together or not at all: giving one now and the other later would leave nurses waiting in storage for a
   partner who's busy with another half-started stretcher (hold and wait). Trains returning a stretcher claim their
   parking spot first, so two never head for the same one.

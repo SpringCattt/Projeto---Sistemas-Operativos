@@ -64,6 +64,13 @@ for lay in [load_layout()]:
     assert all(t.partner.kind == 'waiting' for t in lay.rooms_of('triage')) and lay.rest_spots
     assert all(len(b) >= 2 for b in lay.emergency_beds.values()) and lay.stretcher_spots
     assert len(lay.stretcher_bay) >= config.STRETCHERS and not set(lay.stretcher_bay) & set(lay.stretcher_spots)
+    # Even with every stretcher parked, each one has a side whoever parks it can stand on and still get out from
+    full = set(lay.stretcher_bay)
+    for x, y in full:
+        assert any(lay.walkable(*g) and g not in full and any(lay.walkable(*n) and n not in full
+                                                              for n in ((g[0] + 1, g[1]), (g[0] - 1, g[1]),
+                                                                        (g[0], g[1] + 1), (g[0], g[1] - 1)))
+                   for g in ((x - 1, y), (x + 1, y))), f'stretcher at {(x, y)}: nowhere to park it from'
     assert all(side for side, _ in lay.exam_spots.values())
     # The ambulance bay leads straight into Emergency, without crossing any other room
     em = lay.rooms_of('emergency')[0]

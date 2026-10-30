@@ -17,7 +17,6 @@ TARGET_FPS = 144
 MIN_FPS = 30
 
 ACTOR_SPEED = 1.5  # tiles per second
-STAIRS_S = 2.0  # a flight of stairs, up or down (walking pace; running is faster)
 LIFT_FLOOR_S = 3.0  # the elevator, per floor (stretchers can't take the stairs)
 RUN_SPEED = [1.4, 1.8, 2.4]  # x ACTOR_SPEED: staff run to a task in another room, faster the more urgent
 STRETCHER_SPEED = 2.4  # the two nurses pushing a stretcher (and the patient on it)
@@ -50,7 +49,7 @@ CLEAN_S = (4, 6)
 # Patients waiting for a doctor
 PATIENCE_LOSS = (0.3, 0.8)  # points per second (each patient gets a value in this range); patience starts at 100
 TEMPERAMENTS = {'passive': 0.45, 'medium': 0.40, 'aggressive': 0.15}  # out of patience: leaves / complains / fights
-ESCALATE_AFTER_S = [180, 240]  # waiting this long, Green turns Yellow, and then Yellow turns Red
+ESCALATE_AFTER_S = 180  # waiting this long, Green turns Yellow (never Red: Reds come by ambulance, they can't walk)
 VOMIT_CHANCE_PER_S = [0.0, 0.003, 0.006]  # by urgency
 EXPEL_CHANCE = 0.5  # security throws an aggressive patient out (otherwise it calms down)
 

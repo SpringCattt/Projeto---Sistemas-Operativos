@@ -42,12 +42,19 @@ speed), `N_PATIENTS`, `ARRIVALS_PER_MINUTE`, `MAX_DOCTORS` (the building grows a
 
 ## How it works, in short
 
-**4 processes**, sharing nothing, talking only through queues:
+**4 processes.** They talk through queues, plus one block of **shared memory** for where everyone is:
 
 ```
- Arrivals ──patients──> Simulation ──snapshots──> UI (what you see)
+ Arrivals ──patients──> Simulation ══positions (shared memory + lock, 60/s)══> UI (what you see)
+                            ├──────words: names, speech, cards (queue, 10/s)──> UI
                             └───────events──────> Log (hospital.log)
 ```
+
+Each kind of data goes the way that suits it. Positions are a few numbers per person, the same size every time,
+changing every frame: the simulation writes them straight into memory both processes see, under a lock so the UI
+never reads a half-written block. Words have any length and change now and then: they go through a queue, which
+copies them and does its own synchronisation. Measured with 68 people, moving data to the UI went from 5.3 % of
+a CPU core (everything through the queue, 60 times a second) to 2.1 %.
 
 **Inside the simulation, one thread per person.** Each one runs its own routine step by step. A patient's is:
 

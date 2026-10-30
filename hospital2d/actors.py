@@ -5,6 +5,7 @@ import itertools
 import math
 import os
 import random
+import struct
 import time
 import traceback
 
@@ -22,6 +23,12 @@ def read_names(filename):
 
 FIRST_NAMES = read_names('first_names.txt')
 LAST_NAMES = read_names('last_names.txt')
+
+# What the UI needs 60 times a second, as one fixed-size row per actor in shared memory (see sim.write_positions):
+# id, px, py, tx, ty, facing, anim_t, lying, on a stretcher, action, and the stretcher it pushes (x, y, facing; -1 = none)
+ROW = struct.Struct('<iffhhbf??bffb')
+FACINGS = ('down', 'left', 'right', 'up')
+ACTIONS = (None, 'typing', 'mopping')
 
 ROLE_LABEL = {'doctor': 'Doctor', 'nurse': 'Nurse', 'receptionist': 'Receptionist', 'security': 'Security',
               'cleaner': 'Cleaner', 'patient': 'Patient', 'dispatcher': 'Dispatcher'}
@@ -371,13 +378,18 @@ class Actor:
         return []
 
     def snapshot(self):
-        """Plain data for the UI process, which can't see this object (separate memory)."""
+        """The words for the UI process, which can't see this object (separate memory); where it is and how it's
+        drawn go through shared memory instead (numbers)."""
         room = self.lay.room_at[self.ty][self.tx]
         return {'id': self.id, 'role': self.role, 'name': self.name, 'look': self.look,
-                'px': self.px, 'py': self.py, 'tx': self.tx, 'ty': self.ty, 'facing': self.facing,
-                'anim_t': self.anim_t, 'path': list(self.path), 'state': self.state(),
+                'path': list(self.path), 'state': self.state(),
                 'room': room.name if room else 'doorway', 'bubble': self.bubble, 'mark': None,
                 'speech': self.speech if self.h.clock() < self.speech_until else None,
-                'lying': self.lying, 'stretcher': self.on_stretcher, 'action': self.action,
-                'cart': (self.pushing.px, self.pushing.py, self.pushing.facing) if self.pushing else None,
                 'card': [('Doing', self.doing)] + self.card()}
+
+    def numbers(self):
+        """Its row in shared memory (ROW)."""
+        c = self.pushing
+        return (self.id, self.px, self.py, self.tx, self.ty, FACINGS.index(self.facing), self.anim_t, self.lying,
+                self.on_stretcher, ACTIONS.index(self.action), c.px if c else 0.0, c.py if c else 0.0,
+                FACINGS.index(c.facing) if c else -1)

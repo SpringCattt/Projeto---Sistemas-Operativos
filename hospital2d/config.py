@@ -27,7 +27,8 @@ TIME_SCALE = 1.0  # 2.0 = everything (walking, waiting, arrivals) happens twice 
 # Concurrency: every actor is a thread in the simulation process, which sends the UI process snapshots
 ACTOR_HZ = 30  # updates per second of an actor thread while it walks...
 IDLE_HZ = 10  # ...and while it stands or sits still (it doesn't need more: saves CPU for big hospitals)
-SNAPSHOT_HZ = 60  # snapshots per second sent to the UI
+SNAPSHOT_HZ = 60  # times per second the simulation writes where everyone is (shared memory with the UI)...
+WORDS_HZ = 10  # ...and sends the words (names, speech, cards, stats) through the snapshots queue
 
 # Arrivals (the arrivals process)
 ARRIVALS_PER_MINUTE = 6

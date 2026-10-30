@@ -61,15 +61,19 @@ touches a door or sits on a wall is left out, and so is decoration that would le
 ### Four processes
 
 ```
-                 snapshots (Queue, 60/s)                         patients, surges (Queue)
-   UI process  <-------------------------  Simulation process  <-------------------------  Arrivals process
-   (main.py)   ------------------------->  (sim.py)
-                 commands: 'quit' (Queue)        |  events, summary (Queue)
+                 positions (shared memory + lock, 60/s)          patients, surges (Queue)
+   UI process  <=========================  Simulation process  <-------------------------  Arrivals process
+   (main.py)   <-------------------------  (sim.py)
+               ------------------------->        |  events, summary (Queue)
+                 words (Queue, 10/s); commands   |
                                                  v
                                             Log process (eventlog.py) -> hospital.log
 ```
 
-* **UI** only draws. It never touches the actors: it draws the latest snapshot (plain data) the simulation sends.
+* **UI** only draws. It never touches the actors: every frame it reads where everyone is from shared memory
+  (`sim.read_positions`: one fixed-size row of numbers per person, `actors.ROW`) and puts that together with the
+  latest words from the queue (names, speech, cards, stats; `WORDS_HZ` times a second). The lock that comes with
+  the shared block (`mp.Array`) is held only to copy bytes in or out, so neither side waits more than microseconds.
 * **Simulation** owns the hospital: the plan, the shared structures and one thread per actor.
 * **Arrivals** decides when people walk in (Poisson arrivals, with random surges) and what they come with
   (`data/complaints.csv`).
@@ -231,10 +235,10 @@ Ryzen 5 3600, Python 3.14 (one process, so all actor threads share the GIL):
   ones still update 30 times, so movement is just as smooth. With 694 threads that took them from 90 % to 96 %
   on time, with 1034 from 64 % to 73 %: the 80 % limit moved from roughly 800 to roughly 950 threads (estimated
   between the measured sizes).
-* The snapshot the UI gets 60 times a second stays small (a few ms to build and serialise even with a thousand
-  people), so the communication between processes is not the bottleneck.
+* Moving data to the UI costs 2.1 % of a CPU core with 68 people (5.3 % when everything went through the queue
+  60 times a second): positions by shared memory, words by queue.
 * On the UI side, the FPS counter (top left) turns red below `MIN_FPS`; `TARGET_FPS` only caps it — above 60
-  nothing looks smoother, since the simulation sends 60 snapshots a second.
+  nothing looks smoother, since the simulation writes positions 60 times a second.
 
 ## Credits
 

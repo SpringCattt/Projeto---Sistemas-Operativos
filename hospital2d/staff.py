@@ -677,14 +677,18 @@ class WardNurse(TaskStaff):
             lift.leave(self)
 
     def near_lift(self, column, train):
-        """Where a train waits its turn: a free tile a few steps from the elevator's door, on the same floor and
-        off the tiles in front of it (whoever comes out needs them)."""
+        """Where a train waits its turn: close by, to one side of the elevator's door, on the side it comes from
+        (so it never crosses the tiles in front of the door, which whoever comes out needs); further off only if
+        there's no room there."""
         floor, mine = self.lay.floor_of(column[0][0]), {(m.tx, m.ty) for m in train}
         with self.world.lock:
             taken = set(self.world.occupied) - mine
         near = self.lay.distances_from((train[0].tx, train[0].ty))
-        spots = [t for t, d in self.lay.distances_from(column[0]).items()
-                 if 4 <= d <= 8 and self.lay.floor_of(t[0]) == floor and t not in column and t not in taken]
+        around = self.lay.distances_from(column[0])
+        ok = lambda t: self.lay.floor_of(t[0]) == floor and t not in column and t not in taken
+        beside = [t for t, d in around.items() if d <= 4 and abs(t[0] - column[0][0]) >= 2
+                  and column[0][1] <= t[1] <= column[-1][1] and ok(t)]
+        spots = beside or [t for t, d in around.items() if 4 <= d <= 8 and ok(t)]
         return min(spots, key=lambda t: near.get(t, 10 ** 6), default=(train[0].tx, train[0].ty))
 
     def ride(self, train, lift):

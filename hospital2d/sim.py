@@ -446,6 +446,7 @@ class Hospital:
     def treated(self, p, surgery=False):
         """p pays: by its urgency, less the longer it waited for a doctor (config.PRICE). The payment is credited to
         whoever did each step for it (config.SHARE): that shares the day's bonus out."""
+        p.cured = True  # (the UI shows it over its head until it's gone)
         u, on_time = p.base_urgency, config.ON_TIME_S[p.base_urgency]
         late = max(0.0, p.waited - on_time) / (2 * on_time)  # 0 on time, 1 at three times that
         pay = (config.PRICE[u] + (config.SURGERY_PRICE if surgery else 0)) \
@@ -516,8 +517,10 @@ class Hospital:
             actors = list(self.actors)
         with self.world.lock:
             messes = list(self.world.messes)
+            pushed = {id(a.pushing) for a in actors if getattr(a, 'pushing', None) is not None}
+            # every stretcher on the floor that nobody is pushing (the nurses walking to one: it stays where it is)
             parked = [(c.px, c.py, c.facing) for c in self.world.occupied.values()
-                      if isinstance(c, Cart) and c.driver is None]
+                      if isinstance(c, Cart) and id(c) not in pushed]
         with self.stats_lock:
             stats = dict(self.stats)
         with self.events_lock:

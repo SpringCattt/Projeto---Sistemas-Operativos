@@ -2,15 +2,21 @@
 #   speed: default 8. Faster than that people can't move as fast as they should, and it would learn wrong things.
 #   hospitals: how many run at once, each in its own process (one CPU core each); default 4. At least 2 to learn.
 #
-# What it learns: who goes first among patients of the same urgency when there are more patients than doctors
-# (the most urgent always go first, like real triage; Dispatcher.priority: weights for minutes waited and impatience). It's an evolution strategy, in rounds of ROUND_MINUTES simulated minutes:
-#   1. every hospital starts the same day (same seed: same patients arriving at the same times) with the current
-#      weights nudged a bit, half of them one way and half the opposite way (+noise / -noise)
-#   2. each scores its round: treated - 3 x gave up - minutes Red patients waited for a doctor
-#   3. the weights move towards the nudges that scored better than the average, and the next round starts
-# With 4 or more hospitals, some play other days twice, with the current weights and with the ones it started from
+# What it's after: the biggest staff bonus, which is a share of the day's profit (what the patients paid minus the
+# wages; config.PRICE, config.WAGE). Each round is one whole day (24 hours, then the ones still inside are seen
+# to). What it decides, and so learns (world.start_policy):
+#   - who goes first among patients of the same urgency (the most urgent always go first, like real triage):
+#     weights for minutes waited and impatience
+#   - when to call in staff on call (how many tasks more than free staff) and how long it waits, with nothing to
+#     do, before sending them home: more staff, more wages; fewer, longer waits (patients pay less, or give up)
+# It's an evolution strategy:
+#   1. every hospital plays the same day (same seed: same patients arriving at the same times) with the current
+#      policy nudged a bit, half of them one way and half the opposite way (+noise / -noise)
+#   2. each one's score is that day's profit
+#   3. the policy moves towards the nudges that made more than the average, and the next day starts
+# With 4 or more hospitals, some play other days twice, with the current policy and with the one it started from
 # (one day; five with 20+ hospitals): the fair test of whether what it learned is any better (vs_start in
-# learning.csv: the average difference over those days, above 0 = better).
+# learning.csv: the average difference in profit over those days, above 0 = better).
 # On top of that, as before, the Boss learns how long each task takes (who does it; averaged over the hospitals).
 # Everything is saved after every round in boss_brain.json (the game starts from it too) and learning.csv.
 # Run it again and it goes on from there. Graphs, whenever you want (even while this runs): python charts.py
@@ -25,15 +31,16 @@ import time
 import config
 from arrivals import new_patient
 from sim import BRAIN, Hospital
-from world import Dispatcher
+from world import Dispatcher, start_policy
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 CSV = os.path.join(HERE, 'learning.csv')
-FIELDS = ['round', 'reward', 'best', 'worst', 'w_waited', 'w_impatience', 'treated', 'gave_up',
-          'red_wait_min', 'tasks', 'error_s', 'vs_start']
-ROUND_MINUTES = 10
-NOISE = 2.0  # how big the nudges are
-STEP = 1.0  # how far the weights move each round (at most about one nudge)
+FIELDS = ['round', 'profit', 'best', 'worst', 'w_waited', 'w_impatience', 'call_in_at', 'send_home_after_s',
+          'treated', 'gave_up', 'red_wait_min', 'called_in', 'tasks', 'error_s', 'vs_start']
+NOISE = 2.0  # how big the nudges are...
+SCALES = (1.0, 1.0, 0.5, 20.0)  # ...for each part of the policy: weights, weights, tasks, seconds
+LOWEST = (0.0, 0.0, 1.0, 10.0)  # (no negative weights; call in at 1 task more at least; wait 10 s at least)
+STEP = 1.0  # how far the policy moves each round (at most about one nudge)
 
 
 def hospital(i, speed, jobs, reports):
@@ -50,7 +57,7 @@ def hospital(i, speed, jobs, reports):
             h.start()
             h.measure()  # from here: did the actor threads keep up with their rate? (too many hospitals: no)
             try:
-                while h.clock() < ROUND_MINUTES * 60:
+                while h.day_over is None and h.clock() < 3 * config.DAY_HOURS * config.HOUR_S:  # (a day, and a cap)
                     while h.clock() >= next_arrival:
                         h.admit(new_patient(rng))
                         next_arrival += rng.expovariate(config.ARRIVALS_PER_MINUTE / 60)
@@ -58,11 +65,13 @@ def hospital(i, speed, jobs, reports):
                 h.measure()
             finally:
                 h.shutdown()
+            if h.day_over is None:  # (didn't end: the day so far)
+                h.end_day()
+            day = h.day_over
             red = sum(h.waits.get(2, [])) / 60
-            reward = h.stats['treated'] - 3 * h.stats['gave_up'] - red
-            reports.put((i, {'reward': reward, 'treated': h.stats['treated'], 'gave_up': h.stats['gave_up'],
-                             'red': red, 'brain': d.brain, 'tasks': d.learned, 'errors': d.error_sum,
-                             'keep_up': h.keep_up}))
+            reports.put((i, {'profit': day['profit'], 'treated': day['treated'], 'gave_up': day['gave_up'], 'red': red,
+                             'called_in': day['called_in'], 'brain': d.brain, 'tasks': d.learned,
+                             'errors': d.error_sum, 'keep_up': h.keep_up}))
     except KeyboardInterrupt:
         pass
 
@@ -100,8 +109,7 @@ def main(speed, n):
         p.start()
     if n < 2:
         print('With 1 hospital it only learns how long tasks take: use 2 or more to learn who goes first.')
-    print(f'Learning with {n} hospitals at x{speed:g}, rounds of {ROUND_MINUTES} simulated minutes '
-          f'(Ctrl+C to stop). Graphs: python charts.py')
+    print(f'Learning with {n} hospitals at x{speed:g}, a day per round (Ctrl+C to stop). Graphs: python charts.py')
     rng = random.Random()
     try:
         with open(CSV, 'a', newline='', encoding='utf-8') as f:
@@ -119,10 +127,11 @@ def main(speed, n):
                     e = [rng.gauss(0, 1) for _ in boss.policy]
                     noises += [e, [-x for x in e]]
                 noises += [[0.0] * len(boss.policy)] * ((n - compare) % 2)
-                plays = [[w + NOISE * x for w, x in zip(boss.policy, e)] for e in noises]
+                plays = [[max(low, w + NOISE * k * x) for w, x, k, low in zip(boss.policy, e, SCALES, LOWEST)]
+                         for e in noises]
                 seeds = [seed] * len(plays)
                 for day in days:
-                    plays += [list(boss.policy), list(config.PRIORITY_START)]
+                    plays += [list(boss.policy), start_policy()]
                     seeds += [day, day]
                 for job, weights, s in zip(jobs, plays, seeds):
                     job.put((s, weights, boss.brain))
@@ -133,16 +142,17 @@ def main(speed, n):
                     except queue.Empty:
                         continue
                     results[i] = r
-                rewards = [r['reward'] for r in results[:len(noises)]]
+                rewards = [r['profit'] for r in results[:len(noises)]]
                 m = len(rewards)
                 mean = sum(rewards) / m
                 spread = (sum((x - mean) ** 2 for x in rewards) / m) ** 0.5
                 tests = results[len(noises):]
-                vs_start = round(sum(a['reward'] - b['reward'] for a, b in zip(tests[::2], tests[1::2])) / len(days), 1)                     if days else ''
+                vs_start = round(sum(a['profit'] - b['profit'] for a, b in zip(tests[::2], tests[1::2])) / len(days)) \
+                    if days else ''
                 if m >= 2 and spread > 0:  # towards the nudges that did better than the average
                     for k in range(len(boss.policy)):
                         move = sum((x - mean) / spread * e[k] for x, e in zip(rewards, noises)) / m
-                        boss.policy[k] = max(0.0, boss.policy[k] + STEP * NOISE * move)
+                        boss.policy[k] = max(LOWEST[k], boss.policy[k] + STEP * NOISE * SCALES[k] * move)
                 kinds = {k for r in results for k in r['brain']}  # how long tasks take: averaged
                 boss.brain = {k: [sum(ws) / len(ws) for ws in zip(*(r['brain'][k] for r in results if k in r['brain']))]
                               for k in kinds}
@@ -150,14 +160,15 @@ def main(speed, n):
                 boss.learned += tasks
                 boss.error_sum += errors
                 boss.save(BRAIN)
-                avg = [sum(r[k] for r in results) / n for k in ('treated', 'gave_up', 'red')]
-                out.writerow([rnd, round(mean, 1), round(max(rewards), 1), round(min(rewards), 1),
+                avg = [sum(r[k] for r in results) / n for k in ('treated', 'gave_up', 'red', 'called_in')]
+                out.writerow([rnd, round(mean), round(max(rewards)), round(min(rewards)),
                               *[round(w, 2) for w in boss.policy], *[round(x, 1) for x in avg], tasks,
                               round(errors / tasks, 1) if tasks else '', vs_start])
                 f.flush()  # so charts.py sees it straight away
                 keep_up = min(r['keep_up'] for r in results)
-                print(f'round {rnd}: score {mean:.1f} (best {max(rewards):.1f}, worst {min(rewards):.1f}); '
-                      f'weights waited {boss.policy[0]:.1f}, impatience {boss.policy[1]:.1f}; '
+                print(f'day {rnd}: profit {mean:,.0f} (best {max(rewards):,.0f}, worst {min(rewards):,.0f}); '
+                      f'weights waited {boss.policy[0]:.1f}, impatience {boss.policy[1]:.1f}; call in at '
+                      f'{boss.policy[2]:.1f} more tasks, home after {boss.policy[3]:.0f} s; '
                       f'vs start {vs_start}; keeping up {100 * keep_up:.0f}%'
                       + ('  << too many hospitals for this PC: use fewer' if keep_up < 0.9 else ''))
     except KeyboardInterrupt:

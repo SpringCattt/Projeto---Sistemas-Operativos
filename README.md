@@ -35,7 +35,14 @@ semaphores.
 
 **Controls:** WASD or right-drag to move · mouse wheel to zoom · click a person (or any room) to see what's going
 on · `B` see what the Boss is doing · `L` event log · `ESC` close · `Tab` **admin tablet** (pause, speed, send
-patients, trigger events, hire/send home staff) · `Space` pause · `+`/`-` speed.
+patients, trigger events, hire/send home staff) · `Space` pause · `+`/`-` speed · `Enter` start the next day.
+
+**Days and money.** It starts on day 0; a day is 24 hours, one every 30 seconds (12 minutes at x1). At midnight the
+doors close, the patients still inside are seen to, and when the last one is gone the day ends: the game pauses on
+the day's report (what the patients paid, the wages, the profit and the staff bonus) until you start the next day.
+Patients pay by urgency, less the longer they waited for a doctor, nothing if they gave up; staff are paid by the
+hour; 30 % of the profit is the staff bonus, shared out by what each one brought in. All the numbers are in
+[`config.py`](hospital2d/config.py) (`PRICE`, `WAGE`, `BONUS_SHARE`...).
 
 To make it calmer or bigger, change [`hospital2d/config.py`](hospital2d/config.py): `TIME_SCALE` (0.5 = half
 speed), `N_PATIENTS`, `ARRIVALS_PER_MINUTE`… The building itself is a map you draw in
@@ -97,11 +104,12 @@ python test_sim.py      # the simulation with real threads (~1.5 min)
 python bench.py         # how far it scales
 ```
 
-**The Boss learns** who to see first among patients of the same colour (the most urgent colour always goes first,
-like real triage) when there are more patients than doctors: `python learn.py 8 4` plays
-4 hospitals at once without the window, trying small changes and keeping what works (Ctrl+C stops it), and
-`python charts.py` draws how it's going (needs `pip install matplotlib`). When work piles up it also **calls in staff
-on call**, and sends them home when it's quiet again.
+**The Boss learns** to make the biggest staff bonus, that is, the most profit in a day. What it decides: who to see
+first among patients of the same colour (the most urgent colour always goes first, like real triage), and when to
+**call in staff on call** and send them home (more staff, more wages; fewer, longer waits and patients who give
+up). `python learn.py 8 4` plays 4 hospitals at once without the window, a whole day each round, trying small
+changes and keeping what makes more (Ctrl+C stops it), and `python charts.py` draws how it's going (needs
+`pip install matplotlib`).
 
 ## Credits
 

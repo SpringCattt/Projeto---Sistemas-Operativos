@@ -141,6 +141,7 @@ class Receptionist(Staff):
             self.tire(config.FATIGUE_PER_TASK['complaint'])
         else:
             self.h.log(f'{self.label()} registers {p.name}: "{p.reason}"')
+            p.helpers['reception'] = [self]
             self.talk('reception_done')
             self.h.triage_queue.put(p)  # producer of the triage queue
             self.tire(config.FATIGUE_PER_TASK['register'])
@@ -183,6 +184,7 @@ class TriageNurse(Staff):
         p.waiting_room = emergency[0] if p.rank == 2 and emergency else self.room.partner
         self.talk('nurse_result', color=config.URGENCY_NAMES[p.rank])
         self.h.log(f'{self.label()} triages {p.label()}: {p.reason}')
+        p.helpers['triage'] = [self]
         self.h.queue_for_doctor(p)
         self.tire(config.FATIGUE_PER_TASK['triage'])
         s.finish('ok')
@@ -329,6 +331,7 @@ class Doctor(TaskStaff):
             p.talk('patient_thanks')
             p.say('<3', 4)
             s.finish('done')
+            p.helpers['doctor'] = [self]
             self.h.treated(p)
 
     def operate(self, task, p):
@@ -358,7 +361,8 @@ class Doctor(TaskStaff):
                 self.tire(config.FATIGUE_PER_TASK['surgery'])
                 self.h.count('surgeries')
                 self.h.log(f'{self.label()} finished the surgery of {p.label()}')
-                self.h.treated(p)
+                p.helpers['doctor'] = [self]
+                self.h.treated(p, surgery=True)
             s.finish('done')
         finally:
             self.extra_avoid = ()
@@ -394,6 +398,7 @@ class Security(TaskStaff):
                 if task.result == 'expelled':
                     self.talk('security_out')
                 task.done.set()
+                self.h.credit_for(self, 'fight')
                 self.tire(config.FATIGUE_PER_TASK['fight'])
                 return
             spot = self.next_to((target.tx, target.ty))
@@ -417,6 +422,7 @@ class Cleaner(TaskStaff):
         with self.world.lock:
             self.world.messes.pop(task.tile, None)
         self.h.log(f'{self.label()} cleaned up the mess')
+        self.h.credit_for(self, 'clean')
         self.tire(config.FATIGUE_PER_TASK['clean'])
 
 
@@ -516,6 +522,7 @@ class WardNurse(TaskStaff):
             self.swap(train, cart, p)
             self.pushing = None
             self.h.log(f'{self.label()} and {back.label()} take {p.label()} on a stretcher')
+            p.helpers['stretcher'] = [self, back]
             target = self.bed(s.lie) if s.lie else [s.tile]  # next to the exam bed / operating table
             delivered = self.drive(train, *self.stop_beside(target, train, with_patient=True, keep_free=s.tile),
                                    with_patient=True)

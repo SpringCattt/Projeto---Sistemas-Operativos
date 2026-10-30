@@ -42,9 +42,13 @@ game shows one floor at a time: `PgUp` / `PgDn` or the floor buttons, and the vi
 when they go up or down.
 
 * **Ground floor:** emergencies. Street, reception, triage, waiting rooms, bar, Emergency (with its ambulance
-  bay) and the Boss's control room.
+  bay), storage right next to it (the stretchers start there) and the Boss's control room.
 * **First floor:** the doctors' rooms.
-* **Second floor:** the surgeries (with their disinfection rooms), storage and rest.
+* **Second floor:** the surgeries (with their disinfection rooms) and rest.
+
+Storage was on the second floor at first. With 4 doctors, a minute of the hospital, storage next to Emergency:
+Red patients waited 72–79 s for a doctor instead of 101–107 s (two runs each); upstairs, every Red patient cost
+the elevator two more trips.
 
 Every floor has the **Main Hall** in the same place, with **stairs** and an **elevator** in it. People walk up
 and down the stairs (a flight takes `STAIRS_S`); stretchers can't, so they take the elevator: one stretcher at a
@@ -54,8 +58,8 @@ On the ground floor, the hall has the Boss's round **Control Room** in the middl
 (sealed: no doors; the Boss sits in the exact centre and nobody else goes in). The main corridor runs through the
 hall and out to both sides, and ends in an exit at each end: whoever has seen a doctor leaves that way, so they
 don't walk back against the people coming in through reception and the waiting rooms. Under the hall is the base
-block: street → reception → a triage room on each side → the two waiting rooms, plus the bar; Emergency is on
-top of the hall.
+block: street → reception → a triage room on each side → the two waiting rooms, plus the bar; Emergency and
+storage are on top of the hall.
 
 **Editing the building.** Open a floor (`maps/floorN.tmj`, 0 = ground floor) in Tiled (turn on *View → Snapping →
 Snap to Grid*). Another file `floor3.tmj` is another floor. Each map has three layers, and the game reads them all
@@ -279,5 +283,5 @@ still grew with the number of doctors; `bench.py` now keeps the map's staff and 
 
 ## Ideas for later
 
-Several floors and freely editable plans, parking, a working storage room (nurses and cleaners fetching
+Parking, a working storage room (nurses and cleaners fetching
 supplies), bathrooms and other needs (bar, vending machines, TV), patients wandering where they shouldn't.

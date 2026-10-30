@@ -502,39 +502,56 @@ class Hospital:
         return '\n'.join(lines)
 
 
-# Shared memory between the simulation and the UI: how many rows there are, then one ROW per actor
-COUNT = struct.Struct('<i')
+# Shared memory between the simulation and the UI: a sequence number, how many rows there are, one ROW per actor.
+# A seqlock instead of a lock: the writer (only the simulation's main loop) makes the number odd while it writes and
+# even again when it's done; a reader copies the rows and keeps the copy only if the number was the same even one
+# before and after (else it was being written: it copies again). The writer never waits for a reader, and the
+# number is also the version: a reader that already has it skips the copy.
+# shortcut: relies on x86 keeping stores in order (and loads in order); on ARM it would need memory barriers
+SEQ, COUNT = struct.Struct('<Q'), struct.Struct('<i')
 MAX_ROWS = 5000  # shortcut: actors past this many aren't drawn; make it bigger if a hospital ever gets there
 
 
 def new_positions():
-    """The shared block. mp.Array comes with its own lock: whoever writes or reads takes it first, so the UI never
-    sees a half-written block (one actor's new x with its old y)."""
-    return mp.Array('B', COUNT.size + MAX_ROWS * ROW.size)
+    """The shared block (no lock: see the seqlock above)."""
+    return mp.RawArray('B', SEQ.size + COUNT.size + MAX_ROWS * ROW.size)
 
 
 def write_positions(shared, actors):
-    """Packed outside the lock; under it, only the copy into shared memory (microseconds)."""
+    """Packed first; then the number goes odd, the copy into shared memory (microseconds), the number even."""
     rows = [a.numbers() for a in actors[:MAX_ROWS]]
     data = COUNT.pack(len(rows)) + b''.join(ROW.pack(*r) for r in rows)
-    with shared.get_lock():
-        memoryview(shared.get_obj()).cast('B')[:len(data)] = data
+    block = memoryview(shared).cast('B')
+    seq, = SEQ.unpack_from(block)
+    SEQ.pack_into(block, 0, seq + 1)  # odd: being written
+    block[SEQ.size:SEQ.size + len(data)] = data
+    SEQ.pack_into(block, 0, seq + 2)  # even: done
 
 
-def read_positions(shared):
-    """{actor id: its ROW}. Copied out under the lock, unpacked after it."""
-    with shared.get_lock():
-        block = memoryview(shared.get_obj()).cast('B')
-        n, = COUNT.unpack_from(block)
-        data = block[COUNT.size:COUNT.size + n * ROW.size].tobytes()
-    return {r[0]: r for r in ROW.iter_unpack(data)}
+def read_positions(shared, seen=None, tries=1000):
+    """(version, {actor id: its ROW}), or (version, None) if it's still `seen` (nothing new) or a whole copy
+    couldn't be had in `tries` (a writer that died half-way would otherwise hang the reader)."""
+    block = memoryview(shared).cast('B')
+    for _ in range(tries):
+        seq, = SEQ.unpack_from(block)
+        if seq == seen:
+            return seq, None
+        if seq % 2:  # being written right now
+            continue
+        n = min(COUNT.unpack_from(block, SEQ.size)[0], MAX_ROWS)
+        start = SEQ.size + COUNT.size
+        data = block[start:start + n * ROW.size].tobytes()
+        if SEQ.unpack_from(block)[0] == seq:  # nobody wrote meanwhile: a consistent copy
+            return seq, {r[0]: r for r in ROW.iter_unpack(data)}
+    return seen, None
 
 
-def run_simulation(snapshots, commands, arrivals, log_out, seed=None, speed=None, positions=None):
+def run_simulation(snapshots, commands, arrivals, log_out, seed=None, speed=None, positions=None, open_=None):
     """Process body. snapshots: Queue -> UI (the words: names, speech, cards, stats). positions: shared memory with
     the UI (where everyone is: write_positions). commands: Queue <- UI ('quit', or an admin tablet order).
     arrivals: Queue <- arrivals process. log_out: Queue -> log process. speed: shared Value with the arrivals
-    process (how fast simulated time runs, 0 = paused)."""
+    process (how fast simulated time runs, 0 = paused). open_: shared Event, set while the doors are open (the
+    arrivals process sleeps on it at night)."""
     snapshots.cancel_join_thread()  # on exit, don't wait for the UI to read snapshots nobody needs any more
     h = Hospital(seed, log_out=log_out, brain=BRAIN, on_call=True)
     h.log('The hospital opens')
@@ -560,6 +577,12 @@ def run_simulation(snapshots, commands, arrivals, log_out, seed=None, speed=None
         while True:
             poked = poke.wait(1 / config.SNAPSHOT_HZ)  # paces the updates (or sooner, to show an order straight away)
             poke.clear()
+            # What the arrivals process must know: how fast time runs (the end of a day pauses it too) and whether
+            # the doors are open (only written when it changes)
+            if speed is not None and speed.value != h.speed:
+                speed.value = h.speed
+            if open_ is not None and open_.is_set() == h.closed:
+                open_.clear() if h.closed else open_.set()
             if quit_.is_set():
                 break
             while True:

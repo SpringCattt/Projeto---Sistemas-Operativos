@@ -30,15 +30,22 @@ def new_patient(rng, urgency=None, surgery=None):
             'reason': reason, 'urgency': urgency, 'surgery': surgery, 'temperament': temper}
 
 
-def run_arrivals(out, stop, seed=None, speed=None):
+def run_arrivals(out, stop, seed=None, speed=None, open_=None):
     """Process body. out: Queue -> simulation, ('patient', info) or ('surge', seconds). stop: Event.
-    speed: shared Value, simulated seconds per real second (set by the simulation: admin tablet; 0 = paused)."""
+    speed: shared Value, simulated seconds per real second (set by the simulation: admin tablet; 0 = paused).
+    open_: shared Event, set while the hospital's doors are open; at night it sleeps on it."""
     out.cancel_join_thread()  # on exit, don't wait for the simulation to read what it no longer needs
     rng = random.Random(seed)
     step = 0.1  # real seconds between checks
     surge_until = 0.0
     next_arrival = time.monotonic()
     while not stop.wait(step):
+        if open_ is not None and not open_.is_set():  # closed for the night: blocked until the next day opens
+            while not open_.wait(0.5):
+                if stop.is_set():
+                    return
+            next_arrival = surge_until = time.monotonic()  # a new day: nothing owed from before
+            continue
         now = time.monotonic()
         scale = speed.value if speed is not None else config.TIME_SCALE
         if scale <= 0:  # paused

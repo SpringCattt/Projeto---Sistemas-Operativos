@@ -1,6 +1,7 @@
 # test_sim.py - The simulation with its real threads (no UI, no other processes), sped up 8x: python test_sim.py
 # Takes about 1.5 minutes.
 import contextlib
+import multiprocessing as mp
 import queue
 import threading
 import time
@@ -10,7 +11,7 @@ import config
 
 config.TIME_SCALE = 8
 
-from arrivals import new_patient  # noqa: E402 (after the speed-up)
+from arrivals import new_patient, run_arrivals  # noqa: E402 (after the speed-up)
 from sim import JOBS, Hospital, new_positions, read_positions, write_positions  # noqa: E402
 from world import Dispatcher, Line, Task, Theatres  # noqa: E402
 
@@ -293,9 +294,52 @@ def test_positions():
     row = lambda i: (i, i + 0.5, 2.5, i, 2, 3, 1.25, True, False, 2, 0.0, 0.0, -1)
     people = [SimpleNamespace(numbers=lambda i=i: row(i)) for i in range(3)]
     write_positions(shared, people)
-    assert read_positions(shared) == {i: row(i) for i in range(3)}
+    version, rows = read_positions(shared)
+    assert rows == {i: row(i) for i in range(3)}
+    assert read_positions(shared, version) == (version, None)  # nothing new since: no copy at all
     write_positions(shared, people[:1])
-    assert read_positions(shared) == {0: row(0)}
+    assert read_positions(shared, version)[1] == {0: row(0)}
+
+
+def write_rounds(shared, n):
+    """(test_seqlock's writer, in another process) n writes of 50 rows; in write k every row says k."""
+    for k in range(n):
+        write_positions(shared, [SimpleNamespace(numbers=lambda i=i, k=k: (i, float(k), float(k), 0, 0, 0, 0.0,
+                                                                          False, False, 0, 0.0, 0.0, -1))
+                                 for i in range(50)])
+
+
+def test_seqlock():
+    """A writer in another process at full speed and a reader here: every copy the reader keeps is whole (all 50
+    rows from the same write), never half of one write and half of the next. The writer never waits."""
+    shared = new_positions()
+    writer = mp.Process(target=write_rounds, args=(shared, 20000))
+    writer.start()
+    seen, whole = None, 0
+    try:
+        while writer.is_alive():
+            seen, rows = read_positions(shared, seen)
+            if rows:
+                assert len({r[1] for r in rows.values()}) == 1, 'a torn read: rows from two different writes'
+                whole += 1
+    finally:
+        writer.join()
+    assert whole > 10, whole
+
+
+def test_arrivals_at_night():
+    """The arrivals process sends nobody while the doors are closed, and starts again when they open."""
+    out, stop, open_ = mp.Queue(), threading.Event(), threading.Event()  # (a thread here: the same function)
+    t = threading.Thread(target=run_arrivals, args=(out, stop, 1, None, open_), daemon=True)
+    t.start()
+    try:
+        time.sleep(1.0)
+        assert out.empty(), 'someone arrived at night'
+        open_.set()
+        assert until(lambda: not out.empty(), 5), 'nobody arrived once open'
+    finally:
+        stop.set()
+        t.join(2)
 
 
 def test_elevator():

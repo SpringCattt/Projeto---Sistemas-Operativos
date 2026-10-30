@@ -175,7 +175,7 @@ def draw_tablet(screen, font, small, snap, opts, top):
     frame = pygame.Rect(x0, top, w, 36 + 4 * 26 + 5 * 28 + 22 + len(JOB_LABELS) * 28 + 6)  # headings, rows, lines
     pygame.draw.rect(screen, (12, 13, 17), frame.inflate(10, 10), border_radius=14)  # the tablet's bezel
     pygame.draw.rect(screen, (28, 31, 39), frame, border_radius=8)
-    hits = [(frame.inflate(10, 10), ('card',))]
+    hits = []  # (the tablet itself goes last: the first area under the mouse wins, so its buttons go first)
     screen.blit(font.render('Admin tablet', True, HIGHLIGHT), (x0 + 12, top + 8))
     y = top + 36
 
@@ -219,7 +219,7 @@ def draw_tablet(screen, font, small, snap, opts, top):
         hits.append((button(screen, small, pygame.Rect(x0 + 150, y, 34, 22), '-'), ('cmd', ('fire', job))))
         hits.append((button(screen, small, pygame.Rect(x0 + 260, y, 34, 22), '+'), ('cmd', ('hire', job))))
         y += 28
-    return hits
+    return hits + [(frame.inflate(10, 10), ('card',))]
 
 
 SKY = [(0, (14, 22, 60, 150)), (5, (14, 22, 60, 150)), (6.5, (255, 170, 120, 60)), (7.5, (255, 255, 255, 0)),
@@ -279,6 +279,7 @@ def run_ui(snapshots, commands, positions, sim=None):
     vans.update({(kind, i): both_ways(image(f'custom/ambulance_{kind}_{i}')) for kind in ('siren', 'open') for i in (0, 1)})
     lift_frames = [image(f'custom/elevator_{i}') for i in range(3)]  # doors closed, half open, open
     shadow = image('custom/shadow')  # under everyone standing or walking
+    cured_mark = image('custom/cured')  # over a treated patient, on its way out
     # Outside (grass, road, street) gets dark at night and warm at dawn and dusk; inside the lights are on
     outdoor = pygame.Surface(floor_map.get_size(), pygame.SRCALPHA)
     for y in range(lay.height):
@@ -542,7 +543,9 @@ def run_ui(snapshots, commands, positions, sim=None):
 
         if zoom >= 2:  # over the heads: urgency (triaged patients) and what's going on
             for a, hx, hy in heads:
-                if a.mark is not None:
+                if a.mark == 'cured':
+                    blit_scaled(cured_mark, hx - cured_mark.get_width() * zoom / 2, hy - (cured_mark.get_height() + 1) * zoom)
+                elif a.mark is not None:
                     r = zoom + 1
                     pygame.draw.polygon(screen, URGENCY_COLORS[a.mark],
                                         [(hx, hy - 3 * r), (hx + r, hy - 2 * r), (hx, hy - r), (hx - r, hy - 2 * r)])

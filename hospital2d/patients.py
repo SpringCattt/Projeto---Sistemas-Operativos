@@ -328,6 +328,6 @@ class Patient(Actor):
 
     def snapshot(self):
         s = super().snapshot()
-        s['mark'] = self.rank
+        s['mark'] = 'cured' if getattr(self, 'cured', False) else self.rank  # (cured: on its way out)
         s['card'] = s['card'][1:]  # 'Doing' says nothing for a patient: 'Stage' does
         return s

@@ -125,10 +125,6 @@ class Hospital:
     def admit(self, info):
         """A patient walks in from the street (sent by the arrivals process)."""
         self.count('arrived')
-        if len(self.patients()) >= config.MAX_PATIENTS:
-            self.count('turned_away')
-            self.log(f'{info["name"]} is turned away: the hospital is full')
-            return None
         if info['surgery'] and self.lay.ambulance_bay:  # by ambulance: in through Emergency's own door, triaged
             self.log(f'{info["name"]} arrives by ambulance')
             return self.add_waiting(info, arrive=self.lay.ambulance_bay)
@@ -370,7 +366,7 @@ class Hospital:
     def summary(self):
         s = self.stats
         lines = [f'Simulated time: {self.clock():.0f} s',
-                 f'Arrived: {s["arrived"]}  turned away: {s["turned_away"]}  surges: {s["surges"]}',
+                 f'Arrived: {s["arrived"]}  surges: {s["surges"]}',
                  f'Treated: {s["treated"]}  surgeries: {s["surgeries"]}  gave up: {s["gave_up"]}  '
                  f'thrown out: {s["expelled"]}',
                  f'Complaints: {s["complaints"]}  fights: {s["fights"]}  vomits: {s["vomits"]}  '

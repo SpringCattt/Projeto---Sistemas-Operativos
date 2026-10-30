@@ -1,8 +1,10 @@
-# layout.py - Builds the hospital floor plan (rooms, doors and furniture) from config.py
+# layout.py - The hospital's plan (floors, rooms, doors, furniture, stairs, elevator), read from the Tiled maps in maps/
 import functools
 import heapq
+import glob
 import json
 import os
+import re
 from collections import deque
 from dataclasses import dataclass
 
@@ -10,8 +12,10 @@ import config
 
 EMPTY, WALL, FLOOR, DOOR = 0, 1, 2, 3
 
-MAPS = os.path.join(os.path.dirname(__file__), 'maps')  # the plan, drawn in the Tiled map editor (see README)
+MAPS = os.path.join(os.path.dirname(__file__), 'maps')  # the floors, drawn in the Tiled map editor (see README)
 GROUND = {'wall': WALL, 'door': DOOR, 'floor_grass': EMPTY}  # what a ground tile is; any other one is floor
+STAIRS = 'stairs'  # a stairs tile goes to the stairs tile at the same place on the floor above and below
+FLOOR_GAP = 4  # the floors lie side by side in one grid (grass between them: nobody walks across)
 SEATS = {'chair', 'office_chair', 'bench', 'sofa'}  # furniture people sit on (every tile of a bench is a seat)
 # Just for looks: left out wherever it would leave a way through only one tile wide (see Layout)
 DECOR = {'plant', 'sanitizer', 'trash_bin', 'cabinet', 'biohazard', 'iv_stand', 'bp_monitor', 'eye_chart', 'poster',
@@ -61,13 +65,37 @@ class Furniture:
         return [(x, y) for y in range(self.y, self.y + self.h) for x in range(self.x, self.x + self.w)]
 
 
-def load_layout(path=os.path.join(MAPS, 'floor0.tmj')):
-    """The plan drawn in Tiled. Three layers: 'ground' (what each tile looks like, and so what it is: wall, door,
+def load_layout(folder=MAPS):
+    """Every floor<N>.tmj in `folder` (floor0 = ground floor), side by side in one grid: floor N starts at
+    x = N * stride. Tiles, rooms and routes work the same on every floor; the stairs and the elevator join them."""
+    paths = sorted(glob.glob(os.path.join(folder, 'floor*.tmj')), key=lambda p: int(re.findall(r'\d+', p)[-1]))
+    floors = [read_floor(p) for p in paths]
+    stride = max(len(f[0][0]) for f in floors) + FLOOR_GAP
+    height = max(len(f[0]) for f in floors)
+    ground = [['custom/floor_grass'] * stride * len(floors) for _ in range(height)]
+    rooms, furniture, staff_only, stretchers = [], [], set(), []
+    for n, (g, rs, fs, so, st) in enumerate(floors):
+        dx = n * stride
+        for y, row in enumerate(g):
+            ground[y][dx:dx + len(row)] = row
+        for r in rs:
+            r.x += dx
+        for f in fs:
+            f.x += dx
+        rooms += rs
+        furniture += fs
+        staff_only |= {(x + dx, y) for x, y in so}
+        stretchers += [(x + dx, y) for x, y in st]
+    return Layout(ground, rooms, furniture, staff_only, stretchers, stride)
+
+
+def read_floor(path):
+    """One floor drawn in Tiled. Three layers: 'ground' (what each tile looks like, and so what it is: wall, door,
     grass = outside, anything else = floor), 'rooms' (a rectangle over each room, walls included: its name, its
     kind as the class, an ellipse for a round one; property partner = the room it works with, walls = false for
     the street; and 'staff_only' rectangles: patients never walk there) and 'furniture' (pieces from the hospital
     tileset; their size on the floor is the tile's w and h, or the piece's own; 'stretcher' pieces are where the
-    stretchers park)."""
+    stretchers park; an 'elevator' opens downwards, at the same place on every floor it stops at)."""
     T = config.TILE
     with open(path, encoding='utf-8') as f:
         m = json.load(f)
@@ -114,14 +142,20 @@ def load_layout(path=os.path.join(MAPS, 'floor0.tmj')):
             stretchers.append((x, y))
         else:
             furniture.append(Furniture(p['kind'], x, y, p['kind'] not in SEATS, fw, fh))
-    return Layout(ground, rooms, furniture, staff_only, stretchers)
+    return ground, rooms, furniture, staff_only, stretchers
 
 
 class Layout:
-    def __init__(self, ground, rooms, furniture, staff_only, stretchers):
+    def __init__(self, ground, rooms, furniture, staff_only, stretchers, stride=None):
         """ground: the image of each tile ([y][x], from the assets folder), which also says what it is (GROUND).
-        The rest as load_layout reads it from the map."""
+        stride: how far apart the floors are in x (load_layout). The rest as read_floor reads it from the maps."""
         self.ground, self.rooms, self.width, self.height = ground, rooms, len(ground[0]), len(ground)
+        self.stride = stride or self.width
+        self.floors = -(-self.width // self.stride)
+        # Stairs: each stairs tile leads to the one at the same place on the floor above / below, if there is one
+        stairs = {(x, y) for y, row in enumerate(ground) for x, name in enumerate(row) if name.endswith('/' + STAIRS)}
+        self.links = {t: [u for u in ((t[0] - self.stride, t[1]), (t[0] + self.stride, t[1])) if u in stairs]
+                      for t in stairs}
         # cached per plan (a cache on the method would keep every plan ever built alive: learn.py builds hundreds)
         self.distances_from = functools.lru_cache(maxsize=512)(self._distances_from)
         self.tiles = [[GROUND.get(name.rsplit('/', 1)[-1], FLOOR) for name in row] for row in ground]
@@ -228,6 +262,14 @@ class Layout:
         self.stretcher_bay = [t for t in stretchers if self.walkable(*t)]
         self.stretcher_spots = [t for r in self.rooms_of('storage') for t in self.free_tiles(r)
                                 if all(max(abs(t[0] - x), abs(t[1] - y)) > 1 for x, y in stretchers)]
+        # Elevators: the same box at the same place on each floor it serves. It opens downwards, onto a column of
+        # three tiles where a stretcher train (nurse, stretcher, nurse) waits to get in and comes out
+        shafts = {}
+        for f in self.furniture:
+            if f.kind == 'elevator':
+                shafts.setdefault((f.x % self.stride, f.y), {})[self.floor_of(f.x)] = (
+                    [(f.x, f.y + f.h + i) for i in range(3)], (f.x + f.w / 2, f.y + f.h / 2))
+        self.lifts = list(shafts.values())  # each one: {floor: (the column in front of it, the middle of its box)}
         self.waiting_seats = {r: [t for t in self.free_tiles(r) if t in self.seats] for r in self.rooms_of('waiting')}
         self.control_seat = next((f.x, f.y) for r in self.rooms_of('control') for f in furniture_in(r, 'office_chair'))
         self.rest_spots = [t for r in self.rooms_of('rest') for t in self.free_tiles(r) if t in self.seats]
@@ -235,6 +277,10 @@ class Layout:
     def walkable(self, x, y):
         return 0 <= x < self.width and 0 <= y < self.height \
             and self.tiles[y][x] in (FLOOR, DOOR) and (x, y) not in self.solid
+
+    def floor_of(self, x):
+        """Which floor a tile (or a position) is on, from its x."""
+        return int(x) // self.stride
 
     def rooms_of(self, kind):
         return [r for r in self.rooms if r.kind == kind]
@@ -254,18 +300,25 @@ class Layout:
         dist, todo = {start: 0}, deque([start])
         while todo:
             x, y = todo.popleft()
-            for nb in ((x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)):
+            for nb in ((x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1), *self.links.get((x, y), ())):
                 if nb not in dist and self.walkable(*nb):
                     dist[nb] = dist[(x, y)] + 1
                     todo.append(nb)
         return dist
 
-    def path(self, start, goal, avoid=(), blocked=frozenset(), limit=None):
+    def guess(self, a, b):
+        """A lower bound of the walk from a to b: on the same floor, straight lines; to another one, a step per
+        floor on the stairs (which keep x, y). Never more than the real walk, so A* still finds the shortest."""
+        s = self.stride
+        return abs(a[0] % s - b[0] % s) + abs(a[1] - b[1]) + abs(a[0] // s - b[0] // s)
+
+    def path(self, start, goal, avoid=(), blocked=frozenset(), limit=None, stairs=True):
         """4-direction A*: the shortest route, and of all the shortest ones the one with fewest turns, so people walk
         straight instead of zig-zagging. Returns the tiles up to goal (start excluded), or [] if unreachable.
         avoid: room kinds the walker may not step into (e.g. patients and the corridor).
         blocked: tiles it may not step on (staff-only areas, other people).
-        limit: only routes up to this many tiles (gives up much sooner when there's no such route)."""
+        limit: only routes up to this many tiles (gives up much sooner when there's no such route).
+        stairs: may take the stairs to another floor (a stretcher can't: it takes the elevator)."""
         def ok(x, y):
             if not self.walkable(x, y) or (x, y) in blocked:
                 return False
@@ -274,10 +327,9 @@ class Layout:
 
         if start == goal or not ok(*goal):
             return []
-        gx, gy = goal
         # The state is (tile, direction it came from), so a turn can cost a little: TURN, far less than a step,
         # never makes a route longer, it only picks the straightest of the shortest ones
-        open_ = [(abs(start[0] - gx) + abs(start[1] - gy), 0, 0.0, start, -1)]
+        open_ = [(self.guess(start, goal), 0, 0.0, start, -1)]
         best, came = {(start, -1): 0.0}, {}
         while open_:
             _, _, g, cur, d = heapq.heappop(open_)
@@ -289,16 +341,18 @@ class Layout:
                 return route[::-1]
             if g > best[(cur, d)]:
                 continue
-            if limit is not None and g + abs(cur[0] - gx) + abs(cur[1] - gy) > limit + 0.5:  # (turns cost a bit)
+            if limit is not None and g + self.guess(cur, goal) > limit + 0.5:  # (turns cost a bit)
                 return []  # everything left is longer than that
-            for nd, (ddx, ddy) in enumerate(DIRECTIONS):
-                nb = (cur[0] + ddx, cur[1] + ddy)
+            steps = [((cur[0] + ddx, cur[1] + ddy), nd) for nd, (ddx, ddy) in enumerate(DIRECTIONS)]
+            if stairs:  # up or down: as if it went straight on (no turn)
+                steps += [(nb, d) for nb in self.links.get(cur, ())]
+            for nb, nd in steps:
                 if not ok(*nb):
                     continue
                 ng = g + 1 + (TURN if d not in (-1, nd) else 0.0)
                 if ng < best.get((nb, nd), float('inf')):
                     best[(nb, nd)] = ng
                     came[(nb, nd)] = (cur, d)
-                    h = abs(nb[0] - gx) + abs(nb[1] - gy)
+                    h = self.guess(nb, goal)
                     heapq.heappush(open_, (ng + h, h, ng, nb, nd))
         return []

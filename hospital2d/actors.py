@@ -78,6 +78,7 @@ class Actor:
         self.path, self.reserved = [], None
         self.blocked_for, self.give_way_after = 0.0, self.rng.uniform(0.4, 1.2)
         self.stuck_for = 0.0  # blocked without moving, in total: after a while it steps aside (see step)
+        self.climbed = 0.0  # how far up (or down) the flight of stairs it's on
         self.facing, self.anim_t = 'down', 0.0
         self.pause = self.rng.uniform(0, self.pace[1])
         self.area = []  # where it wanders when idle
@@ -258,6 +259,12 @@ class Actor:
         self.blocked_for = self.stuck_for = 0.0
         nx, ny = nxt
         dx, dy = nx + 0.5 - self.px, ny + 0.5 - self.py
+        if abs(nx - self.tx) + abs(ny - self.ty) > 1:  # the stairs (to the same place a floor up or down)
+            self.climbed += dt * self.speed
+            self.anim_t += dt * self.speed
+            if self.climbed < config.STAIRS_S:
+                return
+            self.climbed = dx = dy = 0.0  # up there: it arrives below
         dist, stride = math.hypot(dx, dy), config.ACTOR_SPEED * self.speed * dt
         if dist > 1e-6:
             self.facing = ('right' if dx > 0 else 'left') if abs(dx) > abs(dy) else ('down' if dy > 0 else 'up')

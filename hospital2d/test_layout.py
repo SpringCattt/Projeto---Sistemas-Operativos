@@ -12,7 +12,7 @@ for lay in [load_layout()]:
     seen, queue = {start}, deque([start])
     while queue:
         x, y = queue.popleft()
-        for nb in ((x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)):
+        for nb in ((x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1), *lay.links.get((x, y), ())):
             if lay.walkable(*nb) and nb not in seen:
                 seen.add(nb)
                 queue.append(nb)
@@ -25,6 +25,18 @@ for lay in [load_layout()]:
             assert set(free) <= seen, f'{r.name} has unreachable areas'
 
     assert lay.path(start, lay.free_tiles(lay.rooms_of('doctor')[-1])[0])
+
+    # Floors: stairs between each floor and the next; an elevator that stops on all of them, with the three tiles
+    # in front of it free on each (where a stretcher train gets in and out)
+    assert lay.floors >= 1 and all(lay.walkable(*t) for t in lay.links)
+    for f in range(lay.floors - 1):
+        assert any(lay.floor_of(t[0]) == f and any(lay.floor_of(u[0]) == f + 1 for u in up)
+                   for t, up in lay.links.items()), f'no stairs from floor {f} to floor {f + 1}'
+    if lay.floors > 1:
+        assert any(len(stops) == lay.floors for stops in lay.lifts), 'no elevator to every floor'
+    for stops in lay.lifts:
+        for f, (column, _) in stops.items():
+            assert all(lay.walkable(*t) for t in column) and set(column) <= seen, f'elevator door, floor {f}'
 
     # Patients not yet called go between waiting rooms without touching the corridor, triage or staff areas
     w1, w2 = lay.rooms_of('waiting')

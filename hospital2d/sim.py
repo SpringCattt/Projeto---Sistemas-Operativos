@@ -21,7 +21,7 @@ from staff import Boss, Cart, Cleaner, Doctor, Receptionist, Security, TriageNur
 SPEEDS = (0.25, 0.5, 1, 2, 4, 8)  # what the admin tablet offers
 BRAIN = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'boss_brain.json')  # written by learn.py
 JOBS = {c.__name__: c for c in (Doctor, WardNurse, TriageNurse, Receptionist, Security, Cleaner)}
-from world import Dispatcher, Line, Task, Theatres, Transfer, World
+from world import Dispatcher, Elevator, Line, Task, Theatres, Transfer, World
 
 
 class Hospital:
@@ -43,6 +43,7 @@ class Hospital:
         if brain:
             self.dispatcher.load(brain)
         self.theatres = Theatres(self.lay.rooms_of('surgery')[:n_surgeries])
+        self.lifts = [Elevator(stops) for stops in self.lay.lifts]
         self.disinfection = {r: threading.Semaphore(max(1, len(spots))) for r, spots in self.lay.sink_spots.items()}
         self.log_out = log_out  # Queue to the log process (or None)
         self.events, self.events_lock = deque(maxlen=10), threading.Lock()
@@ -107,6 +108,33 @@ class Hospital:
         with self.actors_lock:
             for a in self.actors:
                 self._spawn(a.run, (), f'{a.role}-{a.id}')
+        for i, lift in enumerate(self.lifts):
+            self._spawn(self.run_lift, (lift,), f'elevator-{i}')
+
+    def run_lift(self, lift):
+        """An elevator's own thread: to wherever it's needed (Elevator.target), one of its floors at a time."""
+        floors = sorted(lift.stops)
+        while not self.stop.is_set():
+            with lift.cond:
+                target = lift.target()
+                if target is None or target == lift.floor:
+                    if not lift.open:
+                        lift.open = True
+                        lift.cond.notify_all()
+                    lift.cond.wait(0.05)
+                    continue
+                lift.open = False
+                nxt = floors[floors.index(lift.floor) + (1 if target > lift.floor else -1)]
+            self.sleep(config.LIFT_FLOOR_S * abs(nxt - lift.floor))
+            with lift.cond:
+                lift.floor = nxt
+                lift.cond.notify_all()
+
+    def sleep(self, seconds):
+        """`seconds` of simulated time (longer while paused or slowed down; cut short by shutdown)."""
+        end = self.clock() + seconds
+        while self.clock() < end and not self.stop.wait(0.02):
+            pass
 
     def _spawn(self, target, args, name):
         t = threading.Thread(target=target, args=args, name=name, daemon=True)

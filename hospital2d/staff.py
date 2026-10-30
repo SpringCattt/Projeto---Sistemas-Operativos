@@ -626,7 +626,82 @@ class WardNurse(TaskStaff):
         return (keep_free or tiles[0]), None
 
     def drive(self, train, goal, last=None, with_patient=False, timeout=180, yielding=False):
-        """Moves the train (front, middle, back) until its front reaches `goal`, then `last` if given. Each step,
+        """Moves the train (front, middle, back) until its front reaches `goal`, then `last` if given; to another
+        floor in the elevator first (lift)."""
+        floor = self.lay.floor_of(goal[0])
+        if self.lay.floor_of(train[0].tx) != floor and not self.lift(train, floor, with_patient):
+            return False
+        return self.roll(train, goal, last, with_patient, timeout, yielding)
+
+    def lift(self, train, floor, with_patient):
+        """Stretchers can't take the stairs: to `floor` in the elevator. Calls it, waits for its turn, rolls in
+        when it's here, rides (hidden in the box) and rolls out onto the tiles in front of it."""
+        here = self.lay.floor_of(train[0].tx)
+        lifts = [e for e in self.h.lifts if here in e.stops and floor in e.stops]
+        if not lifts:
+            return False
+        near = self.lay.distances_from((train[0].tx, train[0].ty))
+        lift = min(lifts, key=lambda e: near.get(e.stops[here][0][0], 10 ** 6))
+        self.doing = 'waiting for the elevator'
+        lift.call(self, here)
+        try:
+            # first close by (not holding it while it's still far away), off the tiles in front of its door
+            self.roll(train, self.near_lift(lift.stops[here][0], train), with_patient=with_patient, timeout=120)
+            if not self.wait_until(lambda: lift.take(self), timeout=600) \
+                    or not self.roll(train, lift.stops[here][0][0], with_patient=with_patient, timeout=120):
+                return False
+            with self.world.lock:  # in: off the floor
+                for m in train:
+                    if self.world.occupied.get((m.tx, m.ty)) is m:
+                        del self.world.occupied[(m.tx, m.ty)]
+            lift.send(floor)
+            self.doing = 'in the elevator'
+            self.wait_until(lambda: self.ride(train, lift) and lift.there(floor))
+            self.ride(train, lift)
+            # out, onto the column in front of it (whoever stands there steps aside)
+            self.wait_until(lambda: self.get_out(train, lift.stops[floor][0]))
+            return True
+        finally:
+            lift.leave(self)
+
+    def near_lift(self, column, train):
+        """Where a train waits its turn: a free tile a few steps from the elevator's door, on the same floor and
+        off the tiles in front of it (whoever comes out needs them)."""
+        floor, mine = self.lay.floor_of(column[0][0]), {(m.tx, m.ty) for m in train}
+        with self.world.lock:
+            taken = set(self.world.occupied) - mine
+        near = self.lay.distances_from((train[0].tx, train[0].ty))
+        spots = [t for t, d in self.lay.distances_from(column[0]).items()
+                 if 4 <= d <= 8 and self.lay.floor_of(t[0]) == floor and t not in column and t not in taken]
+        return min(spots, key=lambda t: near.get(t, 10 ** 6), default=(train[0].tx, train[0].ty))
+
+    def ride(self, train, lift):
+        """Inside the box, on whichever floor the car is (drawn behind it: out of sight)."""
+        x, y = lift.stops[lift.floor][1]
+        for m, (dx, dy) in zip(train, ((-0.5, -0.3), (0.5, -0.3), (0.0, 0.2))):
+            m.px, m.py = x + dx, y + dy
+            m.tx, m.ty = int(m.px), int(m.py)
+        return True
+
+    def get_out(self, train, column):
+        """Onto the three tiles in front of the elevator, once they're free (whoever is on them is asked to step
+        aside). True when out."""
+        with self.world.lock:
+            occ = self.world.occupied
+            in_the_way = [occ[t] for t in column if t in occ]
+            if not in_the_way:
+                for m, t in zip(train, column):
+                    occ[t] = m
+                    m.tx, m.ty = t
+                    m.px, m.py, m.facing = t[0] + 0.5, t[1] + 0.5, 'down'
+                return True
+        for a in in_the_way:
+            if hasattr(a, 'make_way'):
+                a.make_way = True
+        return False
+
+    def roll(self, train, goal, last=None, with_patient=False, timeout=180, yielding=False):
+        """drive, on one floor. Each step,
         the front takes the next tile and the other two step into the tiles the one ahead of them just left, all
         at the same time: the three can never come apart. It can also turn round (the back becomes the front).
         In the way: someone standing is asked to step aside; when two trains meet head on (at a door, say) the
@@ -680,7 +755,8 @@ class WardNurse(TaskStaff):
             room = self.lay.room_at[x[1]][x[0]]
             return x not in taken and (not with_patient or (x not in self.lay.staff_only and
                                                             (room is None or room.kind not in PATIENT_NEVER)))
-        spots = [x for x, d in around.items() if 4 <= d <= 10 and ok(x) and x in near]
+        spots = [x for x, d in around.items() if 4 <= d <= 10 and ok(x) and x in near
+                 and self.lay.floor_of(x[0]) == self.lay.floor_of(conflict[0])]
         if spots:
             self.drive(train, min(spots, key=near.get), with_patient=with_patient, timeout=20, yielding=True)
         self.wait(1.5)
@@ -696,7 +772,8 @@ class WardNurse(TaskStaff):
         options = []
         for order in (train, train[::-1]):  # forwards, or turned round
             start = (order[0].tx, order[0].ty)
-            r = [] if start == goal else self.lay.path(start, goal, avoid, blocked | {(m.tx, m.ty) for m in order[1:]})
+            r = [] if start == goal else self.lay.path(start, goal, avoid, blocked | {(m.tx, m.ty) for m in order[1:]},
+                                                        stairs=False)
             if r or start == goal:
                 # one more step past the goal: any of `last` except back where it came from (its own stretcher)
                 came = r[-2] if len(r) >= 2 else (order[1].tx, order[1].ty)

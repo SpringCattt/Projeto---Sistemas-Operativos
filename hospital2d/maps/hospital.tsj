@@ -6,7 +6,7 @@
  "columns": 0,
  "margin": 0,
  "spacing": 0,
- "tilecount": 58,
+ "tilecount": 60,
  "tilewidth": 48,
  "tileheight": 48,
  "objectalignment": "bottomleft",
@@ -264,6 +264,29 @@
   },
   {
    "id": 17,
+   "image": "../assets/custom/elevator.png",
+   "imagewidth": 32,
+   "imageheight": 40,
+   "properties": [
+    {
+     "name": "kind",
+     "type": "string",
+     "value": "elevator"
+    },
+    {
+     "name": "w",
+     "type": "int",
+     "value": 2
+    },
+    {
+     "name": "h",
+     "type": "int",
+     "value": 2
+    }
+   ]
+  },
+  {
+   "id": 18,
    "image": "../assets/third_party/hospital/Pngs/room_bed_v.png",
    "imagewidth": 16,
    "imageheight": 32,
@@ -281,7 +304,7 @@
    ]
   },
   {
-   "id": 18,
+   "id": 19,
    "image": "../assets/third_party/moderntown/sprites/shadow/16px/sign/sign_exit.png",
    "imagewidth": 16,
    "imageheight": 16,
@@ -294,7 +317,7 @@
    ]
   },
   {
-   "id": 19,
+   "id": 20,
    "image": "../assets/third_party/moderntown/sprites/shadow/16px/exam/eye_chart.png",
    "imagewidth": 16,
    "imageheight": 16,
@@ -307,7 +330,7 @@
    ]
   },
   {
-   "id": 20,
+   "id": 21,
    "image": "../assets/third_party/hospital/Pngs/lab_refrigerator.png",
    "imagewidth": 16,
    "imageheight": 32,
@@ -320,7 +343,7 @@
    ]
   },
   {
-   "id": 21,
+   "id": 22,
    "image": "../assets/third_party/hospital/Pngs/room_iv_stand_w.png",
    "imagewidth": 16,
    "imageheight": 32,
@@ -333,7 +356,7 @@
    ]
   },
   {
-   "id": 22,
+   "id": 23,
    "image": "../assets/third_party/moderntown/sprites/shadow/16px/sign/map_stand.png",
    "imagewidth": 32,
    "imageheight": 32,
@@ -351,7 +374,7 @@
    ]
   },
   {
-   "id": 23,
+   "id": 24,
    "image": "../assets/third_party/hospital/Pngs/room_ecg_cart.png",
    "imagewidth": 16,
    "imageheight": 32,
@@ -364,7 +387,7 @@
    ]
   },
   {
-   "id": 24,
+   "id": 25,
    "image": "../assets/custom/office_chair.png",
    "imagewidth": 16,
    "imageheight": 15,
@@ -377,7 +400,7 @@
    ]
   },
   {
-   "id": 25,
+   "id": 26,
    "image": "../assets/third_party/hospital/Pngs/operation_table.png",
    "imagewidth": 32,
    "imageheight": 48,
@@ -400,7 +423,7 @@
    ]
   },
   {
-   "id": 26,
+   "id": 27,
    "image": "../assets/custom/pc.png",
    "imagewidth": 16,
    "imageheight": 11,
@@ -413,7 +436,7 @@
    ]
   },
   {
-   "id": 27,
+   "id": 28,
    "image": "../assets/third_party/hospital/Pngs/room_flower.png",
    "imagewidth": 16,
    "imageheight": 16,
@@ -426,7 +449,7 @@
    ]
   },
   {
-   "id": 28,
+   "id": 29,
    "image": "../assets/third_party/hospital/Pngs/room_anatomy_poster.png",
    "imagewidth": 16,
    "imageheight": 16,
@@ -439,7 +462,7 @@
    ]
   },
   {
-   "id": 29,
+   "id": 30,
    "image": "../assets/third_party/hospital/Pngs/room_hand_sanitizer.png",
    "imagewidth": 16,
    "imageheight": 16,
@@ -452,7 +475,7 @@
    ]
   },
   {
-   "id": 30,
+   "id": 31,
    "image": "../assets/third_party/hospital/Pngs/room_pharmacy_shelf.png",
    "imagewidth": 16,
    "imageheight": 16,
@@ -465,7 +488,7 @@
    ]
   },
   {
-   "id": 31,
+   "id": 32,
    "image": "../assets/third_party/hospital/Pngs/lab_sink.png",
    "imagewidth": 32,
    "imageheight": 32,
@@ -483,7 +506,7 @@
    ]
   },
   {
-   "id": 32,
+   "id": 33,
    "image": "../assets/third_party/moderntown/sprites/shadow/16px/shelf/shelf_canned_food.png",
    "imagewidth": 16,
    "imageheight": 32,
@@ -496,7 +519,7 @@
    ]
   },
   {
-   "id": 33,
+   "id": 34,
    "image": "../assets/third_party/moderntown/sprites/shadow/16px/shelf/endcap_soda.png",
    "imagewidth": 16,
    "imageheight": 32,
@@ -509,7 +532,7 @@
    ]
   },
   {
-   "id": 34,
+   "id": 35,
    "image": "../assets/custom/sofa_m.png",
    "imagewidth": 16,
    "imageheight": 14,
@@ -527,7 +550,7 @@
    ]
   },
   {
-   "id": 35,
+   "id": 36,
    "image": "../assets/custom/stretcher_v.png",
    "imagewidth": 14,
    "imageheight": 26,
@@ -540,7 +563,7 @@
    ]
   },
   {
-   "id": 36,
+   "id": 37,
    "image": "../assets/third_party/hospital/Pngs/maternity_table.png",
    "imagewidth": 13,
    "imageheight": 13,
@@ -553,7 +576,7 @@
    ]
   },
   {
-   "id": 37,
+   "id": 38,
    "image": "../assets/third_party/hospital/Pngs/room_trash_bin.png",
    "imagewidth": 16,
    "imageheight": 16,
@@ -566,7 +589,7 @@
    ]
   },
   {
-   "id": 38,
+   "id": 39,
    "image": "../assets/third_party/hospital/Pngs/operation_accessories_table_full.png",
    "imagewidth": 16,
    "imageheight": 16,
@@ -579,7 +602,7 @@
    ]
   },
   {
-   "id": 39,
+   "id": 40,
    "image": "../assets/custom/tv.png",
    "imagewidth": 16,
    "imageheight": 10,
@@ -592,7 +615,7 @@
    ]
   },
   {
-   "id": 40,
+   "id": 41,
    "image": "../assets/third_party/hospital/Pngs/operation_ultrasound_machine.png",
    "imagewidth": 32,
    "imageheight": 32,
@@ -610,7 +633,7 @@
    ]
   },
   {
-   "id": 41,
+   "id": 42,
    "image": "../assets/custom/vending.png",
    "imagewidth": 16,
    "imageheight": 15,
@@ -623,98 +646,104 @@
    ]
   },
   {
-   "id": 42,
+   "id": 43,
    "image": "../assets/custom/floor_bar.png",
    "imagewidth": 16,
    "imageheight": 16
   },
   {
-   "id": 43,
+   "id": 44,
    "image": "../assets/custom/floor_control.png",
    "imagewidth": 16,
    "imageheight": 16
   },
   {
-   "id": 44,
+   "id": 45,
    "image": "../assets/custom/floor_corridor.png",
    "imagewidth": 16,
    "imageheight": 16
   },
   {
-   "id": 45,
+   "id": 46,
    "image": "../assets/custom/floor_disinfection.png",
    "imagewidth": 16,
    "imageheight": 16
   },
   {
-   "id": 46,
+   "id": 47,
    "image": "../assets/custom/floor_doctor.png",
    "imagewidth": 16,
    "imageheight": 16
   },
   {
-   "id": 47,
+   "id": 48,
    "image": "../assets/custom/floor_emergency.png",
    "imagewidth": 16,
    "imageheight": 16
   },
   {
-   "id": 48,
+   "id": 49,
    "image": "../assets/custom/floor_grass.png",
    "imagewidth": 16,
    "imageheight": 16
   },
   {
-   "id": 49,
+   "id": 50,
    "image": "../assets/custom/floor_reception.png",
    "imagewidth": 16,
    "imageheight": 16
   },
   {
-   "id": 50,
+   "id": 51,
    "image": "../assets/custom/floor_rest.png",
    "imagewidth": 16,
    "imageheight": 16
   },
   {
-   "id": 51,
+   "id": 52,
    "image": "../assets/custom/floor_storage.png",
    "imagewidth": 16,
    "imageheight": 16
   },
   {
-   "id": 52,
+   "id": 53,
    "image": "../assets/custom/floor_street.png",
    "imagewidth": 16,
    "imageheight": 16
   },
   {
-   "id": 53,
+   "id": 54,
    "image": "../assets/custom/floor_surgery.png",
    "imagewidth": 16,
    "imageheight": 16
   },
   {
-   "id": 54,
+   "id": 55,
    "image": "../assets/custom/floor_triage.png",
    "imagewidth": 16,
    "imageheight": 16
   },
   {
-   "id": 55,
+   "id": 56,
    "image": "../assets/custom/floor_waiting.png",
    "imagewidth": 16,
    "imageheight": 16
   },
   {
-   "id": 56,
+   "id": 57,
    "image": "../assets/custom/wall.png",
    "imagewidth": 16,
    "imageheight": 16
   },
   {
-   "id": 57,
+   "id": 58,
    "image": "../assets/custom/door.png",
+   "imagewidth": 16,
+   "imageheight": 16
+  },
+  {
+   "id": 59,
+   "image": "../assets/custom/stairs.png",
    "imagewidth": 16,
    "imageheight": 16
   }

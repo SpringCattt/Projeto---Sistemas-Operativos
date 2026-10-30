@@ -8,15 +8,12 @@ import time
 import config
 from sim import Hospital
 
-CASES = [  # (doctors, patients already waiting)
-    (7, 20), (7, 60), (15, 120), (25, 200), (40, 300), (60, 450), (80, 600), (120, 900), (160, 1200),
-    (200, 1500), (250, 1900),
-]
+CASES = [20, 60, 120, 200, 300, 450, 600, 900, 1200, 1500, 1900]  # patients already waiting (the staff: the map's)
 WARMUP_S, MEASURE_S = 2.0, 6.0
 
 
-def measure(n_doctors, n_patients):
-    h = Hospital(seed=1, n_doctors=n_doctors, n_patients=n_patients)
+def measure(n_patients):
+    h = Hospital(seed=1, n_patients=n_patients)
     h.start()
     time.sleep(WARMUP_S)
     h.measure()  # starts the window
@@ -40,11 +37,11 @@ def measure(n_doctors, n_patients):
 if __name__ == '__main__':
     print(f'Threads ask for {config.ACTOR_HZ} updates/s walking and {config.IDLE_HZ} standing still; '
           f'limit at 80 % keeping up.\n')
-    print('| doctors | patients | threads | keeping up | updates/s per actor | CPU (cores) | snapshot | size |')
-    print('|--------:|---------:|--------:|-----------:|--------------------:|------------:|---------:|-----:|')
-    for n_doctors, n_patients in CASES:
-        threads, keep_up, hz, cpu, snap_ms, kb = measure(n_doctors, n_patients)
-        print(f'| {n_doctors} | {n_patients} | {threads} | {100 * keep_up:.0f} % | {hz:.1f} | {cpu:.2f} '
+    print('| patients | threads | keeping up | updates/s per actor | CPU (cores) | snapshot | size |')
+    print('|---------:|--------:|-----------:|--------------------:|------------:|---------:|-----:|')
+    for n_patients in CASES:
+        threads, keep_up, hz, cpu, snap_ms, kb = measure(n_patients)
+        print(f'| {n_patients} | {threads} | {100 * keep_up:.0f} % | {hz:.1f} | {cpu:.2f} '
               f'| {snap_ms:.1f} ms | {kb:.0f} KB |', flush=True)
         if keep_up < 0.5:
             break  # far past the limit: no point going on

@@ -6,7 +6,7 @@
  "columns": 0,
  "margin": 0,
  "spacing": 0,
- "tilecount": 45,
+ "tilecount": 58,
  "tilewidth": 48,
  "tileheight": 48,
  "objectalignment": "bottomleft",
@@ -624,19 +624,97 @@
   },
   {
    "id": 42,
-   "image": "../assets/custom/wall.png",
+   "image": "../assets/custom/floor_bar.png",
    "imagewidth": 16,
    "imageheight": 16
   },
   {
    "id": 43,
-   "image": "../assets/custom/door.png",
+   "image": "../assets/custom/floor_control.png",
    "imagewidth": 16,
    "imageheight": 16
   },
   {
    "id": 44,
+   "image": "../assets/custom/floor_corridor.png",
+   "imagewidth": 16,
+   "imageheight": 16
+  },
+  {
+   "id": 45,
+   "image": "../assets/custom/floor_disinfection.png",
+   "imagewidth": 16,
+   "imageheight": 16
+  },
+  {
+   "id": 46,
+   "image": "../assets/custom/floor_doctor.png",
+   "imagewidth": 16,
+   "imageheight": 16
+  },
+  {
+   "id": 47,
+   "image": "../assets/custom/floor_emergency.png",
+   "imagewidth": 16,
+   "imageheight": 16
+  },
+  {
+   "id": 48,
+   "image": "../assets/custom/floor_grass.png",
+   "imagewidth": 16,
+   "imageheight": 16
+  },
+  {
+   "id": 49,
+   "image": "../assets/custom/floor_reception.png",
+   "imagewidth": 16,
+   "imageheight": 16
+  },
+  {
+   "id": 50,
+   "image": "../assets/custom/floor_rest.png",
+   "imagewidth": 16,
+   "imageheight": 16
+  },
+  {
+   "id": 51,
    "image": "../assets/custom/floor_storage.png",
+   "imagewidth": 16,
+   "imageheight": 16
+  },
+  {
+   "id": 52,
+   "image": "../assets/custom/floor_street.png",
+   "imagewidth": 16,
+   "imageheight": 16
+  },
+  {
+   "id": 53,
+   "image": "../assets/custom/floor_surgery.png",
+   "imagewidth": 16,
+   "imageheight": 16
+  },
+  {
+   "id": 54,
+   "image": "../assets/custom/floor_triage.png",
+   "imagewidth": 16,
+   "imageheight": 16
+  },
+  {
+   "id": 55,
+   "image": "../assets/custom/floor_waiting.png",
+   "imagewidth": 16,
+   "imageheight": 16
+  },
+  {
+   "id": 56,
+   "image": "../assets/custom/wall.png",
+   "imagewidth": 16,
+   "imageheight": 16
+  },
+  {
+   "id": 57,
+   "image": "../assets/custom/door.png",
    "imagewidth": 16,
    "imageheight": 16
   }

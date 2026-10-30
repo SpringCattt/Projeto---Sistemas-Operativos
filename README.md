@@ -38,7 +38,8 @@ on · `B` see what the Boss is doing · `L` event log · `ESC` close · `Tab` **
 patients, trigger events, hire/send home staff) · `Space` pause · `+`/`-` speed.
 
 To make it calmer or bigger, change [`hospital2d/config.py`](hospital2d/config.py): `TIME_SCALE` (0.5 = half
-speed), `N_PATIENTS`, `ARRIVALS_PER_MINUTE`, `MAX_DOCTORS` (the building grows around the centre with it)…
+speed), `N_PATIENTS`, `ARRIVALS_PER_MINUTE`… The building itself is a map you draw in
+[Tiled](https://www.mapeditor.org/): [`hospital2d/maps/floor0.tmj`](hospital2d/maps/floor0.tmj).
 
 ## How it works, in short
 

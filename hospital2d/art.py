@@ -4,7 +4,6 @@ import os
 import pygame
 
 import config
-from layout import EMPTY, WALL, DOOR
 
 T = config.TILE
 ASSETS = os.path.join(os.path.dirname(__file__), 'assets')
@@ -43,18 +42,8 @@ def draw_layout(lay):
     """Floor, walls and doors, drawn once into a Surface (the camera only crops and scales it).
     Furniture is drawn every frame together with the actors (furniture_sprites), so people can be behind it."""
     surf = pygame.Surface((lay.width * T, lay.height * T))
-    for y in range(lay.height):
-        for x in range(lay.width):
-            tile = lay.tiles[y][x]
-            room = lay.room_at[y][x]
-            if tile == EMPTY:
-                name = 'custom/floor_grass'
-            elif tile == WALL:
-                name = 'custom/wall'
-            elif tile == DOOR:
-                name = 'custom/door'
-            else:
-                name = f'custom/floor_{room.kind}'
+    for y, row in enumerate(lay.ground):  # each tile as painted in the map
+        for x, name in enumerate(row):
             surf.blit(image(name), (x * T, y * T))
     return surf
 

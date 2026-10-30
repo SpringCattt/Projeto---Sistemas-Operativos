@@ -315,8 +315,11 @@ def test_admin():
         h.command(('fire', 'Doctor'))
         assert len(h.working(JOBS['Doctor'])) == doctors - 1
         h.command(('hire', 'Doctor'))
-        h.command(('hire', 'Doctor'))  # no third room: refused
         assert len(h.working(JOBS['Doctor'])) == doctors
+        rooms = len(h.lay.rooms_of('doctor'))
+        for _ in range(rooms + 1):  # the last one finds no free room: refused
+            h.command(('hire', 'Doctor'))
+        assert len(h.working(JOBS['Doctor'])) == rooms
         h.command(('hire', 'Cleaner'))
         new = h.actors[-1]
         assert until(lambda: (new.tx, new.ty) == new.commute or new.doing != 'idle', 30), 'the new cleaner never came in'
@@ -339,7 +342,7 @@ def test_overtaking():
             h.world.occupied[(x, y)] = a
     walker.set_path(walker.route((x1, y)))
     runner.speed = config.RUN_SPEED[2]
-    runner.set_path(runner.route((x1 - 2, y)))
+    runner.set_path(runner.route((x0 + 21, y)))  # 20 tiles: ~6 s running past the walker, ~13 s stuck behind it
     assert runner.path and len(set(runner.path) - {(x, y) for x in range(x0, x1 + 1)}) == 0  # straight behind it
     dt, t = 1 / 30, 0.0
     while runner.path and t < 30:

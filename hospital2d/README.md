@@ -36,25 +36,36 @@ they take effect at once (a few ms), whatever the actors are doing.
 
 ## The building
 
-The hospital is built around its centre: the **Main Hall**, with the Boss's round **Control Room** in the middle
+The hospital is drawn in the free [Tiled](https://www.mapeditor.org/) map editor
+([`maps/floor0.tmj`](maps/floor0.tmj)); nothing about the building is in the code. As it comes, it's built around its centre: the **Main Hall**, with the Boss's round **Control Room** in the middle
 (sealed: no doors; the Boss sits in the exact centre and nobody else goes in). The main corridor runs through the
 hall and out to both sides, and ends in an exit at each end: whoever has seen a doctor leaves that way, so they
 don't walk back against the people coming in through reception and the waiting rooms. Under the hall is the base
-block, always the same: street → reception → a triage room on each side (two nurses each) → the two waiting rooms,
-plus the bar. Every other room — doctors' rooms first, then the surgery groups (surgery | disinfection |
-surgery), storage and rest — goes to whichever side is shortest so far (on top of the hall, or along the corridor,
-above or below, left or right), so the hospital grows evenly around the control room as `MAX_DOCTORS` grows.
+block: street → reception → a triage room on each side → the two waiting rooms, plus the bar. Around them, the
+doctors' rooms, Emergency with its ambulance bay, the surgery groups (surgery | disinfection | surgery), storage
+and rest.
 
-Everything you can tune is in [`config.py`](config.py): number of doctors (the building grows with them), surgeries,
-staff, arrivals per minute, surges, how long things take, patience, the dispatcher's weights, fatigue,
-`TIME_SCALE` to speed everything up.
+**Editing the building.** Open `maps/floor0.tmj` in Tiled (turn on *View → Snapping → Snap to Grid*). It has three
+layers, and the game reads all of them the next time it starts:
+* **ground** — paint tiles from the `hospital` tileset. `wall` is a wall, `door` a door, `floor_grass` outside;
+  any other floor tile is floor (each room type has its own look).
+* **rooms** — a rectangle over each room, walls included (an ellipse for a round one). Its *name* is shown in the
+  game; its *class* is its kind: `waiting`, `reception`, `triage`, `doctor`, `emergency`, `surgery`, `disinfection`,
+  `storage`, `rest`, `bar`, `control`, `corridor`, `street`. Custom properties: `partner` (the room it works with:
+  triage → its waiting room, surgery → its disinfection room) and `walls` = false for the street. Rectangles of
+  class `staff_only` mark where patients never go (behind the counters). Streets named `Exit` are the ways out
+  after a visit; the one named `Ambulance Bay` is where ambulances leave patients.
+* **furniture** — drag pieces from the tileset. A piece takes up the tiles its tile says (properties `w`, `h`),
+  unless the piece has its own `w`, `h`. `stretcher` pieces are where stretchers park.
 
-**Editing a room visually.** The storage room is drawn in the free [Tiled](https://www.mapeditor.org/) map editor:
-open [`rooms/storage.tmj`](rooms/storage.tmj), turn on *View → Snapping → Snap to Grid*, drag furniture from the
-`hospital` tileset (every furniture PNG is there) onto the `furniture` layer, move or delete pieces, and save. The
-`stretcher` pieces are where stretchers park. The next run of the game uses it, mirrored when the room's door is on
-top. The walls and door layer is only a guide; the map's size is the room's size, walls included. A piece that
-touches a door or sits on a wall is left out, and so is decoration that would leave a way through one tile wide.
+The staff follows the map: one doctor per doctor's room (desk with an office chair and a patient's chair, and an
+exam bed), one receptionist per office chair at reception, one triage nurse per office chair in triage, one
+operating room per surgery (with an operating table). A piece that touches a door or sits across two rooms is left
+out, and so is decoration that would leave a way through one tile wide. `python test_layout.py` checks a map works:
+every room reachable, the patients' routes, every desk and bed usable.
+
+Everything else you can tune is in [`config.py`](config.py): nurses, security, cleaners, arrivals per minute,
+surges, how long things take, patience, the dispatcher's weights, fatigue, `TIME_SCALE` to speed everything up.
 
 ## Architecture
 
@@ -165,7 +176,7 @@ straight instead of zig-zagging.
   room (semaphore) and only then goes in, from the disinfection room — never straight from the corridor.
 * **Ambulances:** patients who need surgery arrive by ambulance, already triaged as Red, through Emergency's own
   door at the back (the ambulance bay), so they never walk through the hospital.
-* **Stretchers** (`config.STRETCHERS`) are parked in storage, where `rooms/storage.tmj` has them. The dispatcher hands out the two nurses of
+* **Stretchers** (`config.STRETCHERS`) are parked in storage, where the map's `stretcher` pieces are. The dispatcher hands out the two nurses of
   a stretcher together or not at all: giving one now and the other later would leave nurses waiting in storage for a
   partner who's busy with another half-started stretcher (hold and wait). Trains returning a stretcher claim their
   parking spot first, so two never head for the same one.
@@ -191,7 +202,7 @@ straight instead of zig-zagging.
 | `arrivals.py` | the arrivals process |
 | `eventlog.py` | the log process |
 | `layout.py` | builds the plan from `config.py`: rooms, doors, furniture, named spots |
-| `rooms/` | rooms drawn in Tiled (`storage.tmj`) and the tileset with every furniture PNG (`hospital.tsj`) |
+| `maps/` | the building, drawn in Tiled (`floor0.tmj`), and the tileset with every floor, wall and furniture PNG (`hospital.tsj`) |
 | `art.py` | loads the PNGs and draws the plan |
 | `dialogue.py` | picks what people say from `data/dialogue.txt` |
 | `data/` | names, complaints and dialogue lines, one per line |
@@ -217,7 +228,8 @@ surgery route through disinfection, and every patience reaction.
 
 `python bench.py` runs the simulation without the UI with more and more people and measures how well the actor
 threads keep up with the rate they ask for. Below 80 % the hospital is too big for the machine. Results on a
-Ryzen 5 3600, Python 3.14 (one process, so all actor threads share the GIL):
+Ryzen 5 3600, Python 3.14 (one process, so all actor threads share the GIL). These were measured when the building
+still grew with the number of doctors; `bench.py` now keeps the map's staff and adds patients:
 
 | doctors | patients | threads | keeping up, everyone at 30/s | keeping up, still people at 10/s | snapshot to the UI |
 |--------:|---------:|--------:|-----------------------------:|---------------------------------:|-------------------:|

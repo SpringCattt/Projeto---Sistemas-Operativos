@@ -142,6 +142,7 @@ structures ([`world.py`](world.py)):
 | `Dispatcher` | monitor (`Condition`) | open tasks and who is doing what; woken up by every new task and every finished one |
 | `Theatres` | counting `Semaphore` + `Lock` | how many operating rooms are free, and which |
 | `Transfer` | `Condition` + `Event`s | two nurses meet at storage with a stretcher, then pick up and deliver a Red patient |
+| ambulance bay | `Semaphore(1)` | one ambulance there at a time: the next one waits up the road |
 | `Elevator` | monitor (`Condition`) + the car's own thread | stretchers between floors: they call it and wait their turn (first come, first served); it goes to whoever's turn it is, waits until the stretcher is in, takes it to its floor and waits until it's out. A stretcher waits its turn a few steps away and holds the elevator until it's out, so two never block each other at its door |
 | disinfection rooms | counting `Semaphore` (one per room) | as many doctors washing at once as the room has sinks |
 
@@ -223,8 +224,14 @@ straight instead of zig-zagging.
   jumping between similar tasks. The interrupted patient goes back to the waiting room, keeping its place.
 * **Surgery** is never interrupted. The doctor takes a free operating room (semaphore), washes in its disinfection
   room (semaphore) and only then goes in, from the disinfection room — never straight from the corridor.
-* **Ambulances:** every Red patient arrives by ambulance (and needs surgery), already triaged, onto a bed in
-  Emergency, through its own door at the back (the ambulance bay): they never walk.
+* **Ambulances:** every Red patient arrives by ambulance (and needs surgery), already triaged: they never walk. An
+  `Ambulance` is an actor with its own thread: it waits its turn for the bay (a semaphore, one at a time), comes down
+  its road from the top edge of the map with the siren on, and parks where the map's `ambulance` piece is. Its two
+  `Paramedic`s (no thread of their own, and not on the payroll: the ambulance's thread moves them, with the same
+  train code as the hospital's stretchers) slide out of the back with the patient on their stretcher, take it to a
+  free bed in Emergency (kept for them while they go: `claim_bed`; if all are taken, they wait), slide it onto the
+  bed, and only then is it in the doctors' queue. Then they get back in and it drives off. The day doesn't end while
+  an ambulance is still bringing someone.
 * **Stretchers** (`config.STRETCHERS`) are parked upright in storage, where the map's `stretcher` pieces are.
   Whoever parks one ends up on a side it can walk away from (never a corner the stretcher would shut), idle staff
   never stand next to the parked ones, and `test_layout.py` checks every parking spot can be used that way. The dispatcher hands out the two nurses of

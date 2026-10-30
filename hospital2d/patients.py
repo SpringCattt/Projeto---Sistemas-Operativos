@@ -29,6 +29,7 @@ class Patient(Actor):
         self.waiting_room, self.waiting_since, self.triaged_at = None, None, None
         self.waited = 0.0  # from triage to the doctor (what it pays depends on it: Hospital.treated)
         self.helpers = {}  # step ('reception', 'triage', 'stretcher', 'doctor') -> who did it (shares its payment)
+        self.delivered = None  # brought by ambulance: an Event, set once the paramedics have put it on a bed
         self.triaged = triaged
         self.provoke = None  # 'fight' / 'vomit': ordered from the admin tablet (done by its own thread)
 
@@ -48,6 +49,8 @@ class Patient(Actor):
 
     # ---- the visit ------------------------------------------------------------------------------------------
     def life(self):
+        if self.delivered is not None:  # on the paramedics' stretcher: nothing to do until it's on a bed
+            self.wait_until(self.delivered.is_set)
         if not self.triaged:
             self.queue_at_reception()
             self.wait_for_triage()
@@ -127,15 +130,15 @@ class Patient(Actor):
         beds = self.lay.emergency_beds[room]
         self.area = []
         self.stage, self.allowed = 'going to Emergency', BASE_ROOMS | {'triage', 'corridor', 'emergency', 'doctor'}
-        while True:
+        bed = next((b for b in beds if b[0] == (self.tx, self.ty)), None)  # already on one (the paramedics put it)
+        while bed is None:
             free = [b for b in beds if b[0] not in self.world.occupied or self.world.occupied[b[0]] is self]
             if not free:  # Emergency is full: the waiting room, like everyone else
                 self.waiting_room = self.lay.rooms_of('waiting')[0]
                 return self.go_wait()
             if self.walk_to(free[0][0]):
-                break
+                bed = next(b for b in beds if b[0] == (self.tx, self.ty))
         self.allowed = BASE_ROOMS | {'emergency'}
-        bed = next(b for b in beds if b[0] == (self.tx, self.ty))
         self.lie_on(bed[1])
 
     def wait_for_doctor(self):

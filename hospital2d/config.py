@@ -18,6 +18,7 @@ MIN_FPS = 30
 
 ACTOR_SPEED = 1.5  # tiles per second
 LIFT_FLOOR_S = 3.0  # the elevator, per floor (stretchers can't take the stairs)
+AMBULANCE_SPEED = 4.0  # tiles per second, coming down the road to the ambulance bay (and leaving)
 RUN_SPEED = [1.4, 1.8, 2.4]  # x ACTOR_SPEED: staff run to a task in another room, faster the more urgent
 STRETCHER_SPEED = 2.4  # the two nurses pushing a stretcher (and the patient on it)
 TIME_SCALE = 1.0  # 2.0 = everything (walking, waiting, arrivals) happens twice as fast

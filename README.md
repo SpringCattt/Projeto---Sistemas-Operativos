@@ -39,7 +39,9 @@ patients, trigger events, hire/send home staff) · `Space` pause · `+`/`-` spee
 
 To make it calmer or bigger, change [`hospital2d/config.py`](hospital2d/config.py): `TIME_SCALE` (0.5 = half
 speed), `N_PATIENTS`, `ARRIVALS_PER_MINUTE`… The building itself is a map you draw in
-[Tiled](https://www.mapeditor.org/): [`hospital2d/maps/floor0.tmj`](hospital2d/maps/floor0.tmj).
+[Tiled](https://www.mapeditor.org/), one map per floor: [`hospital2d/maps/`](hospital2d/maps/). Three floors:
+emergencies on the ground floor, doctors' rooms on the first, surgeries, storage and rest on the second; `PgUp` /
+`PgDn` (or the floor buttons) show another one.
 
 ## How it works, in short
 
@@ -71,6 +73,7 @@ They share the building, so they synchronise:
 | A doctor calls a patient and waits for them | two **events**: "I'm here" and "you can go" |
 | Only so many operating rooms and sinks | **semaphores** |
 | Two nurses meet at storage before bringing a stretcher | **condition + events** (rendezvous) |
+| One elevator for every stretcher, between floors | a **monitor** with its own thread (the car): first come, first served, one stretcher at a time |
 | Who handles each task | the **Boss**, a thread that scores everyone by distance, fatigue and how busy they are |
 | Two people blocking each other in a doorway | whoever has waited too long steps aside (no deadlock) |
 

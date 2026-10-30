@@ -284,6 +284,61 @@ class Dispatcher:
                 float(actor.task is not None), float(actor.resting))
 
 
+class Elevator:
+    """An elevator, shared by the stretcher trains (a stretcher fills it: one train at a time). A monitor: a train
+    calls it to its floor and waits its turn, first come first served; the car, with its own thread
+    (Hospital.run_lift), goes to whoever's turn it is, waits with the doors open until the train is in, takes it to
+    its floor and waits again until it's out. The train holds it from its turn until it's out, so two trains never
+    meet at its door (one waiting to get in where the other has to get out)."""
+
+    def __init__(self, stops):
+        self.stops = stops  # {floor: (the column in front of it, the middle of its box)} (Layout.lifts)
+        self.cond = threading.Condition()
+        self.floor = min(stops)
+        self.queue = []  # [(train lead, its floor)], in the order they called
+        self.rider, self.to = None, None  # whose turn it is (getting in, inside or getting out), and to where
+        self.open = True  # doors open: stopped at self.floor
+
+    def call(self, rider, floor):
+        with self.cond:
+            if all(r is not rider for r, _ in self.queue):
+                self.queue.append((rider, floor))
+                self.cond.notify_all()
+
+    def take(self, rider):
+        """True once it's the rider's turn and the car is at its floor with the doors open: the rider's until it
+        leaves."""
+        with self.cond:
+            if self.rider is None and self.queue and self.queue[0][0] is rider and self.open                     and self.floor == self.queue[0][1]:
+                self.queue.pop(0)
+                self.rider = rider
+                return True
+            return False
+
+    def send(self, floor):
+        with self.cond:
+            self.to = floor
+            self.cond.notify_all()
+
+    def there(self, floor):
+        with self.cond:
+            return self.open and self.floor == floor
+
+    def leave(self, rider):
+        """Out (or giving up its place in the queue)."""
+        with self.cond:
+            self.queue = [(r, f) for r, f in self.queue if r is not rider]
+            if self.rider is rider:
+                self.rider = self.to = None
+            self.cond.notify_all()
+
+    def target(self):
+        """(cond held) Where the car should be now, or None: stay."""
+        if self.rider is not None:
+            return self.to
+        return self.queue[0][1] if self.queue else None
+
+
 class Theatres:
     """Operating rooms: a counting semaphore says how many are free, a lock guards which ones."""
 

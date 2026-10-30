@@ -2,6 +2,7 @@
 # Takes about 1.5 minutes.
 import contextlib
 import queue
+import threading
 import time
 from types import SimpleNamespace
 
@@ -176,10 +177,10 @@ def test_flow_and_rules():
                         assert (a.tx, a.ty) not in h.lay.staff_only, f'{a.name} behind a counter'
                         assert room is None or room.kind not in PATIENT_ONLY_NOT, f'{a.name} in {room.name}'
             time.sleep(0.01)
+        # the doctors are upstairs: the first ones take a while to get there
+        assert until(lambda: h.stats['treated'] >= 5, 30), h.summary()
     finally:
         stop(h)
-    events = ' '.join(text for _, text in h.events) + ' ' + h.summary()
-    assert h.stats['treated'] >= 5, h.summary()
     assert h.stats['arrived'] >= 10
 
 
@@ -295,6 +296,26 @@ def test_positions():
     assert read_positions(shared) == {i: row(i) for i in range(3)}
     write_positions(shared, people[:1])
     assert read_positions(shared) == {0: row(0)}
+
+
+def test_elevator():
+    """The elevator serves the trains in the order they called, one at a time, and takes each to its floor."""
+    h = Hospital(seed=12, n_doctors=1, n_surgeries=0, n_patients=0)  # not started: only the elevator runs
+    lift = h.lifts[0]
+    threading.Thread(target=h.run_lift, args=(lift,), daemon=True).start()
+    first, second = object(), object()
+    try:
+        lift.call(first, 2)
+        lift.call(second, 0)
+        assert until(lambda: lift.take(first), 10) and lift.floor == 2  # it went up for whoever called first
+        assert not lift.take(second)
+        lift.send(0)
+        assert until(lambda: lift.there(0), 10)
+        assert not lift.take(second)  # still the first one's until it's out
+        lift.leave(first)
+        assert until(lambda: lift.take(second), 5)
+    finally:
+        h.stop.set()
 
 
 def test_admin():

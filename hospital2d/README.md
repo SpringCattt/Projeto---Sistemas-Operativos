@@ -36,19 +36,33 @@ they take effect at once (a few ms), whatever the actors are doing.
 
 ## The building
 
-The hospital is drawn in the free [Tiled](https://www.mapeditor.org/) map editor
-([`maps/floor0.tmj`](maps/floor0.tmj)); nothing about the building is in the code. As it comes, it's built around its centre: the **Main Hall**, with the Boss's round **Control Room** in the middle
+The hospital is drawn in the free [Tiled](https://www.mapeditor.org/) map editor, one map per floor
+([`maps/floor0.tmj`](maps/floor0.tmj), `floor1.tmj`, `floor2.tmj`); nothing about the building is in the code. The
+game shows one floor at a time: `PgUp` / `PgDn` or the floor buttons, and the view follows whoever you've clicked
+when they go up or down.
+
+* **Ground floor:** emergencies. Street, reception, triage, waiting rooms, bar, Emergency (with its ambulance
+  bay) and the Boss's control room.
+* **First floor:** the doctors' rooms.
+* **Second floor:** the surgeries (with their disinfection rooms), storage and rest.
+
+Every floor has the **Main Hall** in the same place, with **stairs** and an **elevator** in it. People walk up
+and down the stairs (a flight takes `STAIRS_S`); stretchers can't, so they take the elevator: one stretcher at a
+time, first come first served, the car moving a floor every `LIFT_FLOOR_S` (see the `Elevator` monitor).
+
+On the ground floor, the hall has the Boss's round **Control Room** in the middle
 (sealed: no doors; the Boss sits in the exact centre and nobody else goes in). The main corridor runs through the
 hall and out to both sides, and ends in an exit at each end: whoever has seen a doctor leaves that way, so they
 don't walk back against the people coming in through reception and the waiting rooms. Under the hall is the base
-block: street → reception → a triage room on each side → the two waiting rooms, plus the bar. Around them, the
-doctors' rooms, Emergency with its ambulance bay, the surgery groups (surgery | disinfection | surgery), storage
-and rest.
+block: street → reception → a triage room on each side → the two waiting rooms, plus the bar; Emergency is on
+top of the hall.
 
-**Editing the building.** Open `maps/floor0.tmj` in Tiled (turn on *View → Snapping → Snap to Grid*). It has three
-layers, and the game reads all of them the next time it starts:
+**Editing the building.** Open a floor (`maps/floorN.tmj`, 0 = ground floor) in Tiled (turn on *View → Snapping →
+Snap to Grid*). Another file `floor3.tmj` is another floor. Each map has three layers, and the game reads them all
+the next time it starts:
 * **ground** — paint tiles from the `hospital` tileset. `wall` is a wall, `door` a door, `floor_grass` outside;
-  any other floor tile is floor (each room type has its own look).
+  any other floor tile is floor (each room type has its own look). `stairs` lead to the `stairs` tile at the same
+  place on the floor above and below.
 * **rooms** — a rectangle over each room, walls included (an ellipse for a round one). Its *name* is shown in the
   game; its *class* is its kind: `waiting`, `reception`, `triage`, `doctor`, `emergency`, `surgery`, `disinfection`,
   `storage`, `rest`, `bar`, `control`, `corridor`, `street`. Custom properties: `partner` (the room it works with:
@@ -56,13 +70,16 @@ layers, and the game reads all of them the next time it starts:
   class `staff_only` mark where patients never go (behind the counters). Streets named `Exit` are the ways out
   after a visit; the one named `Ambulance Bay` is where ambulances leave patients.
 * **furniture** — drag pieces from the tileset. A piece takes up the tiles its tile says (properties `w`, `h`),
-  unless the piece has its own `w`, `h`. `stretcher` pieces are where stretchers park.
+  unless the piece has its own `w`, `h`. `stretcher` pieces are where stretchers park. An `elevator` stops on
+  every floor that has one at the same place; it opens downwards, onto three free tiles (where a stretcher gets in
+  and out).
 
 The staff follows the map: one doctor per doctor's room (desk with an office chair and a patient's chair, and an
 exam bed), one receptionist per office chair at reception, one triage nurse per office chair in triage, one
 operating room per surgery (with an operating table). A piece that touches a door or sits across two rooms is left
-out, and so is decoration that would leave a way through one tile wide. `python test_layout.py` checks a map works:
-every room reachable, the patients' routes, every desk and bed usable.
+out, and so is decoration that would leave a way through one tile wide. `python test_layout.py` checks the maps
+work: every room reachable, stairs between each floor and the next, an elevator to every floor, the patients'
+routes, every desk and bed usable.
 
 Everything else you can tune is in [`config.py`](config.py): nurses, security, cleaners, arrivals per minute,
 surges, how long things take, patience, the dispatcher's weights, fatigue, `TIME_SCALE` to speed everything up.
@@ -109,6 +126,7 @@ structures ([`world.py`](world.py)):
 | `Dispatcher` | monitor (`Condition`) | open tasks and who is doing what; woken up by every new task and every finished one |
 | `Theatres` | counting `Semaphore` + `Lock` | how many operating rooms are free, and which |
 | `Transfer` | `Condition` + `Event`s | two nurses meet at storage with a stretcher, then pick up and deliver a Red patient |
+| `Elevator` | monitor (`Condition`) + the car's own thread | stretchers between floors: they call it and wait their turn (first come, first served); it goes to whoever's turn it is, waits until the stretcher is in, takes it to its floor and waits until it's out. A stretcher waits its turn a few steps away and holds the elevator until it's out, so two never block each other at its door |
 | disinfection rooms | counting `Semaphore` (one per room) | as many doctors washing at once as the room has sinks |
 
 **Deadlocks.** No thread ever holds two of those locks at the same time, so there is no lock-ordering deadlock.
@@ -202,7 +220,7 @@ straight instead of zig-zagging.
 | `arrivals.py` | the arrivals process |
 | `eventlog.py` | the log process |
 | `layout.py` | builds the plan from `config.py`: rooms, doors, furniture, named spots |
-| `maps/` | the building, drawn in Tiled (`floor0.tmj`), and the tileset with every floor, wall and furniture PNG (`hospital.tsj`) |
+| `maps/` | the building, one Tiled map per floor (`floor0.tmj`...), and the tileset with every floor, wall, stairs and furniture PNG (`hospital.tsj`) |
 | `art.py` | loads the PNGs and draws the plan |
 | `dialogue.py` | picks what people say from `data/dialogue.txt` |
 | `data/` | names, complaints and dialogue lines, one per line |

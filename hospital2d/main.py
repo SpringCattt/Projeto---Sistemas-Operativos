@@ -93,23 +93,26 @@ def draw_panel(screen, font, title, lines, topright, width=CARD_W):
     return rect.bottom
 
 
-def draw_dispatcher(screen, font, boss, to_screen, by_id):
+def draw_dispatcher(screen, font, boss, to_screen, by_id, shown):
     """On the map: a line from each busy member of staff to its task (urgency colour), and a pulsing ring on
-    every task still waiting for someone. When a task is about a person, it follows that person smoothly."""
+    every task still waiting for someone. When a task is about a person, it follows that person smoothly.
+    Only what's on the floor on screen (shown(x): is x on it)."""
     pulse = 6 + 3 * abs((pygame.time.get_ticks() // 60) % 10 - 5) / 5
 
     def where(about_id, tile):
         who = by_id.get(about_id)
-        return to_screen(who.px, who.py) if who is not None else to_screen(tile[0] + 0.5, tile[1] + 0.5)
+        x, y = (who.px, who.py) if who is not None else (tile[0] + 0.5, tile[1] + 0.5)
+        return to_screen(x, y) if shown(x) else None
 
     for actor_id, about_id, tile, urgency, _ in boss['working']:
-        a = by_id.get(actor_id)
-        if a is not None:
-            end = where(about_id, tile)
+        a, end = by_id.get(actor_id), where(about_id, tile)
+        if a is not None and end is not None and shown(a.px):
             pygame.draw.line(screen, URGENCY_COLORS[urgency], to_screen(a.px, a.py), end, 3)
             pygame.draw.circle(screen, URGENCY_COLORS[urgency], end, 6)
     for about_id, tile, urgency, _ in boss['open']:
-        pygame.draw.circle(screen, URGENCY_COLORS[urgency], where(about_id, tile), pulse * 2, 3)
+        spot = where(about_id, tile)
+        if spot is not None:
+            pygame.draw.circle(screen, URGENCY_COLORS[urgency], spot, pulse * 2, 3)
 
 
 def draw_events(screen, font, events):
@@ -205,6 +208,7 @@ def run_ui(snapshots, commands, positions):
     lay = load_layout()  # the same map the simulation process loads
     floor_map = draw_layout(lay)
     props = furniture_sprites(lay)
+    props = [[p for p in props if lay.floor_of(p[2] / T) == f] for f in range(lay.floors)]  # each floor's
     vomit = image('custom/vomit')
     looks = {}  # character sheet index -> frames
 
@@ -238,6 +242,7 @@ def run_ui(snapshots, commands, positions):
             'staff': {}}
     show_tablet, opts, beat = False, {'count': 1, 'triaged': False}, 0.0
     actors, selected_id, room_sel, list_open, scroll, show_log, show_boss = [], None, None, False, 0, True, False
+    view, sel_floor = 0, None  # the floor on screen; the one the selected person was on
     dragging, cache, hits, people = False, {}, [], []
 
     while True:
@@ -272,6 +277,9 @@ def run_ui(snapshots, commands, positions):
                 show_boss = not show_boss
             elif ev.type == pygame.KEYDOWN and ev.key == pygame.K_TAB:
                 show_tablet = not show_tablet
+            elif ev.type == pygame.KEYDOWN and ev.key in (pygame.K_PAGEUP, pygame.K_PAGEDOWN):
+                new = max(0, min(lay.floors - 1, view + (1 if ev.key == pygame.K_PAGEUP else -1)))
+                cam_x, view = cam_x + (new - view) * lay.stride * T, new  # same place, another floor
             elif ev.type == pygame.KEYDOWN and ev.key == pygame.K_SPACE:
                 send(('pause',))
             elif ev.type == pygame.KEYDOWN and ev.key in (pygame.K_PLUS, pygame.K_EQUALS, pygame.K_KP_PLUS):
@@ -301,6 +309,8 @@ def run_ui(snapshots, commands, positions):
                     send(action[1])
                 elif action and action[0] == 'opt':
                     opts[action[1]] = action[2]
+                elif action and action[0] == 'floor':
+                    cam_x, view = cam_x + (action[1] - view) * lay.stride * T, action[1]
                 elif action and action[0] == 'tablet':
                     show_tablet = not show_tablet
                 elif action and action[0] == 'pick':
@@ -309,13 +319,23 @@ def run_ui(snapshots, commands, positions):
                     wx, wy = (cam_x + ev.pos[0] / zoom) / T, (cam_y + ev.pos[1] / zoom) / T
                     # Compare with the middle of the body, which is drawn above the actor's tile
                     dist2 = lambda a: (a.px - wx) ** 2 + (a.py + FEET - CHAR_H / T / 2 - wy) ** 2
-                    nearest = min(actors, key=dist2, default=None)
+                    nearest = min((a for a in actors if lay.floor_of(a.px) == view), key=dist2, default=None)
                     selected_id = nearest.id if nearest and dist2(nearest) < 0.8 ** 2 else None
                     tx, ty = int(wx), int(wy)
                     inside = 0 <= tx < lay.width and 0 <= ty < lay.height
                     room_sel = lay.room_at[ty][tx] if selected_id is None and inside else None
                     list_open, scroll = False, 0
                 selected = next((a for a in actors if a.id == selected_id), None)
+
+        if selected is not None:  # it went up or down: the view goes with it
+            f = lay.floor_of(selected.px)
+            if sel_floor is not None and f != sel_floor and f != view:
+                cam_x, view = cam_x + (f - view) * lay.stride * T, f
+            sel_floor = f
+        else:
+            sel_floor = None
+        here = [a for a in actors if lay.floor_of(a.px) == view]  # who's on the floor on screen
+        shown = lambda x: lay.floor_of(x) == view
 
         keys = pygame.key.get_pressed()
         speed = 700 * dt / zoom
@@ -325,7 +345,8 @@ def run_ui(snapshots, commands, positions):
         # Map: crop the visible part and scale it without smoothing
         sw, sh = screen.get_size()
         screen.fill((30, 34, 40))
-        src = pygame.Rect(int(cam_x), int(cam_y), int(sw / zoom) + 2, int(sh / zoom) + 2).clip(floor_map.get_rect())
+        src = pygame.Rect(int(cam_x), int(cam_y), int(sw / zoom) + 2, int(sh / zoom) + 2).clip(
+            pygame.Rect(view * lay.stride * T, 0, lay.stride * T, lay.height * T))  # only this floor
         if src.w > 0 and src.h > 0:
             part = pygame.transform.scale(floor_map.subsurface(src), (src.w * zoom, src.h * zoom))
             screen.blit(part, ((src.x - cam_x) * zoom, (src.y - cam_y) * zoom))
@@ -342,20 +363,21 @@ def run_ui(snapshots, commands, positions):
                 screen.blit(cache[key], (x, y))
 
         for tx, ty in snap['messes']:  # on the floor, under everything else
-            blit_scaled(vomit, *to_screen(tx, ty))
+            if shown(tx):
+                blit_scaled(vomit, *to_screen(tx, ty))
 
         if selected:
-            for tx, ty in selected.path:
+            for tx, ty in (t for t in selected.path if shown(t[0])):
                 x, y = to_screen(tx + 0.5, ty + 0.5)
                 pygame.draw.rect(screen, HIGHLIGHT, (x - zoom, y - zoom, 2 * zoom, 2 * zoom))
 
         # Furniture and people together, back to front: whoever is behind something is covered by it
         if not snap['paused']:  # the little work animations freeze too
             beat = time.perf_counter()
-        bodies = sorted((((a.py + (1.7 if a.lying else FEET)) * T, None, a) for a in actors), key=lambda s: s[0])
+        bodies = sorted((((a.py + (1.7 if a.lying else FEET)) * T, None, a) for a in here), key=lambda s: s[0])
         extras = [centred(stretcher[facing in ('left', 'right')], x, y, (y + 0.5) * T)  # parked in storage
-                  for x, y, facing in snap.get('parked', [])]  # stretchers, keyboards, buckets: in depth order too
-        for a in actors:
+                  for x, y, facing in snap.get('parked', []) if shown(x)]  # stretchers, keyboards, buckets too
+        for a in here:
             if a.stretcher:
                 extras.append(centred(stretcher[a.facing in ("left", "right")], a.px, a.py, (a.py + 1.7) * T - 1))
             if a.cart:
@@ -368,7 +390,7 @@ def run_ui(snapshots, commands, positions):
                 extras.append(centred(mop[int(beat * 5) % 4], a.px - 0.35, a.py, (a.py + FEET) * T + 1))
         extras.sort(key=lambda s: s[0])
         heads = []
-        for item in heapq.merge(props, extras, bodies, key=lambda s: s[0]):
+        for item in heapq.merge(props[view], extras, bodies, key=lambda s: s[0]):
             if item[1] is not None:  # furniture: (depth, image, x, y) in world pixels
                 blit_scaled(item[1], (item[2] - cam_x) * zoom, (item[3] - cam_y) * zoom)
                 continue
@@ -407,7 +429,7 @@ def run_ui(snapshots, commands, positions):
         boss = next((a for a in actors if a.role == 'dispatcher'), None)
         watching_boss = boss is not None and (show_boss or selected is boss)
         if watching_boss:
-            draw_dispatcher(screen, font, boss.boss, to_screen, {a.id: a for a in actors})
+            draw_dispatcher(screen, font, boss.boss, to_screen, {a.id: a for a in actors}, shown)
 
         hits = []
         if selected:
@@ -445,16 +467,20 @@ def run_ui(snapshots, commands, positions):
             hits += draw_tablet(screen, font, small, snap, opts, 46)
         else:
             hits.append((button(screen, small, pygame.Rect(10, 38, 150, 22), 'Admin tablet (Tab)'), ('tablet',)))
+            for f in range(lay.floors):  # top floor on the left
+                rect = pygame.Rect(170 + (lay.floors - 1 - f) * 74, 38, 68, 22)
+                hits.append((button(screen, small, rect, f'Floor {f}', on=f == view), ('floor', f)))
 
         fps, st, t = clock.get_fps(), snap['stats'], snap['time']
         hud = (f'FPS {fps:4.0f}   sim {100 * snap["keep_up"]:3.0f}%   time {int(t // 60):02d}:{int(t % 60):02d}'
+               f'   floor {view}'
                f'   patients {snap["patients"]}   treated {st.get("treated", 0)}   gave up {st.get("gave_up", 0)}'
                f'   line {snap["line"]}   triage {snap["triage"]}   zoom x{zoom}'
                f'   {"PAUSED" if snap["paused"] else "speed x" + format(snap["speed"], "g")}')
         slow = 0 < fps < config.MIN_FPS or snap['keep_up'] < 0.8
         screen.blit(font.render(hud, True, (240, 90, 90) if slow else TEXT, (20, 22, 28)), (10, 10))
-        screen.blit(font.render('WASD/right-drag: move   wheel: zoom   click: NPC or room info   L: log   B: boss   '
-                                'Tab: admin   Space: pause   +/-: speed   ESC: close',
+        screen.blit(font.render('WASD/right-drag: move   wheel: zoom   PgUp/PgDn: floor   click: NPC or room info   '
+                                'L: log   B: boss   Tab: admin   Space: pause   +/-: speed   ESC: close',
                                 True, (200, 200, 200), (20, 22, 28)), (10, sh - 26))
         pygame.display.flip()
 

@@ -198,7 +198,6 @@ def run_ui(snapshots, commands, positions):
     font = pygame.font.SysFont('consolas', 15)
     small = pygame.font.SysFont('consolas', 13)
     banner_font = pygame.font.SysFont('consolas', 28, bold=True)
-    room_font = pygame.font.SysFont('consolas', 13, bold=True)
     # m5x7 (Daniel Linssen, CC0) at its native size, without antialiasing, scaled up with the rest: pixel text
     bubble_font = pygame.font.Font(os.path.join(ASSETS, 'fonts', 'm5x7.ttf'), 16)
     bubbles = {}  # what's said (or an icon) -> its speech bubble
@@ -207,7 +206,6 @@ def run_ui(snapshots, commands, positions):
     floor_map = draw_layout(lay)
     props = furniture_sprites(lay)
     vomit = image('custom/vomit')
-    room_labels = [(r, room_font.render(r.name, True, (40, 44, 52))) for r in lay.rooms if r.kind != 'street']
     looks = {}  # character sheet index -> frames
 
     def frame(a):
@@ -405,8 +403,6 @@ def run_ui(snapshots, commands, positions):
                     img = bubbles[key]
                     # the tail's tip just above the head (and its urgency mark), a little to the right
                     blit_scaled(img, hx + (2 - BUBBLE_TAIL_X) * zoom, hy - (img.get_height() + 3) * zoom)
-            for r, label in room_labels:
-                screen.blit(label, to_screen(r.x + 1.2, r.y + 1.1))
 
         boss = next((a for a in actors if a.role == 'dispatcher'), None)
         watching_boss = boss is not None and (show_boss or selected is boss)

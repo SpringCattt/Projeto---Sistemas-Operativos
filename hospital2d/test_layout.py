@@ -1,13 +1,11 @@
-# test_layout.py - Checks the layout is valid for several sizes: python test_layout.py
+# test_layout.py - Checks the map drawn in Tiled (maps/) works for the simulation: python test_layout.py
 from collections import deque
 
 import config
-from layout import DECOR, build_layout, drawn
+from layout import DECOR, load_layout
 
-for n_doctors, n_surgeries in ((1, 1), (5, 2), (100, 3)):
-    lay = build_layout(n_doctors, n_surgeries)
-    assert len(lay.rooms_of('doctor')) == n_doctors
-    assert len(lay.rooms_of('surgery')) == n_surgeries
+for lay in [load_layout()]:
+    assert lay.rooms_of('doctor') and lay.rooms_of('surgery')
 
     # Every free tile must be reachable from the street (no closed rooms or corners)
     start = lay.free_tiles(lay.rooms_of('street')[0])[0]
@@ -46,15 +44,14 @@ for n_doctors, n_surgeries in ((1, 1), (5, 2), (100, 3)):
     # Named spots: every one is walkable, and patients' ones are on the patients' side
     patient_spots = [front for _, front in lay.reception_desks] + lay.line_spots + lay.lobby
     patient_spots += [chair for _, _, chair in lay.triage_desks] + [c for _, c in lay.doctor_desks.values()]
-    assert len(lay.reception_desks) == config.N_RECEPTIONISTS and len(lay.line_spots) >= 10 and lay.lobby and lay.street_line
-    assert len(lay.doctor_desks) == n_doctors and len(lay.triage_desks) >= 2
+    assert lay.reception_desks and len(lay.line_spots) >= 10 and lay.lobby and lay.street_line
+    assert len(lay.doctor_desks) == len(lay.rooms_of('doctor')) and len(lay.triage_desks) >= 2
     assert all(lay.walkable(*t) and t not in staff for t in patient_spots)
     assert all(p and d for p, d in lay.surgery_spots.values()) and all(lay.sink_spots.values())
     assert all(s.partner and s.partner.kind == 'disinfection' for s in lay.rooms_of('surgery'))
     assert all(t.partner.kind == 'waiting' for t in lay.rooms_of('triage')) and lay.rest_spots
     assert all(len(b) >= 2 for b in lay.emergency_beds.values()) and lay.stretcher_spots
     assert len(lay.stretcher_bay) >= config.STRETCHERS and not set(lay.stretcher_bay) & set(lay.stretcher_spots)
-    assert len(lay.stretcher_bay) == sum(k == 'stretcher' for k, *_ in drawn('storage')[1])  # where Tiled has them
     assert all(side for side, _ in lay.exam_spots.values())
     # The ambulance bay leads straight into Emergency, without crossing any other room
     em = lay.rooms_of('emergency')[0]
@@ -67,7 +64,7 @@ for n_doctors, n_surgeries in ((1, 1), (5, 2), (100, 3)):
 import gc  # noqa: E402
 from layout import Layout  # noqa: E402
 for _ in range(3):
-    build_layout(2, 1).distances_from(lay.street_edge[0])
+    load_layout().distances_from(lay.street_edge[0])
 gc.collect()
 assert sum(isinstance(o, Layout) for o in gc.get_objects()) <= 2, 'old plans are kept in memory'
 print('ok')

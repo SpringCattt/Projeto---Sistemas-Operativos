@@ -288,7 +288,7 @@ class Theatres:
     """Operating rooms: a counting semaphore says how many are free, a lock guards which ones."""
 
     def __init__(self, rooms):
-        self.free = list(rooms)
+        self.rooms, self.free = list(rooms), list(rooms)
         self.sem = threading.Semaphore(len(rooms))
         self.lock = threading.Lock()
 

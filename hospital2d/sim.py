@@ -14,7 +14,7 @@ from collections import Counter, defaultdict, deque
 import config
 from actors import ROW
 from arrivals import new_patient
-from layout import build_layout
+from layout import load_layout
 from patients import Patient
 from staff import Boss, Cart, Cleaner, Doctor, Receptionist, Security, TriageNurse, WardNurse
 
@@ -28,9 +28,9 @@ class Hospital:
     def __init__(self, seed=None, n_doctors=None, n_surgeries=None, n_patients=None, log_out=None, brain=None,
                  on_call=False):
         """brain: file with what the Boss learned (learn.py), to start from instead of config's weights.
-        on_call: the Boss calls in staff on call when work piles up (config.ON_CALL); their doctor's rooms start empty."""
-        self.lay = build_layout(n_doctors or config.MAX_DOCTORS,
-                                config.N_SURGERIES if n_surgeries is None else n_surgeries)
+        on_call: the Boss calls in staff on call when work piles up (config.ON_CALL); their doctor's rooms start empty.
+        n_doctors, n_surgeries: use only the first n doctor's rooms / operating rooms of the map (small tests)."""
+        self.lay = load_layout()
         self.room_kinds = frozenset(r.kind for r in self.lay.rooms)
         self.rng = random.Random(seed)
         self.world = World()
@@ -42,7 +42,7 @@ class Hospital:
         self.dispatcher = Dispatcher(self.clock, self.lay.walk_distance)
         if brain:
             self.dispatcher.load(brain)
-        self.theatres = Theatres(self.lay.rooms_of('surgery'))
+        self.theatres = Theatres(self.lay.rooms_of('surgery')[:n_surgeries])
         self.disinfection = {r: threading.Semaphore(max(1, len(spots))) for r, spots in self.lay.sink_spots.items()}
         self.log_out = log_out  # Queue to the log process (or None)
         self.events, self.events_lock = deque(maxlen=10), threading.Lock()
@@ -60,7 +60,7 @@ class Hospital:
             self.world.occupied[spot] = Cart(spot)
         staff = [Receptionist(self, seat, front, rng) for seat, front in lay.reception_desks]
         staff += [TriageNurse(self, room, seat, chair, rng) for room, seat, chair in lay.triage_desks]
-        rooms = lay.rooms_of('doctor')
+        rooms = lay.rooms_of('doctor')[:n_doctors]
         if on_call:  # the farthest rooms wait for the doctors on call
             rooms = rooms[:max(1, len(rooms) - config.ON_CALL.get('Doctor', 0))]
         doctors = [Doctor(self, room, rng) for room in rooms]

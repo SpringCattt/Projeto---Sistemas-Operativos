@@ -276,7 +276,7 @@ class Doctor(TaskStaff):
             return
         emergency = p.waiting_room is not None and p.waiting_room.kind == 'emergency'
         bed = self.lay.exam_spots.get(self.room)
-        if emergency and p.needs_surgery and self.lay.surgery_spots:  # straight to the theatre on a stretcher
+        if emergency and p.needs_surgery and self.h.theatres.rooms:  # straight to the theatre on a stretcher
             self.h.consult_started(p)
             self.talk('doctor_surgery')
             return self.operate(task, p)
@@ -319,7 +319,7 @@ class Doctor(TaskStaff):
         self.tire(config.FATIGUE_PER_TASK['consult'][p.rank])
         if self.seat:
             self.go(self.seat, timeout=10)
-        if p.needs_surgery and self.lay.surgery_spots:
+        if p.needs_surgery and self.h.theatres.rooms:
             self.talk('doctor_surgery')
             p.talk('patient_surgery')
             p.say('?', 4)

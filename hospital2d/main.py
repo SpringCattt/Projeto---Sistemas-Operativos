@@ -20,7 +20,7 @@ from arrivals import run_arrivals
 from art import ASSETS, BUBBLE_TAIL_X, CHAR_H, CHAR_W, character, draw_layout, furniture_sprites, icon_bubble, image, \
     lying, text_bubble
 from eventlog import run_log
-from layout import build_layout
+from layout import load_layout
 from sim import new_positions, read_positions, run_simulation
 
 T = config.TILE
@@ -203,7 +203,7 @@ def run_ui(snapshots, commands, positions):
     bubble_font = pygame.font.Font(os.path.join(ASSETS, 'fonts', 'm5x7.ttf'), 16)
     bubbles = {}  # what's said (or an icon) -> its speech bubble
 
-    lay = build_layout()  # same config as the simulation process, so the same plan
+    lay = load_layout()  # the same map the simulation process loads
     floor_map = draw_layout(lay)
     props = furniture_sprites(lay)
     vomit = image('custom/vomit')

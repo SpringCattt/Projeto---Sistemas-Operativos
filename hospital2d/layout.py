@@ -10,12 +10,8 @@ import config
 
 EMPTY, WALL, FLOOR, DOOR = 0, 1, 2, 3
 
-# Size (width, height) of each medical-wing room type, walls included (storage: the size it's drawn in Tiled)
-SIZES = {
-    'doctor': (8, 8), 'emergency': (14, 8), 'surgery': (10, 9), 'disinfection': (6, 9), 'rest': (12, 9),
-}
-ROOMS = os.path.join(os.path.dirname(__file__), 'rooms')  # rooms drawn in the Tiled map editor (see README)
-MARGIN = 3  # grass tiles around the building
+MAPS = os.path.join(os.path.dirname(__file__), 'maps')  # the plan, drawn in the Tiled map editor (see README)
+GROUND = {'wall': WALL, 'door': DOOR, 'floor_grass': EMPTY}  # what a ground tile is; any other one is floor
 SEATS = {'chair', 'office_chair', 'bench', 'sofa'}  # furniture people sit on (every tile of a bench is a seat)
 # Just for looks: left out wherever it would leave a way through only one tile wide (see Layout)
 DECOR = {'plant', 'sanitizer', 'trash_bin', 'cabinet', 'biohazard', 'iv_stand', 'bp_monitor', 'eye_chart', 'poster',
@@ -34,7 +30,6 @@ class Room:
     w: int
     h: int
     walls: bool = True
-    flipped: bool = False  # door on top instead of bottom (furniture is mirrored)
     partner: 'Room' = None  # triage -> its waiting room; surgery -> the disinfection room doctors enter through
     round: bool = False  # a circle inside its box (the control room); its walls follow the circle
 
@@ -66,58 +61,89 @@ class Furniture:
         return [(x, y) for y in range(self.y, self.y + self.h) for x in range(self.x, self.x + self.w)]
 
 
-@functools.cache
-def drawn(kind):
-    """A room drawn in Tiled (rooms/<kind>.tmj, door at the bottom): its size, walls included, and its pieces as
-    (kind, x, y, w, h) from its top-left corner. Pieces of kind 'stretcher' are where the stretchers park."""
-    path = os.path.join(ROOMS, kind + '.tmj')
+def load_layout(path=os.path.join(MAPS, 'floor0.tmj')):
+    """The plan drawn in Tiled. Three layers: 'ground' (what each tile looks like, and so what it is: wall, door,
+    grass = outside, anything else = floor), 'rooms' (a rectangle over each room, walls included: its name, its
+    kind as the class, an ellipse for a round one; property partner = the room it works with, walls = false for
+    the street; and 'staff_only' rectangles: patients never walk there) and 'furniture' (pieces from the hospital
+    tileset; their size on the floor is the tile's w and h, or the piece's own; 'stretcher' pieces are where the
+    stretchers park)."""
+    T = config.TILE
     with open(path, encoding='utf-8') as f:
         m = json.load(f)
     (ts,) = m['tilesets']
-    with open(os.path.join(ROOMS, ts['source']), encoding='utf-8') as f:
-        props = {ts['firstgid'] + t['id']: {p['name']: p['value'] for p in t.get('properties', [])}
-                 for t in json.load(f)['tiles']}
-    pieces = []
-    for o in (o for layer in m['layers'] for o in layer.get('objects', [])):
-        p = props.get(o.get('gid', 0) & 0x0FFFFFFF, {})  # (Tiled keeps flips in the top bits)
+    with open(os.path.join(os.path.dirname(path), ts['source']), encoding='utf-8') as f:
+        tiles = {ts['firstgid'] + t['id']: t for t in json.load(f)['tiles']}
+    props = lambda o: {p['name']: p['value'] for p in o.get('properties', [])}
+    layers = {layer['name']: layer for layer in m['layers']}
+    missing = {'ground', 'rooms', 'furniture'} - layers.keys()
+    if missing:
+        raise ValueError(f'{path}: no layer called {", ".join(sorted(missing))}')
+    w, h = m['width'], m['height']
+    # (Tiled keeps flips in the top bits of a tile number; the image path is from the tileset: ../assets/X.png)
+    names = [tiles[g & 0x0FFFFFFF]['image'].split('assets/', 1)[1][:-4] if g else 'custom/floor_grass'
+             for g in layers['ground']['data']]
+    ground = [names[y * w:(y + 1) * w] for y in range(h)]
+
+    rooms, staff_only, by_name = [], set(), {}
+    for o in layers['rooms']['objects']:
+        kind = o.get('type') or o.get('class') or ''
+        x, y, rw, rh = (round(o[k] / T) for k in ('x', 'y', 'width', 'height'))
+        if kind == 'staff_only':
+            staff_only |= {(i, j) for j in range(y, y + rh) for i in range(x, x + rw)}
+            continue
+        if not kind:
+            raise ValueError(f'{path}: room "{o["name"]}" has no class (its kind: waiting, doctor, storage...)')
+        r = Room(kind, o['name'], x, y, rw, rh, props(o).get('walls', True), round=o.get('ellipse', False))
+        rooms.append(r)
+        by_name[r.name] = (r, props(o).get('partner'))
+    for r, partner in by_name.values():
+        if partner:
+            if partner not in by_name:
+                raise ValueError(f'{path}: room "{r.name}" works with "{partner}", and there is no such room')
+            r.partner = by_name[partner][0]
+
+    furniture, stretchers = [], []
+    for o in layers['furniture']['objects']:
+        p = {**props(tiles.get(o.get('gid', 0) & 0x0FFFFFFF, {})), **props(o)}  # (the piece's own size wins)
         if 'kind' not in p:
-            raise ValueError(f'{path}: object {o["id"]} is not a piece from the hospital tileset')
-        w, h = p.get('w', 1), p.get('h', 1)  # its footprint; x, y is its bottom-left corner
-        pieces.append((p['kind'], round(o['x'] / config.TILE), round(o['y'] / config.TILE) - h, w, h))
-    return (m['width'], m['height']), pieces
-
-
-SIZES['storage'] = drawn('storage')[0]
+            raise ValueError(f'{path}: object {o["id"]} on the furniture layer is not a piece from the hospital tileset')
+        fw, fh = p.get('w', 1), p.get('h', 1)
+        x, y = round(o['x'] / T), round(o['y'] / T) - fh  # (x, y in Tiled: the bottom-left corner)
+        if p['kind'] == 'stretcher':
+            stretchers.append((x, y))
+        else:
+            furniture.append(Furniture(p['kind'], x, y, p['kind'] not in SEATS, fw, fh))
+    return Layout(ground, rooms, furniture, staff_only, stretchers)
 
 
 class Layout:
-    def __init__(self, rooms, doors, width, height):
-        self.rooms, self.width, self.height = rooms, width, height
+    def __init__(self, ground, rooms, furniture, staff_only, stretchers):
+        """ground: the image of each tile ([y][x], from the assets folder), which also says what it is (GROUND).
+        The rest as load_layout reads it from the map."""
+        self.ground, self.rooms, self.width, self.height = ground, rooms, len(ground[0]), len(ground)
         # cached per plan (a cache on the method would keep every plan ever built alive: learn.py builds hundreds)
         self.distances_from = functools.lru_cache(maxsize=512)(self._distances_from)
-        self.tiles = [[EMPTY] * width for _ in range(height)]
-        self.room_at = [[None] * width for _ in range(height)]
+        self.tiles = [[GROUND.get(name.rsplit('/', 1)[-1], FLOOR) for name in row] for row in ground]
+        inside = lambda x, y: 0 <= x < self.width and 0 <= y < self.height
+        self.room_at = [[None] * self.width for _ in range(self.height)]
         for r in sorted(rooms, key=lambda r: r.round):  # round rooms last: they sit inside another room
             for y in range(r.y, r.y + r.h):
                 for x in range(r.x, r.x + r.w):
+                    if not inside(x, y):
+                        continue
                     if r.contains(x, y):
-                        self.tiles[y][x], self.room_at[y][x] = FLOOR, r
-                    elif r.round:  # its wall: the tiles touching the circle from outside
-                        if any(r.contains(x + dx, y + dy) for dx in (-1, 0, 1) for dy in (-1, 0, 1)):
-                            self.tiles[y][x], self.room_at[y][x] = WALL, None
-                    elif self.tiles[y][x] != FLOOR:  # a shared wall never erases the neighbour's floor
-                        self.tiles[y][x] = WALL
-        self.doors = {}  # (x, y) -> 'h' (door in a horizontal wall) or 'v'
-        for x, y, door_width, axis in doors:
-            for i in range(door_width):
-                t = (x + i, y) if axis == 'h' else (x, y + i)
-                self.tiles[t[1]][t[0]] = DOOR
-                self.doors[t] = axis
+                        self.room_at[y][x] = r
+                    elif r.round and any(r.contains(x + dx, y + dy) for dx in (-1, 0, 1) for dy in (-1, 0, 1)):
+                        self.room_at[y][x] = None  # its wall: the tiles touching the circle from outside
+        self.doors = {(x, y) for y in range(self.height) for x in range(self.width) if self.tiles[y][x] == DOOR}
 
-        # Furniture: nothing may touch a door, or it would block the way
+        # Furniture: all of a piece in one room, and nothing may touch a door, or it would block the way
         near_door = {(x + dx, y + dy) for x, y in self.doors for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1))}
-        self.furniture = [f for r in rooms for f in furnish(r)
-                          if all(self.room_at[t[1]][t[0]] is r and t not in near_door for t in f.tiles())]
+        def placed(f):
+            rooms_under = {self.room_at[y][x] if inside(x, y) else None for x, y in f.tiles()}
+            return len(rooms_under) == 1 and None not in rooms_under and not near_door & set(f.tiles())
+        self.furniture = [f for f in furniture if placed(f)]
         self.solid = {t for f in self.furniture if f.solid for t in f.tiles()}
         while True:  # one at a time: once one goes, the one across the way may not squeeze anything any more
             squeezing = next((f for f in self.furniture if f.kind in DECOR and f.solid and self.squeezes(f)), None)
@@ -128,15 +154,8 @@ class Layout:
 
         self.seats = {t for f in self.furniture if f.kind in SEATS for t in f.tiles()}
 
-        # Behind a counter (reception, bar) is staff only: patients never walk there
-        self.staff_only = set()
-        for r in rooms:
-            counter_rows = [f.y for f in self.furniture if f.kind == 'counter' and r.contains(f.x, f.y)]
-            if counter_rows:
-                x0, y0, x1, y1 = r.interior
-                behind = range(max(counter_rows) + 1, y1 + 1) if r.flipped else range(y0, min(counter_rows))
-                self.staff_only |= {(x, y) for y in behind for x in range(x0, x1 + 1)}
-        self._find_spots(near_door)
+        self.staff_only = staff_only  # behind the counters (reception, bar): patients never walk there
+        self._find_spots(near_door, stretchers)
 
     def squeezes(self, f):
         """Does `f` leave a floor tile next to it with something solid (or a wall) right across?"""
@@ -148,7 +167,7 @@ class Layout:
                     return True
         return False
 
-    def _find_spots(self, near_door):
+    def _find_spots(self, near_door, stretchers):
         """Named places the actors use: desks, the reception line, where to wait, where to operate..."""
         def furniture_in(room, kind):
             return [f for f in self.furniture if f.kind == kind and room.contains(f.x, f.y)]
@@ -204,15 +223,11 @@ class Layout:
         self.table_spots = {r: bed_spot(furniture_in(r, 'operating_table')[0])[1] for r in self.rooms_of('surgery')}
         self.emergency_beds = {r: [b for b in map(bed_spot, furniture_in(r, 'bed')) if b[0]]
                                for r in self.rooms_of('emergency')}
-        # Stretchers park where rooms/storage.tmj has them; the nurses meet anywhere else in there
-        self.stretcher_bay, self.stretcher_spots = [], []
-        for r in self.rooms_of('storage'):
-            bay = [(r.x + x, r.y + r.h - 1 - y if r.flipped else r.y + y)
-                   for kind, x, y, _, _ in drawn('storage')[1] if kind == 'stretcher']
-            self.stretcher_bay += [t for t in bay if self.walkable(*t)]
-            # (not right next to the stretchers either: that's the lane to push them in and out)
-            self.stretcher_spots += [t for t in self.free_tiles(r)
-                                     if all(max(abs(t[0] - x), abs(t[1] - y)) > 1 for x, y in bay)]
+        # Stretchers park where the map has them; the nurses meet anywhere else in storage, but not right next to
+        # them either: that's the lane to push them in and out
+        self.stretcher_bay = [t for t in stretchers if self.walkable(*t)]
+        self.stretcher_spots = [t for r in self.rooms_of('storage') for t in self.free_tiles(r)
+                                if all(max(abs(t[0] - x), abs(t[1] - y)) > 1 for x, y in stretchers)]
         self.waiting_seats = {r: [t for t in self.free_tiles(r) if t in self.seats] for r in self.rooms_of('waiting')}
         self.control_seat = next((f.x, f.y) for r in self.rooms_of('control') for f in furniture_in(r, 'office_chair'))
         self.rest_spots = [t for r in self.rooms_of('rest') for t in self.free_tiles(r) if t in self.seats]
@@ -287,199 +302,3 @@ class Layout:
                     h = abs(nb[0] - gx) + abs(nb[1] - gy)
                     heapq.heappush(open_, (ng + h, h, ng, nb, nd))
         return []
-
-
-def door_top(r):
-    return r.x + r.w // 2 - 1, r.y, 2, 'h'
-
-
-def door_bottom(r):
-    return r.x + r.w // 2 - 1, r.y + r.h - 1, 2, 'h'
-
-
-def door_between(a, b):
-    """Door in the shared vertical wall (b is to the right of a)."""
-    y0, y1 = max(a.y, b.y) + 1, min(a.y + a.h, b.y + b.h) - 2
-    return b.x, (y0 + y1) // 2, 2, 'v'
-
-
-def surgery_blocks(n):
-    """Groups of surgery | disinfection | surgery (each disinfection room serves the surgeries beside it); with an
-    odd number, the last group is disinfection | surgery. Each group is placed as one block."""
-    blocks, s, d = [], 0, 0
-    for i in range(0, n, 2):
-        d += 1
-        if i + 1 < n:
-            blocks.append([('surgery', f'Surgery {s + 1}'), ('disinfection', f'Disinfection {d}'),
-                           ('surgery', f'Surgery {s + 2}')])
-            s += 2
-        else:
-            blocks.append([('disinfection', f'Disinfection {d}'), ('surgery', f'Surgery {s + 1}')])
-            s += 1
-    return blocks
-
-
-def build_layout(n_doctors=config.MAX_DOCTORS, n_surgeries=config.N_SURGERIES):
-    """The hospital is built around its centre: the Main Hall, with the dispatcher's round Control Room in the
-    middle (sealed: no doors, the Boss is in there from the start and nobody else goes in). The main corridor runs through the hall (y 0..4) and out to both sides. Under the hall, the base
-    block (always the same): street -> reception -> triage -> waiting rooms, with the bar. Every other room is
-    added around the centre, each to whichever side is shortest so far: on top of the hall, or along the
-    corridor (above or below it, left or right), so the hospital grows evenly around the control room."""
-    # shortcut: one floor; when floors arrive, a building becomes a list of these
-    w1 = Room('waiting', 'Waiting Room 1', 0, 4, 20, 14)
-    t1 = Room('triage', 'Triage 1', 9, 17, 11, 6)
-    bar = Room('bar', 'Bar / Cafe', 19, 4, 16, 8, flipped=True)  # door on top: counter at the back
-    rec = Room('reception', 'Entrance and Reception', 19, 11, 16, 12)
-    t2 = Room('triage', 'Triage 2', 34, 17, 11, 6)
-    w2 = Room('waiting', 'Waiting Room 2', 34, 4, 20, 14)
-    street = Room('street', 'Street', 15, 23, 24, 4, walls=False)
-    t1.partner, t2.partner = w1, w2
-    # Odd sizes, so the circle has a centre tile (where the Boss sits) and sits in the exact middle of the hall
-    hall = Room('corridor', 'Main Hall', 12, -16, 31, 21)  # its bottom rows are the main corridor
-    control = Room('control', 'Control Room', 21, -13, 13, 13, round=True)
-    rooms = [w1, t1, bar, rec, t2, w2, street, hall, control]
-    wide = lambda r: (r.x + r.w // 2 - 1, r.y, 3, 'h')  # waiting rooms: lots of people in and out
-    doors = [wide(w1), door_top(bar), wide(w2),  # to the corridor / hall
-             door_between(t1, rec), door_between(rec, t2),  # reception -> triage
-             door_top(t1), door_top(t2),  # triage -> waiting room
-             (rec.x, rec.y + 4, 2, 'v'), (rec.x + rec.w - 1, rec.y + 4, 2, 'v'),  # waiting room -> reception (way out)
-             (rec.x + rec.w // 2 - 1, rec.y + rec.h - 1, 3, 'h'),  # big main entrance
-             (hall.x, 1, 3, 'v'), (hall.x + hall.w - 1, 1, 3, 'v')]  # the corridor goes through the hall
-
-    # Where new rooms go. pos: x of the wall the next room leans on; step: +1 grows right, -1 left;
-    # wall: y the rooms rest on (top rows: above it, door at the bottom) or hang from (bottom rows)
-    rows = [
-        {'pos': hall.x, 'step': 1, 'wall': hall.y, 'top': True, 'limit': hall.x + hall.w - 1},  # on top of the hall
-        {'pos': hall.x + hall.w - 1, 'step': 1, 'wall': 0, 'top': True, 'limit': None},  # corridor, right, above
-        {'pos': hall.x, 'step': -1, 'wall': 0, 'top': True, 'limit': None},  # corridor, left, above
-        {'pos': w2.x + w2.w - 1, 'step': 1, 'wall': 4, 'top': False, 'limit': None},  # corridor, right, below
-        {'pos': w1.x, 'step': -1, 'wall': 4, 'top': False, 'limit': None},  # corridor, left, below
-    ]
-    for row in rows:
-        row['used'] = 0
-
-    # Doctors' rooms first, so they're the closest to the centre; then surgery, storage and rest
-    blocks = [[('doctor', f'Doctor\'s Room {i + 1}')] for i in range(n_doctors)]
-    blocks.insert(min(2, len(blocks)), [('emergency', 'Emergency')])  # Red patients: near the centre
-    blocks += surgery_blocks(n_surgeries) + [[('storage', 'Storage')], [('rest', 'Rest')]]
-    for block in blocks:
-        width = sum(SIZES[kind][0] for kind, _ in block) - (len(block) - 1)  # neighbours share a wall
-        fits = [r for r in rows if r['limit'] is None or r['pos'] + width - 1 <= r['limit']]
-        row = min(fits, key=lambda r: r['used'])
-        row['used'] += width
-        prev = None
-        for kind, name in block:
-            w, h = SIZES[kind]
-            x = row['pos'] if row['step'] > 0 else row['pos'] - w + 1
-            y = row['wall'] - h + 1 if row['top'] else row['wall']
-            r = Room(kind, name, x, y, w, h, flipped=not row['top'])
-            rooms.append(r)
-            row['pos'] = x + w - 1 if row['step'] > 0 else x
-            # Surgery has a corridor door (patients); doctors come in through disinfection
-            doors.append(door_top(r) if r.flipped else door_bottom(r))
-            if kind == 'emergency':  # its own way in, at the back (which always faces outside): the ambulance bay
-                rooms.append(Room('street', 'Ambulance Bay', r.x, r.y + r.h if r.flipped else r.y - 4, r.w, 4,
-                                  walls=False))
-                doors.append(door_bottom(r) if r.flipped else door_top(r))
-            if prev and 'disinfection' in (prev.kind, r.kind):
-                doors.append(door_between(prev, r) if row['step'] > 0 else door_between(r, prev))
-                surgery, disinfection = (prev, r) if r.kind == 'disinfection' else (r, prev)
-                surgery.partner = disinfection
-            prev = r
-
-    # The corridor's two arms reach as far as the rooms on each side
-    left = min([0] + [r.x for r in rooms if r.x < hall.x and r.y < 23])
-    right = max([w2.x + w2.w - 1] + [r.x + r.w - 1 for r in rooms if r.x > hall.x])
-    rooms.append(Room('corridor', 'Corridor', left, 0, hall.x - left + 1, 5))
-    rooms.append(Room('corridor', 'Corridor', hall.x + hall.w - 1, 0, right - hall.x - hall.w + 2, 5))
-    # ...and end in an exit to the street, so people who are done leave that way and don't walk back against
-    # the ones coming in through reception and the waiting rooms
-    rooms += [Room('street', 'Exit', left - 4, 0, 4, 5, walls=False), Room('street', 'Exit', right + 1, 0, 4, 5, walls=False)]
-    doors += [(left, 1, 3, 'v'), (right, 1, 3, 'v')]
-
-    # Shift everything to positive coordinates, with a grass margin
-    min_x, min_y = min(r.x for r in rooms), min(r.y for r in rooms)
-    dx, dy = MARGIN - min_x, MARGIN - min_y
-    for r in rooms:
-        r.x, r.y = r.x + dx, r.y + dy
-    doors = [(x + dx, y + dy, l, a) for x, y, l, a in doors]
-    width = max(r.x + r.w for r in rooms) + MARGIN
-    height = max(r.y + r.h for r in rooms) + MARGIN
-    return Layout(rooms, doors, width, height)
-
-
-def furnish(r):
-    """Furniture for each room type, placed as if the door were at the bottom."""
-    x0, y0, x1, y1 = r.interior
-    cx, cy = (x0 + x1) // 2, (y0 + y1) // 2
-    k, f = r.kind, []
-    if k == 'waiting':
-        for y in range(y0 + 3, y1 - 1, 3):
-            f += [Furniture('chair', x, y, False) for x in range(x0 + 2, x1 - 1) if x != cx]
-        f += [Furniture('tv', cx, y0), Furniture('vending', x1, y0), Furniture('soda', x1 - 1, y0),
-              Furniture('plant', x0, y0), Furniture('plant', x1, y1), Furniture('clock', cx - 3, y0),
-              Furniture('poster', cx + 3, y0), Furniture('sanitizer', x0, y0 + 2), Furniture('trash_bin', x0, y1),
-              Furniture('bench', x0 + 2, y1, False, w=3), Furniture('bench', x1 - 4, y1, False, w=3)]
-    elif k == 'reception':
-        f += [Furniture('counter', x, y0 + 2) for x in range(x0 + 2, x1 - 1)]
-        n = config.N_RECEPTIONISTS
-        for i in range(n):  # one seat + monitor per receptionist
-            x = x0 + 2 + (2 * i + 1) * (x1 - x0 - 3) // (2 * n)
-            f += [Furniture('office_chair', x, y0 + 1, False), Furniture('pc', x, y0 + 2)]
-        f += [Furniture('bell', cx, y0 + 2), Furniture('plant', x0, y1), Furniture('plant', x1, y1),
-              Furniture('trash_bin', x1, y0 + 5), Furniture('clock', cx, y0), Furniture('cabinet', x0, y0),
-              Furniture('cabinet', x1, y0), Furniture('map_stand', x0 + 1, y1 - 1, w=2), Furniture('sanitizer', x0, y0 + 5),
-              Furniture('exit_sign', cx - 1, y1)]
-    elif k == 'triage':
-        # booths: nurse chair, desk with pc, patient chair (left booth first, right one if there are 2)
-        for x in [x0 + 1, x1 - 2][:config.TRIAGE_DESKS_PER_ROOM]:
-            f += [Furniture('office_chair', x, y0, False), Furniture('desk', x, y0 + 1, w=2),
-                  Furniture('pc', x, y0 + 1), Furniture('chair', x + 1, y0 + 2, False)]
-    elif k == 'bar':
-        f += [Furniture('counter', x, y0 + 1) for x in range(x0 + 2, x1 - 1)]
-        # back wall items side by side, so the lane behind the counter stays open from both ends
-        f += [Furniture('coffee', x0 + 3, y0), Furniture('fridge', x0 + 4, y0), Furniture('snacks', x0 + 5, y0),
-              Furniture('soda', x0 + 6, y0), Furniture('cake', x0 + 5, y0 + 1), Furniture('donuts', x0 + 3, y0 + 1),
-              Furniture('plant', x0, y1), Furniture('plant', x1, y1), Furniture('trash_bin', x1, y0 + 2)]
-        for x in range(x0 + 2, x1 - 1, 4):
-            f += [Furniture('table', x, y1 - 1), Furniture('chair', x - 1, y1 - 1, False), Furniture('chair', x + 1, y1 - 1, False)]
-    elif k == 'control':
-        # the dispatcher's desk in the middle of the round room, screens all around
-        f += [Furniture('office_chair', cx, cy, False), Furniture('desk', cx, cy + 1), Furniture('pc', cx, cy + 1),
-              Furniture('tv', cx - 2, y0 + 1), Furniture('tv', cx + 2, y0 + 1),
-              Furniture('cabinet', x0 + 1, y1 - 2), Furniture('cabinet', x1 - 1, y1 - 2),
-              Furniture('plant', x0 + 1, y0 + 2), Furniture('plant', x1 - 1, y0 + 2)]
-    elif k == 'doctor':
-        f += [Furniture('desk', cx - 1, y0 + 1, w=2), Furniture('pc', cx - 1, y0 + 1), Furniture('office_chair', cx - 1, y0, False),
-              Furniture('chair', cx, y0 + 2, False), Furniture('exam_bed', x1, y0 + 2, h=2), Furniture('plant', x0, y0),
-              Furniture('books', cx, y0 + 1), Furniture('eye_chart', x1, y0), Furniture('bp_monitor', x1, y0 + 4),
-              Furniture('cabinet', x0, y0 + 3), Furniture('sanitizer', x0, y0 + 4), Furniture('trash_bin', x1, y1)]
-    elif k == 'emergency':  # beds along the back wall, a monitor beside each (the free side faces the room)
-        for x in range(x0 + 1, x1, 3):
-            f += [Furniture('bed', x, y0, h=2), Furniture('monitor', x + 1, y0)]
-        f += [Furniture('sanitizer', x0, y1), Furniture('iv_stand', x1, y1), Furniture('plant', x1, y0 + 3)]
-    elif k == 'surgery':
-        f += [Furniture('operating_table', cx, cy - 1, w=2, h=3), Furniture('monitor', cx - 2, cy - 1),
-              Furniture('monitor', cx + 3, cy), Furniture('iv_stand', cx + 2, cy - 1), Furniture('tray', cx - 1, cy + 2),
-              Furniture('ultrasound', x0, y0, w=2), Furniture('cabinet', x1, y0), Furniture('cabinet', x1 - 1, y0),
-              Furniture('biohazard', x1, y1), Furniture('sanitizer', x0, y1)]
-    elif k == 'disinfection':
-        f += [Furniture('sink', x, y0, w=2) for x in range(x0, x1, 2)]
-        f += [Furniture('cabinet', x0, y0 + 2), Furniture('biohazard', x1, y1), Furniture('sanitizer', x0, y1)]
-    elif k == 'storage':  # drawn in Tiled: rooms/storage.tmj
-        f += [Furniture(kind, r.x + x, r.y + y, kind not in SEATS, w, h)
-              for kind, x, y, w, h in drawn(k)[1] if kind != 'stretcher']
-    elif k == 'rest':
-        f += [Furniture('sofa', x0 + 1, y0, False, w=3), Furniture('sofa', x0 + 5, y0, False, w=3), Furniture('table', x0 + 3, y0 + 2),
-              Furniture('coffee', x1, y0), Furniture('bed', x1 - 1, y0 + 2, h=2), Furniture('bed', x1, y0 + 2, h=2),
-              Furniture('plant', x0, y1), Furniture('bedside', x1 - 2, y0 + 2), Furniture('armchair', x0, y0 + 3),
-              Furniture('fridge', x1 - 1, y0), Furniture('clock', x0 + 4, y0), Furniture('tv', x0 + 2, y1)]
-    elif r.name == 'Ambulance Bay':
-        f += [Furniture('ambulance', x0 + 2, y0, w=2, h=3)]
-    elif k == 'corridor':
-        f += [Furniture('sanitizer', x, y0) for x in range(x0 + 12, x1, 12)]  # no plants: it's for walking
-        f += [Furniture('bench', x, y1, False, w=3) for x in range(x0 + 1, x1 - 3, 24)]
-    if r.flipped:
-        for item in f:
-            item.y = y0 + y1 - (item.y + item.h - 1)
-    return f

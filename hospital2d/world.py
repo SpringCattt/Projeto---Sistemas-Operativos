@@ -167,7 +167,7 @@ class Dispatcher:
         self.staff = []  # actors that take tasks from here (doctors, security, cleaners)
         self.decisions = deque(maxlen=12)  # (time, text): what it decided and why, shown on the Boss's card
         self.brain = {}  # task kind -> weights (FEATURES)
-        self.policy = list(config.PRIORITY_START)  # who goes first (priority)
+        self.policy = start_policy()  # who goes first (priority), and when to call in / send home staff
         self.learned, self.error_sum = 0, 0.0  # tasks it learned from, and how wrong it was in total (seconds)
 
     def weights(self, kind):
@@ -178,7 +178,7 @@ class Dispatcher:
             with open(path, encoding='utf-8') as f:
                 saved = json.load(f)
             self.brain, self.learned, self.error_sum = saved['brain'], saved['learned'], saved['error_sum']
-            if len(saved.get('policy', [])) == len(self.policy):  # (an older brain weighed urgency too: not used)
+            if len(saved.get('policy', [])) == len(self.policy):  # (an older brain had other things in it: not used)
                 self.policy = saved['policy']
 
     def save(self, path):
@@ -267,7 +267,7 @@ class Dispatcher:
         """Who goes first within the same urgency (the most urgent always go first, like real triage): how long it
         has been waiting and, for a patient, how close it is to running out of patience. learn.py tunes the
         weights (config.PRIORITY_START)."""
-        w_waited, w_impatience = self.policy
+        w_waited, w_impatience = self.policy[:2]
         impatience = 1 - task.patient.patience / 100 if task.patient is not None else 0.0
         return w_waited * (self.clock() - task.created) / 60 + w_impatience * impatience
 
@@ -282,6 +282,13 @@ class Dispatcher:
     def features(self, actor, task):
         return (1.0, self.distance(task.where(), (actor.tx, actor.ty)), actor.fatigue,
                 float(actor.task is not None), float(actor.resting))
+
+
+def start_policy():
+    """The Boss's policy before it learns anything: [w_waited, w_impatience] (who goes first within a colour),
+    then when to call in staff on call (CALL_IN_AT tasks more than free staff) and send them home (after
+    SEND_HOME_AFTER_S with nothing waiting)."""
+    return [*config.PRIORITY_START, config.CALL_IN_AT, config.SEND_HOME_AFTER_S]
 
 
 class Elevator:

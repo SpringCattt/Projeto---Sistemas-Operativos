@@ -93,6 +93,37 @@ def draw_panel(screen, font, title, lines, topright, width=CARD_W):
     return rect.bottom
 
 
+def draw_day_report(screen, font, small, r):
+    """The end of the day: what came in, what the staff cost, the profit and who got the biggest bonus. The world
+    waits, paused, until the button (or Enter) starts the next day. Returns the clickable areas."""
+    green, red = (110, 220, 120), (240, 110, 100)
+    lines = [(f'Treated {r["treated"]:.0f}   gave up {r["gave_up"]:.0f}   thrown out {r["expelled"]:.0f}'
+              f'   surgeries {r["surgeries"]:.0f}', TEXT),
+             (f'Staff called in by the Boss: {r["called_in"]:.0f}', TEXT),
+             ('', TEXT),
+             (f'Patients paid      {r["income"]:10,.0f}', green),
+             (f'Wages              {-r["wages"]:10,.0f}', red),
+             (f'Profit             {r["profit"]:10,.0f}', green if r['profit'] >= 0 else red),
+             (f'Staff bonus ({100 * config.BONUS_SHARE:.0f}%)  {r["bonus"]:10,.0f}', HIGHLIGHT),
+             ('', TEXT)]
+    lines += [(f'  {amount:7,.0f}  {who}', TEXT) for amount, who in r['staff_bonus'][:5]]
+    sw, sh = screen.get_size()
+    w, h = 480, 90 + 22 * len(lines)
+    box = pygame.Rect(0, 0, w, h)
+    box.center = (sw // 2, sh // 2)
+    panel = pygame.Surface(box.size, pygame.SRCALPHA)
+    panel.fill((20, 22, 28, 235))
+    screen.blit(panel, box)
+    pygame.draw.rect(screen, HIGHLIGHT, box, 2, border_radius=6)
+    title = font.render(f'End of day {r["day"]}', True, HIGHLIGHT)
+    screen.blit(title, title.get_rect(midtop=(box.centerx, box.y + 12)))
+    for i, (text, color) in enumerate(lines):
+        screen.blit(font.render(text, True, color), (box.x + 24, box.y + 44 + 22 * i))
+    go = pygame.Rect(0, 0, 220, 30)
+    go.midbottom = (box.centerx, box.bottom - 12)
+    return [(button(screen, font, go, f'Start day {r["day"] + 1} (Enter)', on=True), ('cmd', ('next_day',)))]
+
+
 def draw_dispatcher(screen, font, boss, to_screen, by_id, shown):
     """On the map: a line from each busy member of staff to its task (urgency colour), and a pulsing ring on
     every task still waiting for someone. When a task is about a person, it follows that person smoothly.
@@ -239,7 +270,7 @@ def run_ui(snapshots, commands, positions):
     cam_y = (centre.y + centre.h / 2) * T - screen.get_height() / zoom / 2
     snap = {'actors': [], 'messes': [], 'events': [], 'stats': {}, 'time': 0.0, 'surge': False, 'sim_hz': 0.0,
             'line': 0, 'triage': 0, 'patients': 0, 'keep_up': 1.0, 'speed': config.TIME_SCALE, 'paused': False,
-            'staff': {}}
+            'staff': {}, 'day': 0, 'hour': 0.0, 'closed': False, 'day_over': None, 'today': {}}
     show_tablet, opts, beat = False, {'count': 1, 'triaged': False}, 0.0
     actors, selected_id, room_sel, list_open, scroll, show_log, show_boss = [], None, None, False, 0, True, False
     view, sel_floor = 0, None  # the floor on screen; the one the selected person was on
@@ -280,6 +311,8 @@ def run_ui(snapshots, commands, positions):
             elif ev.type == pygame.KEYDOWN and ev.key in (pygame.K_PAGEUP, pygame.K_PAGEDOWN):
                 new = max(0, min(lay.floors - 1, view + (1 if ev.key == pygame.K_PAGEUP else -1)))
                 cam_x, view = cam_x + (new - view) * lay.stride * T, new  # same place, another floor
+            elif ev.type == pygame.KEYDOWN and ev.key in (pygame.K_RETURN, pygame.K_KP_ENTER) and snap['day_over']:
+                send(('next_day',))
             elif ev.type == pygame.KEYDOWN and ev.key == pygame.K_SPACE:
                 send(('pause',))
             elif ev.type == pygame.KEYDOWN and ev.key in (pygame.K_PLUS, pygame.K_EQUALS, pygame.K_KP_PLUS):
@@ -463,7 +496,9 @@ def run_ui(snapshots, commands, positions):
             screen.blit(text, text.get_rect(center=box.center))
         if show_log and not show_tablet:
             draw_events(screen, small, snap['events'])
-        if show_tablet:
+        if snap['day_over']:  # over everything: nothing goes on until the next day starts
+            hits = draw_day_report(screen, font, small, snap['day_over'])
+        elif show_tablet:
             hits += draw_tablet(screen, font, small, snap, opts, 46)
         else:
             hits.append((button(screen, small, pygame.Rect(10, 38, 150, 22), 'Admin tablet (Tab)'), ('tablet',)))
@@ -471,9 +506,10 @@ def run_ui(snapshots, commands, positions):
                 rect = pygame.Rect(170 + (lay.floors - 1 - f) * 74, 38, 68, 22)
                 hits.append((button(screen, small, rect, f'Floor {f}', on=f == view), ('floor', f)))
 
-        fps, st, t = clock.get_fps(), snap['stats'], snap['time']
-        hud = (f'FPS {fps:4.0f}   sim {100 * snap["keep_up"]:3.0f}%   time {int(t // 60):02d}:{int(t % 60):02d}'
-               f'   floor {view}'
+        fps, st, hour, today = clock.get_fps(), snap['stats'], snap['hour'], snap['today']
+        hud = (f'FPS {fps:4.0f}   sim {100 * snap["keep_up"]:3.0f}%   day {snap["day"]} '
+               f'{int(hour):02d}:{int(hour % 1 * 60):02d}{" closed" if snap["closed"] else ""}'
+               f'   today {today.get("income", 0) - today.get("wages", 0):+,.0f}   floor {view}'
                f'   patients {snap["patients"]}   treated {st.get("treated", 0)}   gave up {st.get("gave_up", 0)}'
                f'   line {snap["line"]}   triage {snap["triage"]}   zoom x{zoom}'
                f'   {"PAUSED" if snap["paused"] else "speed x" + format(snap["speed"], "g")}')

@@ -51,6 +51,10 @@ class Hospital:
         self.waits = defaultdict(list)  # urgency at triage -> seconds from triage to the doctor
         self.errors = []
         self.surge_until = -1.0
+        # The day: its number, when it started, doors closed (after midnight), its report once over (paused)
+        self.day, self.day_start, self.closed, self.day_over = 0, 0.0, False, None
+        self.day_stats = Counter()  # self.stats when the day started (today = stats - day_stats)
+        self.credit = Counter()  # today: staff label -> what it brought in (shares the bonus out)
         self.sim_hz, self.keep_up, self._hz_mark = 0.0, 1.0, (time.perf_counter(), 0, 0.0)
         self._retired_ticks, self._retired_planned = 0, 0.0  # counted by actors that already left
         self.actors, self.actors_lock, self.threads = [], threading.Lock(), []
@@ -110,6 +114,58 @@ class Hospital:
                 self._spawn(a.run, (), f'{a.role}-{a.id}')
         for i, lift in enumerate(self.lifts):
             self._spawn(self.run_lift, (lift,), f'elevator-{i}')
+        self._spawn(self.run_day, (), 'day')
+
+    def run_day(self):
+        """The day's own thread: pays the staff by the hour, closes the doors at midnight, and ends the day when the
+        last patient is gone (the world then stays paused on the day's report until next_day)."""
+        last = self.clock()
+        while not self.stop.wait(0.1):
+            now = self.clock()
+            with self.actors_lock:
+                staff = [a for a in self.actors if a.role != 'patient']
+            hourly = sum(config.WAGE.get(a.role, 0) * (config.ON_CALL_PAY if a.on_call else 1) for a in staff)
+            self.count('wages', hourly * (now - last) / config.HOUR_S)
+            last = now
+            if not self.closed and now - self.day_start >= config.DAY_HOURS * config.HOUR_S:
+                self.closed = True
+                self.log(f'Midnight: no more patients today. The ones inside are seen to')
+            if self.closed and self.day_over is None and not self.patients():
+                self.end_day()
+
+    def today(self):
+        """Today's numbers so far (stats since the day started)."""
+        with self.stats_lock:
+            today = Counter(self.stats)
+            today.subtract(self.day_stats)
+        return today
+
+    def end_day(self):
+        """The day's report, the bonus shared out, and the world paused until next_day."""
+        today = self.today()
+        with self.stats_lock:
+            credit = dict(self.credit)
+        profit = today['income'] - today['wages']
+        pool = config.BONUS_SHARE * max(0.0, profit)
+        total = sum(credit.values())
+        bonus = sorted(((pool * c / total, who) for who, c in credit.items()), reverse=True) if total else []
+        self.day_over = {'day': self.day, 'income': today['income'], 'wages': today['wages'], 'profit': profit,
+                         'bonus': pool, 'treated': today['treated'], 'gave_up': today['gave_up'],
+                         'expelled': today['expelled'], 'surgeries': today['surgeries'],
+                         'called_in': today['called_in'], 'staff_bonus': bonus}
+        self.set_speed(paused=True)
+        self.log(f'End of day {self.day}: earned {today["income"]:.0f}, wages {today["wages"]:.0f}, '
+                 f'profit {profit:.0f}, staff bonus {pool:.0f}')
+
+    def next_day(self):
+        """After the report: the next day starts (from 00:00, doors open)."""
+        if self.day_over is None:
+            return
+        with self.stats_lock:
+            self.day_stats, self.credit = Counter(self.stats), Counter()
+        self.day, self.day_start, self.closed, self.day_over = self.day + 1, self.clock(), False, None
+        self.set_speed(paused=False)
+        self.log(f'Day {self.day} starts')
 
     def run_lift(self, lift):
         """An elevator's own thread: to wherever it's needed (Elevator.target), one of its floors at a time."""
@@ -154,7 +210,9 @@ class Hospital:
 
     # ---- patients coming and going ------------------------------------------------------------------------------
     def admit(self, info):
-        """A patient walks in from the street (sent by the arrivals process)."""
+        """A patient walks in from the street (sent by the arrivals process); none after midnight."""
+        if self.closed:
+            return None
         self.count('arrived')
         if info['surgery'] and self.lay.ambulance_bay:  # by ambulance: in through Emergency's own door, triaged
             self.log(f'{info["name"]} arrives by ambulance')
@@ -188,7 +246,11 @@ class Hospital:
     def command(self, cmd):
         """An order from the admin tablet (UI process)."""
         kind, *args = cmd
-        if kind == 'pause':
+        if kind == 'next_day':
+            self.next_day()
+        elif self.day_over is not None and kind == 'pause':
+            self.log('The day is over: start the next one')
+        elif kind == 'pause':
             self.set_speed(paused=not self.paused)
             self.log('Admin: ' + ('pause' if self.paused else 'resume'))
         elif kind == 'speed':
@@ -256,6 +318,8 @@ class Hospital:
         if self.running:
             self._spawn(a.run, (), f'{a.role}-{a.id}')
         a.on_call = on_call
+        if on_call:
+            self.count('called_in')
         self.log(f'Boss calls in {a.label()} (on call)' if on_call else f'Admin: {a.label()} starts a shift')
 
     def fire(self, job, on_call=False):
@@ -281,7 +345,8 @@ class Hospital:
             job = JOBS[name]
             called = [a for a in self.working(job) if a.on_call]
             places = self.places(job)
-            if waiting[job.role] >= free[job.role] + config.CALL_IN_AT:
+            call_in_at, send_home_after = d.policy[2:4]  # (learned: learn.py)
+            if waiting[job.role] >= free[job.role] + call_in_at:
                 self.quiet_since[name] = None
                 room = places is None or len(self.working(job)) < len(places)
                 if room and len(called) < most and now - self.last_call.get(name, -10 ** 9) > config.CALL_EVERY_S:
@@ -292,7 +357,7 @@ class Hospital:
             else:
                 if self.quiet_since.get(name) is None:
                     self.quiet_since[name] = now
-                if called and now - self.quiet_since[name] > config.SEND_HOME_AFTER_S:
+                if called and now - self.quiet_since[name] > send_home_after:
                     self.quiet_since[name] = now
                     self.fire(job, on_call=True)
 
@@ -301,6 +366,8 @@ class Hospital:
                 for name, job in JOBS.items()}
 
     def surge(self, seconds):
+        if self.closed:
+            return
         self.surge_until = self.clock() + seconds
         self.count('surges')
         for p in self.rng.sample(self.patients(), min(6, len(self.patients()))):
@@ -323,11 +390,31 @@ class Hospital:
     def consult_started(self, p):
         if p.triaged_at is not None:
             with self.stats_lock:
-                self.waits[p.base_urgency].append(self.clock() - p.triaged_at)
+                p.waited = self.clock() - p.triaged_at
+                self.waits[p.base_urgency].append(p.waited)
             p.triaged_at = None  # only the first time counts (not after an interruption)
 
-    def treated(self, p):
-        self.count('treated')
+    def treated(self, p, surgery=False):
+        """p pays: by its urgency, less the longer it waited for a doctor (config.PRICE). The payment is credited to
+        whoever did each step for it (config.SHARE): that shares the day's bonus out."""
+        u, on_time = p.base_urgency, config.ON_TIME_S[p.base_urgency]
+        late = max(0.0, p.waited - on_time) / (2 * on_time)  # 0 on time, 1 at three times that
+        pay = (config.PRICE[u] + (config.SURGERY_PRICE if surgery else 0)) \
+            * max(config.LATE_PAYS, 1 - (1 - config.LATE_PAYS) * late)
+        shares = {step: share for step, share in config.SHARE.items() if p.helpers.get(step)}
+        shares['doctor'] = shares.get('doctor', 0) + 1 - sum(shares.values())  # the steps nobody did
+        with self.stats_lock:
+            self.stats['treated'] += 1
+            self.stats['income'] += pay
+            for step, share in shares.items():
+                who = p.helpers.get(step, [])
+                for a in who:
+                    self.credit[a.label()] += pay * share / len(who)
+
+    def credit_for(self, actor, kind):
+        """Security and cleaners: what a fight stopped or a mess cleaned counts for the bonus (config.CREDIT)."""
+        with self.stats_lock:
+            self.credit[actor.label()] += config.CREDIT[kind]
 
     def retire(self, actor):
         """An actor's thread ended: it leaves the map."""
@@ -391,13 +478,16 @@ class Hospital:
                 'time': self.clock(), 'surge': self.clock() < self.surge_until, 'sim_hz': self.sim_hz,
                 'speed': self.rate, 'paused': self.paused, 'staff': self.staff_counts(),
                 'keep_up': self.keep_up,
+                'day': self.day, 'hour': (self.clock() - self.day_start) / config.HOUR_S, 'closed': self.closed,
+                'day_over': self.day_over, 'today': {k: v for k, v in self.today().items() if k in ('income', 'wages')},
                 'line': len(self.line), 'triage': self.triage_queue.qsize(),
                 'patients': sum(1 for a in actors if a.role == 'patient')}
 
     def summary(self):
         s = self.stats
         lines = [f'Simulated time: {self.clock():.0f} s',
-                 f'Arrived: {s["arrived"]}  surges: {s["surges"]}',
+                 f'Days: {self.day + 1}  arrived: {s["arrived"]}  surges: {s["surges"]}',
+                 f'Earned: {s["income"]:.0f}  wages: {s["wages"]:.0f}  profit: {s["income"] - s["wages"]:.0f}',
                  f'Treated: {s["treated"]}  surgeries: {s["surgeries"]}  gave up: {s["gave_up"]}  '
                  f'thrown out: {s["expelled"]}',
                  f'Complaints: {s["complaints"]}  fights: {s["fights"]}  vomits: {s["vomits"]}  '

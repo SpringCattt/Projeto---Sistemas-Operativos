@@ -318,6 +318,44 @@ def test_elevator():
         h.stop.set()
 
 
+def test_money():
+    """A patient pays by urgency, less the later it saw a doctor; the payment is shared out by who did what."""
+    h = Hospital(seed=13, n_doctors=1, n_surgeries=0, n_patients=0)  # not started: we pay by hand
+    staff = {step: SimpleNamespace(label=lambda step=step: step) for step in ('reception', 'triage', 'doctor')}
+    on_time = SimpleNamespace(base_urgency=1, waited=config.ON_TIME_S[1], helpers={k: [a] for k, a in staff.items()})
+    h.treated(on_time)
+    assert h.stats['income'] == config.PRICE[1]
+    # no stretcher for it: that share is the doctor's
+    assert abs(h.credit['doctor'] - config.PRICE[1] * (config.SHARE['doctor'] + config.SHARE['stretcher'])) < 1e-6
+    assert abs(h.credit['triage'] - config.PRICE[1] * config.SHARE['triage']) < 1e-6
+    late = SimpleNamespace(base_urgency=1, waited=3 * config.ON_TIME_S[1], helpers={'doctor': [staff['doctor']]})
+    h.treated(late, surgery=True)
+    assert abs(h.stats['income'] - config.PRICE[1] - (config.PRICE[1] + config.SURGERY_PRICE) * config.LATE_PAYS) < 1e-6
+
+
+def test_day():
+    """At midnight the doors close; once the last patient is gone the day is over and the world waits, paused,
+    until the next day is started (pause can't skip it). Wages are paid by the hour."""
+    with settings(HOUR_S=1, DAY_HOURS=4):
+        h = Hospital(seed=14, n_doctors=1, n_surgeries=0, n_patients=0)
+        h.start()
+        try:
+            h.admit(new_patient(h.rng, urgency=0))
+            assert until(lambda: h.closed, 10)
+            assert h.admit(new_patient(h.rng)) is None  # closed: nobody else comes in
+            assert until(lambda: h.day_over is not None, 60), 'the day never ended'
+            report = h.day_over
+            assert h.speed == 0 and report['wages'] > 0 and report['day'] == 0
+            assert abs(report['profit'] - (report['income'] - report['wages'])) < 1e-6
+            h.command(('pause',))
+            assert h.speed == 0  # only starting the next day goes on
+            h.command(('next_day',))
+            assert h.day == 1 and not h.closed and h.day_over is None and h.speed > 0
+            assert h.today()['wages'] < report['wages']  # a new day, counted from zero
+        finally:
+            stop(h)
+
+
 def test_admin():
     """The admin tablet's orders: pause stops the clock, speed changes it, staff come and go, patients appear."""
     h = Hospital(seed=8, n_doctors=2, n_surgeries=0, n_patients=0)

@@ -27,6 +27,8 @@ class Patient(Actor):
         self.calls = queue.Queue()  # Summons from staff
         self.gone = self.complaining = False
         self.waiting_room, self.waiting_since, self.triaged_at = None, None, None
+        self.waited = 0.0  # from triage to the doctor (what it pays depends on it: Hospital.treated)
+        self.helpers = {}  # step ('reception', 'triage', 'stretcher', 'doctor') -> who did it (shares its payment)
         self.triaged = triaged
         self.provoke = None  # 'fight' / 'vomit': ordered from the admin tablet (done by its own thread)
 

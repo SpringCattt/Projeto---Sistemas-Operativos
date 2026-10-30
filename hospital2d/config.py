@@ -62,7 +62,8 @@ W_RESTING = 40  # extra if it's resting
 PREEMPT_GAP = 2  # only interrupt for a task this many urgency levels higher (Red over Green)
 # Who goes first when there are more tasks than staff: always the most urgent colour first, like real triage
 # (Manchester); within a colour, the highest minutes waited * w + impatience * w (impatience: 0 = full patience,
-# 1 = about to give up), ties by arrival. Starts as arrival order (both 0); learn.py tunes the two weights.
+# 1 = about to give up), ties by arrival. Starts as arrival order (both 0); learn.py tunes the two weights, and
+# CALL_IN_AT and SEND_HOME_AFTER_S below (the Boss's policy: world.start_policy).
 PRIORITY_START = [0.0, 0.0]
 
 # Staff on call: the Boss calls one in when CALL_IN_AT more tasks are waiting than there are free staff of that role
@@ -72,6 +73,30 @@ ON_CALL = {'Doctor': 3, 'WardNurse': 2, 'Security': 1, 'Cleaner': 1}
 CALL_IN_AT = 3
 CALL_EVERY_S = 30
 SEND_HOME_AFTER_S = 90
+
+# A day: DAY_HOURS hours of HOUR_S simulated seconds (24 x 30 s: 12 minutes at x1), from day 0. At midnight the
+# doors close: whoever is inside is seen to (or gives up), and once the last patient is gone the day is over. In the
+# game it then waits, paused, on the day's report until you start the next day.
+HOUR_S = 30
+DAY_HOURS = 24
+
+# Money (game numbers). A treated patient pays PRICE for its urgency at triage (+ SURGERY_PRICE if operated on):
+# all of it if it saw a doctor within ON_TIME_S, less the longer it waited (LATE_PAYS of it at 3 x ON_TIME_S or
+# more). Nothing if it gave up or was thrown out. Staff cost WAGE per hour in the hospital, ON_CALL_PAY times
+# that if the Boss called them in. The Boss is the owner: no wage.
+PRICE = [60, 150, 400]  # Green, Yellow, Red
+SURGERY_PRICE = 800
+ON_TIME_S = [240, 120, 45]
+LATE_PAYS = 0.4
+WAGE = {'doctor': 10, 'nurse': 5, 'receptionist': 3, 'security': 3, 'cleaner': 3}
+ON_CALL_PAY = 1.5
+# The bonus: BONUS_SHARE of the day's profit (if there is any), shared among the staff by what each one brought
+# in. Of each payment, SHARE goes to whoever did each step for that patient (a step nobody did, like the stretcher
+# for someone who walked, goes to the doctor); security and cleaners count CREDIT for each fight stopped and mess
+# cleaned. The Boss learns (learn.py) to make this pool as big as it can.
+BONUS_SHARE = 0.3
+SHARE = {'reception': 0.10, 'triage': 0.15, 'stretcher': 0.15, 'doctor': 0.60}
+CREDIT = {'fight': 40, 'clean': 20}
 
 STRETCHERS = 4  # parked at the back of storage: with all of them out, a Red patient waits for one to come back
 

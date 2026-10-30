@@ -164,11 +164,25 @@ would have made the guess better (normalised least mean squares; one set of weig
 
 **Who goes first** when there are more patients than doctors: always the most urgent colour first, like real triage
 (the Manchester system used in Portuguese and Spanish emergency rooms). Within a colour it's a priority with two
-weights: minutes waited and impatience (how close the patient is to giving up). It starts as arrival order and
-`learn.py` tunes it with an **evolution strategy**, in rounds of 10 simulated minutes: every hospital plays the same
-day (same seed) with the weights nudged a bit (half one way, half the opposite), each round is scored
-(treated − 3 × gave up − minutes Red patients waited) and the weights move towards the nudges that scored better.
-Two of the hospitals play each day with the learned weights and with the original ones: that difference
+weights: minutes waited and impatience (how close the patient is to giving up). It starts as arrival order.
+
+**Days, money and the bonus.** The simulation runs in days of `DAY_HOURS` hours of `HOUR_S` simulated seconds
+(24 × 30 s), from day 0, kept by its own thread (`Hospital.run_day`): it pays the wages by the hour, closes the
+doors at midnight, and when the last patient is gone it writes the day's report and pauses the world until the
+next day is started (`next_day`; in the game, the report's button or Enter; pause can't skip it). A treated
+patient pays `PRICE` by urgency (+ `SURGERY_PRICE`), all of it if it saw a doctor within `ON_TIME_S`, less the later
+(down to `LATE_PAYS` of it); nothing if it gave up. Each payment is credited to whoever did each step for that
+patient (`SHARE`: reception, triage, stretcher, doctor); security and cleaners get `CREDIT` per fight stopped and
+mess cleaned. Staff cost `WAGE` per hour (`ON_CALL_PAY` times that if called in). The staff bonus is `BONUS_SHARE`
+of the day's profit, shared out by those credits. The staff don't decide anything: they do what the Boss gives
+them, so making the bonus big is the Boss's job.
+
+**What the Boss learns.** `learn.py` plays whole days and keeps what makes more profit (the bonus is a share of it).
+Its policy has four numbers: the two weights above, and when to call in staff on call (`CALL_IN_AT`: how many
+tasks more than free staff) and when to send them home (`SEND_HOME_AFTER_S` with nothing waiting). It's an
+**evolution strategy**: every hospital plays the same day (same seed) with the policy nudged a bit (half one way,
+half the opposite), each one's score is that day's profit, and the policy moves towards the nudges that made more.
+Some hospitals play other days with the learned policy and with the one it started from: that difference
 (`vs_start`, its own chart) is the fair test of whether what it learned is actually better.
 
 ```
@@ -176,13 +190,13 @@ python learn.py 8 4       # 4 hospitals at once at x8 (one process each); Ctrl+C
 python charts.py          # graphs of how it's going so far (charts.png), also while learn.py runs
 ```
 
-Don't go above x8: people couldn't move as fast as they should. After every round it saves `boss_brain.json` (the
-game starts from it too) and a row in `learning.csv`. In PowerShell, at low priority:
+Don't go above x8: people couldn't move as fast as they should. A day takes about 2.5 minutes at x8. After every
+round it saves `boss_brain.json` (the game starts from it too) and a row in `learning.csv`. In PowerShell, at low priority:
 `cmd /c start "learn" /low python learn.py 8 4`.
 
-**Staff on call** (`config.ON_CALL`): when tasks pile up for a role, the Boss calls someone in (they walk in from
-the street; on-call doctors get the rooms left empty for them) and sends them home once it has been quiet for a
-while.
+**Staff on call** (`config.ON_CALL`): when tasks pile up for a role (by the learned `call in at`), the Boss calls
+someone in (they walk in from the street; on-call doctors get the rooms left empty for them) and sends them home
+once it has been quiet for a while (the learned `send home after`).
 
 The distance is the real one, walking around walls and furniture (a breadth-first search from the task, cached).
 Click the Boss (or press `B`) to watch it: a line from every busy member of staff to its task, a pulsing ring on

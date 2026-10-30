@@ -41,9 +41,9 @@ def main():
 
     a = ax[0][0]
     a.fill_between(rounds, column(rows, 'worst'), column(rows, 'best'), color='lightgray', label='best / worst hospital')
-    a.plot(rounds, column(rows, 'reward'), color='gray', linewidth=0.8, label='average')
-    a.plot(rounds, smooth(column(rows, 'reward')), color='tab:red', label='trend (last 10)')
-    a.set(title='Score of each round (higher = better)', xlabel='round', ylabel='treated - 3 x gave up - Red waiting min')
+    a.plot(rounds, column(rows, 'profit'), color='gray', linewidth=0.8, label='average')
+    a.plot(rounds, smooth(column(rows, 'profit')), color='tab:red', label='trend (last 10)')
+    a.set(title="Each day's profit (the staff bonus is a share of it)", xlabel='day (round)', ylabel='profit')
     a.legend()
 
     a = ax[0][1]
@@ -52,8 +52,17 @@ def main():
     a.set(title='Who goes first within a colour: what it learned', xlabel='round', ylabel='weight')
     a.legend()
 
+    a = ax[1][2]
+    a.plot(rounds, column(rows, 'call_in_at'), color='tab:orange', label='call in at (tasks more than free staff)')
+    a.set(title='Staff on call: what it learned', xlabel='round', ylabel='tasks')
+    b = a.twinx()
+    b.plot(rounds, column(rows, 'send_home_after_s'), color='tab:brown', label='send home after (s, right)')
+    b.set_ylabel('seconds with nothing to do')
+    a.legend(handles=a.get_lines() + b.get_lines(), loc='upper left')
+
     a = ax[1][0]
-    for name, color in (('treated', 'tab:green'), ('gave_up', 'tab:red'), ('red_wait_min', 'tab:purple')):
+    for name, color in (('treated', 'tab:green'), ('gave_up', 'tab:red'), ('red_wait_min', 'tab:purple'),
+                        ('called_in', 'tab:orange')):
         a.plot(rounds, smooth(column(rows, name)), color=color, label=name.replace('_', ' '))
     a.set(title='Per round, per hospital (trend)', xlabel='round', ylabel='patients / minutes')
     a.legend()
@@ -71,10 +80,9 @@ def main():
           label='each round')
     a.plot(rounds, smooth(diff, 20), color='black', label='trend (last 20)')
     a.axhline(0, color='gray', linewidth=0.8)
-    a.set(title='Learned weights vs the original ones, same day\n(above 0 = what it learned is better)',
-          xlabel='round', ylabel='score difference')
+    a.set(title='What it learned vs where it started, same day\n(above 0 = what it learned makes more)',
+          xlabel='round', ylabel='profit difference')
     a.legend()
-    ax[1][2].axis('off')
 
     fig.tight_layout()
     out = OUT

@@ -265,11 +265,15 @@ straight instead of zig-zagging.
 | `dialogue.py` | picks what people say from `data/dialogue.txt` |
 | `data/` | names, complaints and dialogue lines, one per line |
 
-**Animations.** Besides the people walking (the character sheets' frames): ambulances flash their lights and open
-their back doors while the paramedics unload, the elevator's doors slide open when the car is at that floor for
-someone (`elevator_0..2`), automatic doors open while someone is at them (a double door as one), receptionists
-type, cleaners mop. All of it is PNGs in `assets/custom/` (`ambulance*`, `elevator_*`, `door`, `door_open`,
-`stretcher_v/h`, `stairs`, `road_l/r`, `wall`, `wall_v`...).
+**Animations.** Besides the people walking (the character sheets' frames, now with a shadow under their feet):
+ambulances flash their lights and open their back doors while the paramedics unload, the elevator's doors slide
+open when the car is at that floor for someone (`elevator_0..2`), automatic doors open while someone is at them (a
+double door as one), TVs show a wildlife programme and the news, vending machines blink, coffee machines steam,
+PC screens scroll, heart monitors sweep their beat across a screen on top of the cart, receptionists type, cleaners
+mop (`art.ANIMATED`: frames by time, frozen while paused). Outside gets dark at night and warm at dawn and dusk,
+following the day's clock (`main.SKY`); inside, the lights are on. Grass and street come in a few variants,
+scattered, so they don't look tiled. All of it is PNGs in `assets/custom/`. The map and the night shade are scaled
+for the screen only when the view changes (the night used to cost 145 → 108 FPS).
 
 **Speech bubbles.** People talk when they interact (registration, triage, the doctor's call, complaints, fights,
 security, someone throwing up, a surge, the Boss shouting orders…). The lines are in `data/dialogue.txt`

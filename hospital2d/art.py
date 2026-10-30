@@ -28,6 +28,9 @@ FURNITURE = {
     'books': H + 'lab_books', 'ambulance': C + 'ambulance', 'elevator': C + 'elevator',
 }
 STACKED = {'shelf'}  # one image repeated on every tile of the footprint
+# Animated pieces: kind -> (its frames custom/<name>_0.., frames per second). main.py picks the frame by time
+ANIMATED = {'tv': ('tv', 8, 1.5), 'vending': ('vending', 3, 1.2), 'coffee': ('coffee', 3, 3.0), 'pc': ('pc', 4, 2.0)}
+VARIANTS = {'custom/floor_grass': ('grass', 4), 'custom/floor_street': ('street', 3)}  # (so they don't look tiled)
 LIFT = {'pc': 9, 'bell': 9, 'cake': 9, 'donuts': 9, 'books': 9}  # pixels up: they stand on a counter/desk top
 
 _cache = {}
@@ -49,6 +52,9 @@ def draw_layout(lay):
             # a wall that only goes up and down gets the upright piece, so it's one smooth wall like the others
             if name == 'custom/wall' and ({(x, y - 1), (x, y + 1)} & walls) and not ({(x - 1, y), (x + 1, y)} & walls):
                 name = 'custom/wall_v'
+            if name in VARIANTS:  # grass and street: one of a few looks, scattered (the same every time)
+                base, n = VARIANTS[name]
+                name = f'custom/{base}_{((x * 73856093) ^ (y * 19349663)) % n}'
             surf.blit(image(name), (x * T, y * T))
     return surf
 
@@ -56,7 +62,8 @@ def draw_layout(lay):
 def furniture_sprites(lay):
     """[(depth, image, x, y)] in world pixels, sorted back to front. depth is where the piece meets the floor:
     whatever has a bigger depth is drawn later and covers it. Seats use their top edge instead, so whoever
-    sits on them is drawn over them."""
+    sits on them is drawn over them. An animated piece's image is (frames, frames per second, a time offset so
+    they don't all move in step)."""
     counters = {(f.x, f.y) for f in lay.furniture if f.kind == 'counter'}
     out = []
     for f in lay.furniture:
@@ -75,8 +82,18 @@ def furniture_sprites(lay):
             out += [(depth, image(FURNITURE[f.kind]), x * T, y * T) for x, y in f.tiles()]
         else:  # centred on the footprint, standing on its bottom edge
             img = image(FURNITURE[f.kind])
-            out.append((depth, img, (f.x + f.w / 2) * T - img.get_width() // 2,
-                        (f.y + f.h) * T - img.get_height() - LIFT.get(f.kind, 0)))
+            x, y = (f.x + f.w / 2) * T - img.get_width() // 2, (f.y + f.h) * T - img.get_height() - LIFT.get(f.kind, 0)
+            offset = ((f.x * 7 + f.y * 13) % 17) / 7
+            if f.kind in ANIMATED:
+                name, n, fps = ANIMATED[f.kind]
+                frames = tuple(image(f'custom/{name}_{i}') for i in range(n))
+                out.append((depth, (frames, fps, offset), x + (img.get_width() - frames[0].get_width()) // 2,
+                            y + img.get_height() - frames[0].get_height()))
+            else:
+                out.append((depth, img, x, y))
+            if f.kind == 'monitor':  # the cart gets a screen with the heartbeat on it, sitting on its top
+                screen = tuple(image(f'custom/ecg_{i}') for i in range(10))
+                out.append((depth, (screen, 5.0, offset), x + 2, y + 4))
     out.sort(key=lambda s: s[0])  # stable: things standing on a counter/desk stay after it
     return out
 

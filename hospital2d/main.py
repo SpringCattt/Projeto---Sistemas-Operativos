@@ -20,7 +20,7 @@ from arrivals import run_arrivals
 from art import ASSETS, BUBBLE_TAIL_X, CHAR_H, CHAR_W, character, draw_layout, furniture_sprites, icon_bubble, image, \
     lying, text_bubble
 from eventlog import run_log
-from layout import load_layout
+from layout import EMPTY, load_layout
 from sim import new_positions, read_positions, run_simulation
 
 T = config.TILE
@@ -222,6 +222,20 @@ def draw_tablet(screen, font, small, snap, opts, top):
     return hits
 
 
+SKY = [(0, (14, 22, 60, 150)), (5, (14, 22, 60, 150)), (6.5, (255, 170, 120, 60)), (7.5, (255, 255, 255, 0)),
+       (18, (255, 255, 255, 0)), (19.5, (255, 140, 70, 70)), (21, (14, 22, 60, 150)), (24, (14, 22, 60, 150))]
+
+
+def sky(hour):
+    """The colour (and how much of it) laid over the outside at that hour: clear by day, warm at dawn and dusk,
+    dark blue at night."""
+    for (h0, c0), (h1, c1) in zip(SKY, SKY[1:]):
+        if h0 <= hour <= h1:
+            k = (hour - h0) / (h1 - h0)
+            return tuple(round(a + (b - a) * k) for a, b in zip(c0, c1))
+    return SKY[0][1]
+
+
 def run_ui(snapshots, commands, positions, sim=None):
     """commands: Queue -> simulation, for the admin tablet (None: the tablet does nothing). positions: the shared
     block the simulation writes (sim.write_positions). sim: the simulation process, to notice if it stops."""
@@ -264,6 +278,16 @@ def run_ui(snapshots, commands, positions, sim=None):
     vans = {None: both_ways(image('custom/ambulance'))}  # lights off; flashing; flashing with the back doors open
     vans.update({(kind, i): both_ways(image(f'custom/ambulance_{kind}_{i}')) for kind in ('siren', 'open') for i in (0, 1)})
     lift_frames = [image(f'custom/elevator_{i}') for i in range(3)]  # doors closed, half open, open
+    shadow = image('custom/shadow')  # under everyone standing or walking
+    # Outside (grass, road, street) gets dark at night and warm at dawn and dusk; inside the lights are on
+    outdoor = pygame.Surface(floor_map.get_size(), pygame.SRCALPHA)
+    for y in range(lay.height):
+        for x in range(lay.width):
+            room = lay.room_at[y][x]
+            if lay.tiles[y][x] == EMPTY or (room is not None and room.kind == 'street'):
+                outdoor.fill((255, 255, 255, 255), (x * T, y * T, T, T))
+    sky_key, sky_shade = None, None  # (floor, quarter of an hour) it was made for, and the shade itself
+    scaled = {}  # the map and the night as last scaled for the screen: (what for, surface)
     lifts = [(i, floor, piece) for i, stops in enumerate(lay.lifts) for floor, (_, _, piece) in stops.items()]
     lift_open = {}  # (lift, floor) -> how open its doors are drawn (0 to 2), easing towards the real state
     door_open = image('custom/door_open')
@@ -407,8 +431,10 @@ def run_ui(snapshots, commands, positions, sim=None):
         src = pygame.Rect(int(cam_x), int(cam_y), int(sw / zoom) + 2, int(sh / zoom) + 2).clip(
             pygame.Rect(view * lay.stride * T, 0, lay.stride * T, lay.height * T))  # only this floor
         if src.w > 0 and src.h > 0:
-            part = pygame.transform.scale(floor_map.subsurface(src), (src.w * zoom, src.h * zoom))
-            screen.blit(part, ((src.x - cam_x) * zoom, (src.y - cam_y) * zoom))
+            if scaled.get('map', (None,))[0] != (tuple(src), zoom):  # (scaled again only when the view changes)
+                scaled['map'] = ((tuple(src), zoom), pygame.transform.scale(floor_map.subsurface(src),
+                                                                           (src.w * zoom, src.h * zoom)))
+            screen.blit(scaled['map'][1], ((src.x - cam_x) * zoom, (src.y - cam_y) * zoom))
 
         def to_screen(tx, ty):
             return (tx * T - cam_x) * zoom, (ty * T - cam_y) * zoom
@@ -469,7 +495,11 @@ def run_ui(snapshots, commands, positions, sim=None):
         heads = []
         for item in heapq.merge(props[view], extras, bodies, key=lambda s: s[0]):
             if item[1] is not None:  # furniture: (depth, image, x, y) in world pixels
-                blit_scaled(item[1], (item[2] - cam_x) * zoom, (item[3] - cam_y) * zoom)
+                img = item[1]
+                if isinstance(img, tuple):  # animated: the frame for now (frozen while paused, like the rest)
+                    frames, fps, offset = img
+                    img = frames[int((beat + offset) * fps) % len(frames)]
+                blit_scaled(img, (item[2] - cam_x) * zoom, (item[3] - cam_y) * zoom)
                 continue
             a = item[2]
             if a.role == 'ambulance':  # a vehicle, not a person: nose first, lights flashing, back doors open
@@ -487,6 +517,7 @@ def run_ui(snapshots, commands, positions, sim=None):
                 blit_scaled(img, x, y)
                 y -= (CHAR_H - img.get_height()) * zoom  # bubbles and marks above the head as usual
             else:
+                blit_scaled(shadow, *to_screen(a.px - shadow.get_width() / 2 / T, a.py + FEET - 3 / T))
                 x, y = to_screen(a.px - CHAR_W / 2 / T, a.py + FEET - CHAR_H / T)
                 if a.action == 'typing':  # bobs with the keystrokes
                     y -= zoom * (int(beat * 8) % 2)
@@ -494,6 +525,20 @@ def run_ui(snapshots, commands, positions, sim=None):
             heads.append((a, x + CHAR_W * zoom / 2, y))
             if a is selected:
                 pygame.draw.rect(screen, HIGHLIGHT, (x, y, CHAR_W * zoom, CHAR_H * zoom), 2)
+
+        key = (view, int(snap['hour'] % 24 * 4))  # the light outside, by the quarter hour
+        if key != sky_key:
+            sky_key, color = key, sky(snap['hour'] % 24)
+            sky_shade = None
+            if color[3]:
+                region = pygame.Rect(view * lay.stride * T, 0, lay.stride * T, lay.height * T)
+                sky_shade = outdoor.subsurface(region).copy()
+                sky_shade.fill(color, special_flags=pygame.BLEND_RGBA_MULT)
+        if sky_shade is not None and src.w > 0 and src.h > 0:  # over the ground and whoever is outside
+            if scaled.get('sky', (None,))[0] != (tuple(src), zoom, sky_key):
+                part = sky_shade.subsurface(src.move(-view * lay.stride * T, 0))
+                scaled['sky'] = ((tuple(src), zoom, sky_key), pygame.transform.scale(part, (src.w * zoom, src.h * zoom)))
+            screen.blit(scaled['sky'][1], ((src.x - cam_x) * zoom, (src.y - cam_y) * zoom))
 
         if zoom >= 2:  # over the heads: urgency (triaged patients) and what's going on
             for a, hx, hy in heads:

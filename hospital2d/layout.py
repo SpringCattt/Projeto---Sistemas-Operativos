@@ -1,6 +1,8 @@
 # layout.py - Builds the hospital floor plan (rooms, doors and furniture) from config.py
 import functools
 import heapq
+import json
+import os
 from collections import deque
 from dataclasses import dataclass
 
@@ -8,11 +10,11 @@ import config
 
 EMPTY, WALL, FLOOR, DOOR = 0, 1, 2, 3
 
-# Size (width, height) of each medical-wing room type, walls included
+# Size (width, height) of each medical-wing room type, walls included (storage: the size it's drawn in Tiled)
 SIZES = {
-    'doctor': (8, 8), 'emergency': (14, 8), 'surgery': (10, 9), 'disinfection': (6, 9),
-    'storage': (14, 9), 'rest': (12, 9),
+    'doctor': (8, 8), 'emergency': (14, 8), 'surgery': (10, 9), 'disinfection': (6, 9), 'rest': (12, 9),
 }
+ROOMS = os.path.join(os.path.dirname(__file__), 'rooms')  # rooms drawn in the Tiled map editor (see README)
 MARGIN = 3  # grass tiles around the building
 SEATS = {'chair', 'office_chair', 'bench', 'sofa'}  # furniture people sit on (every tile of a bench is a seat)
 # Just for looks: left out wherever it would leave a way through only one tile wide (see Layout)
@@ -62,6 +64,30 @@ class Furniture:
 
     def tiles(self):
         return [(x, y) for y in range(self.y, self.y + self.h) for x in range(self.x, self.x + self.w)]
+
+
+@functools.cache
+def drawn(kind):
+    """A room drawn in Tiled (rooms/<kind>.tmj, door at the bottom): its size, walls included, and its pieces as
+    (kind, x, y, w, h) from its top-left corner. Pieces of kind 'stretcher' are where the stretchers park."""
+    path = os.path.join(ROOMS, kind + '.tmj')
+    with open(path, encoding='utf-8') as f:
+        m = json.load(f)
+    (ts,) = m['tilesets']
+    with open(os.path.join(ROOMS, ts['source']), encoding='utf-8') as f:
+        props = {ts['firstgid'] + t['id']: {p['name']: p['value'] for p in t.get('properties', [])}
+                 for t in json.load(f)['tiles']}
+    pieces = []
+    for o in (o for layer in m['layers'] for o in layer.get('objects', [])):
+        p = props.get(o.get('gid', 0) & 0x0FFFFFFF, {})  # (Tiled keeps flips in the top bits)
+        if 'kind' not in p:
+            raise ValueError(f'{path}: object {o["id"]} is not a piece from the hospital tileset')
+        w, h = p.get('w', 1), p.get('h', 1)  # its footprint; x, y is its bottom-left corner
+        pieces.append((p['kind'], round(o['x'] / config.TILE), round(o['y'] / config.TILE) - h, w, h))
+    return (m['width'], m['height']), pieces
+
+
+SIZES['storage'] = drawn('storage')[0]
 
 
 class Layout:
@@ -178,15 +204,15 @@ class Layout:
         self.table_spots = {r: bed_spot(furniture_in(r, 'operating_table')[0])[1] for r in self.rooms_of('surgery')}
         self.emergency_beds = {r: [b for b in map(bed_spot, furniture_in(r, 'bed')) if b[0]]
                                for r in self.rooms_of('emergency')}
-        # Stretchers park against the back wall of storage (the one away from its door), with room between them;
-        # the nurses meet anywhere else in there
+        # Stretchers park where rooms/storage.tmj has them; the nurses meet anywhere else in there
         self.stretcher_bay, self.stretcher_spots = [], []
         for r in self.rooms_of('storage'):
-            x0, y0, x1, y1 = r.interior
-            back = y1 if r.flipped else y0
-            self.stretcher_bay += [(x, back) for x in range(x0 + 1, x1, 3) if self.walkable(x, back)]
-            # (not right in front of the stretchers either: that's the lane to push them in and out)
-            self.stretcher_spots += [t for t in self.free_tiles(r) if abs(t[1] - back) > 1]
+            bay = [(r.x + x, r.y + r.h - 1 - y if r.flipped else r.y + y)
+                   for kind, x, y, _, _ in drawn('storage')[1] if kind == 'stretcher']
+            self.stretcher_bay += [t for t in bay if self.walkable(*t)]
+            # (not right next to the stretchers either: that's the lane to push them in and out)
+            self.stretcher_spots += [t for t in self.free_tiles(r)
+                                     if all(max(abs(t[0] - x), abs(t[1] - y)) > 1 for x, y in bay)]
         self.waiting_seats = {r: [t for t in self.free_tiles(r) if t in self.seats] for r in self.rooms_of('waiting')}
         self.control_seat = next((f.x, f.y) for r in self.rooms_of('control') for f in furniture_in(r, 'office_chair'))
         self.rest_spots = [t for r in self.rooms_of('rest') for t in self.free_tiles(r) if t in self.seats]
@@ -440,9 +466,9 @@ def furnish(r):
     elif k == 'disinfection':
         f += [Furniture('sink', x, y0, w=2) for x in range(x0, x1, 2)]
         f += [Furniture('cabinet', x0, y0 + 2), Furniture('biohazard', x1, y1), Furniture('sanitizer', x0, y1)]
-    elif k == 'storage':  # shelves along the side walls; the back wall is for the stretchers (Layout.stretcher_bay)
-        f += [Furniture('shelf', x0, y0 + 1, h=4), Furniture('shelf', x1, y0 + 1, h=4),
-              Furniture('fridge', x0, y1 - 1), Furniture('fridge', x1, y1 - 1), Furniture('biohazard', x0, y1)]
+    elif k == 'storage':  # drawn in Tiled: rooms/storage.tmj
+        f += [Furniture(kind, r.x + x, r.y + y, kind not in SEATS, w, h)
+              for kind, x, y, w, h in drawn(k)[1] if kind != 'stretcher']
     elif k == 'rest':
         f += [Furniture('sofa', x0 + 1, y0, False, w=3), Furniture('sofa', x0 + 5, y0, False, w=3), Furniture('table', x0 + 3, y0 + 2),
               Furniture('coffee', x1, y0), Furniture('bed', x1 - 1, y0 + 2, h=2), Furniture('bed', x1, y0 + 2, h=2),

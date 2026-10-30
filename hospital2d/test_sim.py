@@ -10,7 +10,7 @@ import config
 config.TIME_SCALE = 8
 
 from arrivals import new_patient  # noqa: E402 (after the speed-up)
-from sim import JOBS, Hospital  # noqa: E402
+from sim import JOBS, Hospital, new_positions, read_positions, write_positions  # noqa: E402
 from world import Dispatcher, Line, Task, Theatres  # noqa: E402
 
 PATIENT_ONLY_NOT = {'bar', 'control', 'storage', 'rest', 'disinfection'}  # rooms a patient never enters
@@ -283,6 +283,18 @@ def test_on_call():
             assert until(lambda: doctors() == 1, 90), 'the doctors on call never went home'
         finally:
             stop(h)
+
+
+def test_positions():
+    """Where everyone is goes to the UI through shared memory: the UI reads exactly what the simulation wrote,
+    and someone who left has no row any more."""
+    shared = new_positions()
+    row = lambda i: (i, i + 0.5, 2.5, i, 2, 3, 1.25, True, False, 2, 0.0, 0.0, -1)
+    people = [SimpleNamespace(numbers=lambda i=i: row(i)) for i in range(3)]
+    write_positions(shared, people)
+    assert read_positions(shared) == {i: row(i) for i in range(3)}
+    write_positions(shared, people[:1])
+    assert read_positions(shared) == {0: row(0)}
 
 
 def test_admin():

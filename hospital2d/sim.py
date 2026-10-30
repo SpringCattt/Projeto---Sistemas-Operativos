@@ -1,15 +1,18 @@
 # sim.py - The simulation process. A Hospital holds the plan, the shared structures (world.py) and the actors,
-# each running in its own thread, plus one dispatcher thread. The process talks to the others only through queues:
-#   arrivals process -> new patients and surges      UI process <- snapshots, -> commands ('quit')
+# each running in its own thread, plus one dispatcher thread. The process talks to the others through queues, and to the UI also through shared memory:
+#   arrivals process -> new patients and surges      UI process <- positions (shared memory), words, -> commands
 #   log process      <- events and the final summary
+import multiprocessing as mp
 import os
 import queue
 import random
+import struct
 import threading
 import time
 from collections import Counter, defaultdict, deque
 
 import config
+from actors import ROW
 from arrivals import new_patient
 from layout import build_layout
 from patients import Patient
@@ -381,8 +384,37 @@ class Hospital:
         return '\n'.join(lines)
 
 
-def run_simulation(snapshots, commands, arrivals, log_out, seed=None, speed=None):
-    """Process body. snapshots: Queue -> UI. commands: Queue <- UI ('quit', or an admin tablet order).
+# Shared memory between the simulation and the UI: how many rows there are, then one ROW per actor
+COUNT = struct.Struct('<i')
+MAX_ROWS = 5000  # shortcut: actors past this many aren't drawn; make it bigger if a hospital ever gets there
+
+
+def new_positions():
+    """The shared block. mp.Array comes with its own lock: whoever writes or reads takes it first, so the UI never
+    sees a half-written block (one actor's new x with its old y)."""
+    return mp.Array('B', COUNT.size + MAX_ROWS * ROW.size)
+
+
+def write_positions(shared, actors):
+    """Packed outside the lock; under it, only the copy into shared memory (microseconds)."""
+    rows = [a.numbers() for a in actors[:MAX_ROWS]]
+    data = COUNT.pack(len(rows)) + b''.join(ROW.pack(*r) for r in rows)
+    with shared.get_lock():
+        memoryview(shared.get_obj()).cast('B')[:len(data)] = data
+
+
+def read_positions(shared):
+    """{actor id: its ROW}. Copied out under the lock, unpacked after it."""
+    with shared.get_lock():
+        block = memoryview(shared.get_obj()).cast('B')
+        n, = COUNT.unpack_from(block)
+        data = block[COUNT.size:COUNT.size + n * ROW.size].tobytes()
+    return {r[0]: r for r in ROW.iter_unpack(data)}
+
+
+def run_simulation(snapshots, commands, arrivals, log_out, seed=None, speed=None, positions=None):
+    """Process body. snapshots: Queue -> UI (the words: names, speech, cards, stats). positions: shared memory with
+    the UI (where everyone is: write_positions). commands: Queue <- UI ('quit', or an admin tablet order).
     arrivals: Queue <- arrivals process. log_out: Queue -> log process. speed: shared Value with the arrivals
     process (how fast simulated time runs, 0 = paused)."""
     snapshots.cancel_join_thread()  # on exit, don't wait for the UI to read snapshots nobody needs any more
@@ -405,10 +437,10 @@ def run_simulation(snapshots, commands, arrivals, log_out, seed=None, speed=None
             poke.set()
 
     threading.Thread(target=listen, name='admin-orders', daemon=True).start()
-    last_measure = time.perf_counter()
+    last_measure = last_words = time.perf_counter()
     try:
         while True:
-            poke.wait(1 / config.SNAPSHOT_HZ)  # paces the snapshots (or sooner, to show an order straight away)
+            poked = poke.wait(1 / config.SNAPSHOT_HZ)  # paces the updates (or sooner, to show an order straight away)
             poke.clear()
             if quit_.is_set():
                 break
@@ -424,10 +456,16 @@ def run_simulation(snapshots, commands, arrivals, log_out, seed=None, speed=None
             if time.perf_counter() - last_measure >= 1:
                 h.measure()
                 last_measure = time.perf_counter()
-            try:  # if the UI is behind, skip this one: it only ever wants the latest
-                snapshots.put_nowait(h.snapshot())
-            except queue.Full:
-                pass
+            if positions is not None:
+                with h.actors_lock:
+                    actors = list(h.actors)
+                write_positions(positions, actors)
+            if poked or time.perf_counter() - last_words >= 1 / config.WORDS_HZ:
+                last_words = time.perf_counter()
+                try:  # if the UI is behind, skip this one: it only ever wants the latest
+                    snapshots.put_nowait(h.snapshot())
+                except queue.Full:
+                    pass
     finally:
         log_out.put(('summary', h.shutdown()))
         log_out.put(None)

@@ -34,7 +34,6 @@ ARRIVALS_PER_MINUTE = 6
 SURGE_EVERY_S = 240  # on average a surge starts this often...
 SURGE_SECONDS = 20  # ...lasts this long...
 SURGE_MULTIPLIER = 6  # ...and multiplies arrivals by this
-MAX_PATIENTS = 60  # with this many inside, new arrivals are turned away at the door
 
 URGENCY_NAMES = ['Green', 'Yellow', 'Red']
 

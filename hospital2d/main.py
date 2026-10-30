@@ -296,7 +296,8 @@ def run_ui(snapshots, commands, positions, sim=None):
             rows = fresh if fresh is not None else rows
             actors = [a for a in actors if a.id in rows]
             for a in actors:
-                _, a.px, a.py, a.tx, a.ty, facing, a.anim_t, a.lying, a.stretcher, action, cx, cy, cf = rows[a.id]
+                _, a.px, a.py, a.tx, a.ty, facing, a.anim_t, a.lying, a.stretcher, action, cx, cy, cf, a.hidden = \
+                    rows[a.id]
                 a.facing, a.action = FACINGS[facing], ACTIONS[action]
                 a.cart = (cx, cy, FACINGS[cf]) if cf >= 0 else None
         selected = next((a for a in actors if a.id == selected_id), None)
@@ -372,7 +373,7 @@ def run_ui(snapshots, commands, positions, sim=None):
             sel_floor = f
         else:
             sel_floor = None
-        here = [a for a in actors if lay.floor_of(a.px) == view]  # who's on the floor on screen
+        here = [a for a in actors if lay.floor_of(a.px) == view and not a.hidden]  # who's on the floor on screen
         shown = lambda x: lay.floor_of(x) == view
 
         keys = pygame.key.get_pressed()

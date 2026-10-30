@@ -22,7 +22,9 @@ COMPLAINTS = read_complaints()
 
 
 def new_patient(rng, urgency=None, surgery=None):
-    """Who walks in and what they'll tell reception (an urgency / surgery can be asked for: admin tablet)."""
+    """Who walks in and what they'll tell reception (an urgency / surgery can be asked for: admin tablet). A Red
+    one always needs surgery: it comes by ambulance (Hospital.admit)."""
+    surgery = True if urgency == 2 else surgery
     rows = [c for c in COMPLAINTS if urgency in (None, c[1]) and surgery in (None, c[3])] or COMPLAINTS
     reason, urgency, _, surgery = rng.choices(rows, weights=[c[2] for c in rows])[0]
     temper = rng.choices(list(config.TEMPERAMENTS), weights=list(config.TEMPERAMENTS.values()))[0]

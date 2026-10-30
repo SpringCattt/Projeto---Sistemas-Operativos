@@ -70,12 +70,15 @@ class Hospital:
             rooms = rooms[:max(1, len(rooms) - config.ON_CALL.get('Doctor', 0))]
         doctors = [Doctor(self, room, rng) for room in rooms]
         self.on_call, self.last_call, self.quiet_since = on_call, {}, {}
+        # Where idle staff wander: never on the stairs, nor beside the parked stretchers (the lane to take them in
+        # and out: someone standing in a corner there gets shut in when a stretcher is parked next to it)
+        idle_ok = lambda t: t not in lay.seats and t not in lay.links and t not in lay.stretcher_lane
         medical = [t for k in ('corridor', 'surgery', 'disinfection', 'storage')
-                   for r in lay.rooms_of(k) for t in lay.free_tiles(r) if t not in lay.seats]
+                   for r in lay.rooms_of(k) for t in lay.free_tiles(r) if idle_ok(t)]
         public = [t for k in ('waiting', 'reception') for r in lay.rooms_of(k) for t in lay.free_tiles(r)
                   if t not in lay.seats and t not in lay.staff_only]
         everywhere = [t for r in lay.rooms if r.kind not in ('street', 'control')
-                      for t in lay.free_tiles(r) if t not in lay.seats]
+                      for t in lay.free_tiles(r) if idle_ok(t)]
         nurses = [WardNurse(self, medical, rng) for _ in range(config.N_NURSES)]
         security = [Security(self, public, rng) for _ in range(config.N_SECURITY)]
         cleaners = [Cleaner(self, everywhere, rng) for _ in range(config.N_CLEANERS)]
@@ -214,9 +217,9 @@ class Hospital:
         if self.closed:
             return None
         self.count('arrived')
-        if info['surgery'] and self.lay.ambulance_bay:  # by ambulance: in through Emergency's own door, triaged
+        if info['urgency'] == 2 and self.lay.ambulance_bay:  # Red: by ambulance, already triaged, can't walk
             self.log(f'{info["name"]} arrives by ambulance')
-            return self.add_waiting(info, arrive=self.lay.ambulance_bay)
+            return self.add_waiting(info)
         p = Patient(self, self.lay.street_edge, self.rng, info)
         with self.actors_lock:
             self.actors.append(p)

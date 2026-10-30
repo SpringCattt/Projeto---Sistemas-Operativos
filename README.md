@@ -77,7 +77,9 @@ instead of showing a world frozen for no reason.
 
 **Inside the simulation, one thread per person.** Each one runs its own routine step by step. A patient's is:
 
-> street → reception line → registration → triage (Green / Yellow / Red) → waiting room → doctor → maybe surgery → exit
+> street → reception line → registration → triage (Green / Yellow) → waiting room → doctor → exit
+
+Red patients can't walk: they come by ambulance, onto a bed in Emergency, and from there on a stretcher to surgery.
 
 They share the building, so they synchronise:
 

@@ -25,8 +25,9 @@ FIRST_NAMES = read_names('first_names.txt')
 LAST_NAMES = read_names('last_names.txt')
 
 # What the UI needs 60 times a second, as one fixed-size row per actor in shared memory (see sim.write_positions):
-# id, px, py, tx, ty, facing, anim_t, lying, on a stretcher, action, and the stretcher it pushes (x, y, facing; -1 = none)
-ROW = struct.Struct('<iffhhbf??bffb')
+# id, px, py, tx, ty, facing, anim_t, lying, on a stretcher, action, the stretcher it pushes (x, y, facing; -1 = none),
+# hidden (in the elevator)
+ROW = struct.Struct('<iffhhbf??bffb?')
 FACINGS = ('down', 'left', 'right', 'up')
 ACTIONS = (None, 'typing', 'mopping')
 
@@ -78,7 +79,6 @@ class Actor:
         self.path, self.reserved = [], None
         self.blocked_for, self.give_way_after = 0.0, self.rng.uniform(0.4, 1.2)
         self.stuck_for = 0.0  # blocked without moving, in total: after a while it steps aside (see step)
-        self.climbed = 0.0  # how far up (or down) the flight of stairs it's on
         self.facing, self.anim_t = 'down', 0.0
         self.pause = self.rng.uniform(0, self.pace[1])
         self.area = []  # where it wanders when idle
@@ -99,6 +99,7 @@ class Actor:
         self.make_way = False  # a stretcher needs its tile: it steps aside at its next tick (unless it can't)
         self.yield_until, self.aside = 0.0, None  # making way for a stretcher: its step aside, then stays put a moment
         self.driver = None  # (nurse, train) while it's part of a stretcher train (staff.WardNurse.drive)
+        self.hidden = False  # inside the elevator: not drawn
 
     def label(self):
         return f'{ROLE_LABEL[self.role]} {self.name}'
@@ -259,12 +260,8 @@ class Actor:
         self.blocked_for = self.stuck_for = 0.0
         nx, ny = nxt
         dx, dy = nx + 0.5 - self.px, ny + 0.5 - self.py
-        if abs(nx - self.tx) + abs(ny - self.ty) > 1:  # the stairs (to the same place a floor up or down)
-            self.climbed += dt * self.speed
-            self.anim_t += dt * self.speed
-            if self.climbed < config.STAIRS_S:
-                return
-            self.climbed = dx = dy = 0.0  # up there: it arrives below
+        if abs(nx - self.tx) + abs(ny - self.ty) > 1:  # the stairs: straight to the same place a floor up or down
+            dx = dy = 0.0
         dist, stride = math.hypot(dx, dy), config.ACTOR_SPEED * self.speed * dt
         if dist > 1e-6:
             self.facing = ('right' if dx > 0 else 'left') if abs(dx) > abs(dy) else ('down' if dy > 0 else 'up')
@@ -399,4 +396,4 @@ class Actor:
         c = self.pushing
         return (self.id, self.px, self.py, self.tx, self.ty, FACINGS.index(self.facing), self.anim_t, self.lying,
                 self.on_stretcher, ACTIONS.index(self.action), c.px if c else 0.0, c.py if c else 0.0,
-                FACINGS.index(c.facing) if c else -1)
+                FACINGS.index(c.facing) if c else -1, self.hidden)

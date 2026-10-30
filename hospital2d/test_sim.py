@@ -170,7 +170,8 @@ def test_flow_and_rules():
             with h.world.lock:  # tiles only change holding this lock, so this is a consistent picture
                 with h.actors_lock:
                     actors = list(h.actors)
-                tiles = [(a.tx, a.ty) for a in actors if a.role != 'patient' or not a.gone]
+                tiles = [(a.tx, a.ty) for a in actors  # (whoever is inside the elevator is off the floor)
+                         if (a.role != 'patient' or not a.gone) and not a.hidden]
                 assert len(set(tiles)) == len(tiles), 'two actors on one tile'
                 for a in actors:
                     if a.role == 'patient':
@@ -241,7 +242,7 @@ def test_stretcher():
                 if p.on_stretcher:
                     room = h.lay.room_at[p.ty][p.tx]
                     rode.add(room.kind if room else 'door')
-                if p.on_stretcher and not p.path:  # between two steps of the train
+                if p.on_stretcher and not p.path and not p.hidden:  # between two steps (not inside the elevator)
                     pushing = [n for n in nurses if n.task is not None and n.task.kind == 'stretcher']
                     assert len(pushing) == 2, 'two nurses push the stretcher'
                     for n in pushing:
@@ -291,7 +292,7 @@ def test_positions():
     """Where everyone is goes to the UI through shared memory: the UI reads exactly what the simulation wrote,
     and someone who left has no row any more."""
     shared = new_positions()
-    row = lambda i: (i, i + 0.5, 2.5, i, 2, 3, 1.25, True, False, 2, 0.0, 0.0, -1)
+    row = lambda i: (i, i + 0.5, 2.5, i, 2, 3, 1.25, True, False, 2, 0.0, 0.0, -1, False)
     people = [SimpleNamespace(numbers=lambda i=i: row(i)) for i in range(3)]
     write_positions(shared, people)
     version, rows = read_positions(shared)
@@ -305,7 +306,7 @@ def write_rounds(shared, n):
     """(test_seqlock's writer, in another process) n writes of 50 rows; in write k every row says k."""
     for k in range(n):
         write_positions(shared, [SimpleNamespace(numbers=lambda i=i, k=k: (i, float(k), float(k), 0, 0, 0, 0.0,
-                                                                          False, False, 0, 0.0, 0.0, -1))
+                                                                          False, False, 0, 0.0, 0.0, -1, False))
                                  for i in range(50)])
 
 
@@ -458,7 +459,7 @@ def test_overtaking():
 def test_reactions():
     """Out of patience: passive leaves, medium complains at reception, aggressive starts a fight that security
     ends. Waiting patients get worse and throw up; a cleaner cleans it."""
-    with settings(CONSULT_S=[(900, 900)] * 3, PATIENCE_LOSS=(25, 25), ESCALATE_AFTER_S=[8, 400],
+    with settings(CONSULT_S=[(900, 900)] * 3, PATIENCE_LOSS=(25, 25), ESCALATE_AFTER_S=8,
                   VOMIT_CHANCE_PER_S=[0.0, 0.5, 0.0]):
         h = Hospital(seed=6, n_doctors=1, n_surgeries=0, n_patients=0)
         h.add_waiting(info(1, temperament='medium'))  # keeps the only doctor busy (900 s)

@@ -428,7 +428,7 @@ class Cleaner(TaskStaff):
 
 class Cart:
     """The empty stretcher: it takes up a tile like a person does, but has no thread (two nurses move it)."""
-    speed, path, anim_t, driver = 0.0, (), 0.0, None
+    speed, path, anim_t, driver, hidden = 0.0, (), 0.0, None, False
 
     def __init__(self, tile):
         self.tx, self.ty = tile
@@ -600,9 +600,13 @@ class WardNurse(TaskStaff):
                 m = min(spots, key=lambda m: near.get(m, 10 ** 6))
                 self.world.bay_claims.add(m)
             try:
-                sides = [g for g in ((m[0] - 1, m[1]), (m[0] + 1, m[1]))  # along the wall: it pulls it in sideways
-                         if self.lay.walkable(*g) and self.world.occupied.get(g) in (None, *train)]
+                # along the wall: it pulls it in sideways, the front ending beside it, on a side it can leave from
+                # (not a corner whose only way out is that spot: it would be shut in behind the stretcher)
+                sides = [g for g in ((m[0] - 1, m[1]), (m[0] + 1, m[1]))
+                         if self.lay.walkable(*g) and self.world.occupied.get(g) in (None, *train)
+                         and any(self.lay.walkable(*n) and n != m for n in neighbours(g))]
                 if sides and self.drive(train, m, sides, timeout=60) and (cart.tx, cart.ty) == m:
+                    cart.facing = 'down'  # parked upright, like all the others
                     return True
             finally:
                 with self.world.lock:
@@ -683,10 +687,10 @@ class WardNurse(TaskStaff):
         return min(spots, key=lambda t: near.get(t, 10 ** 6), default=(train[0].tx, train[0].ty))
 
     def ride(self, train, lift):
-        """Inside the box, on whichever floor the car is (drawn behind it: out of sight)."""
+        """Inside the box, on whichever floor the car is: out of sight until they get out."""
         x, y = lift.stops[lift.floor][1]
-        for m, (dx, dy) in zip(train, ((-0.5, -0.3), (0.5, -0.3), (0.0, 0.2))):
-            m.px, m.py = x + dx, y + dy
+        for m in train:
+            m.px, m.py, m.hidden = x, y, True
             m.tx, m.ty = int(m.px), int(m.py)
         return True
 
@@ -700,7 +704,7 @@ class WardNurse(TaskStaff):
                 for m, t in zip(train, column):
                     occ[t] = m
                     m.tx, m.ty = t
-                    m.px, m.py, m.facing = t[0] + 0.5, t[1] + 0.5, 'down'
+                    m.px, m.py, m.facing, m.hidden = t[0] + 0.5, t[1] + 0.5, 'down', False
                 return True
         for a in in_the_way:
             if hasattr(a, 'make_way'):

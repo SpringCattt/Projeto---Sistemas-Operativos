@@ -170,7 +170,7 @@ class Patient(Actor):
         self.wander(dt)
         self.patience = max(0.0, self.patience - self.patience_loss * dt)
         now = self.h.clock()
-        if self.rank < 2 and now - self.waiting_since > config.ESCALATE_AFTER_S[self.rank]:
+        if self.rank < 1 and now - self.waiting_since > config.ESCALATE_AFTER_S:  # (never Red: it walked in)
             self.rank += 1  # the consultation task reads this, so the dispatcher sees it straight away
             self.waiting_since = now
             self.h.count('got_worse')

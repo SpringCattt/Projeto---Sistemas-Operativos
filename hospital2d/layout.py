@@ -260,8 +260,9 @@ class Layout:
         # Stretchers park where the map has them; the nurses meet anywhere else in storage, but not right next to
         # them either: that's the lane to push them in and out
         self.stretcher_bay = [t for t in stretchers if self.walkable(*t)]
+        self.stretcher_lane = {(x + dx, y + dy) for x, y in stretchers for dx in (-1, 0, 1) for dy in (-1, 0, 1)}
         self.stretcher_spots = [t for r in self.rooms_of('storage') for t in self.free_tiles(r)
-                                if all(max(abs(t[0] - x), abs(t[1] - y)) > 1 for x, y in stretchers)]
+                                if t not in self.stretcher_lane]
         # Elevators: the same box at the same place on each floor it serves. It opens downwards, onto a column of
         # three tiles where a stretcher train (nurse, stretcher, nurse) waits to get in and comes out
         shafts = {}

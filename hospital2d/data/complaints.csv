@@ -12,9 +12,9 @@ Abdominal pain,1,6,0
 High fever,1,5,0
 Asthma attack,1,4,0
 Head injury,1,3,0
-Chest pain,2,3,0
-Difficulty breathing,2,2,0
-Stroke symptoms,2,1,0
+Chest pain,2,3,1
+Difficulty breathing,2,2,1
+Stroke symptoms,2,1,1
 Appendicitis,2,2,1
 Car accident,2,1,1
 Internal bleeding,2,1,1

@@ -40,7 +40,8 @@ patients, trigger events, hire/send home staff) · `Space` pause · `+`/`-` spee
 To make it calmer or bigger, change [`hospital2d/config.py`](hospital2d/config.py): `TIME_SCALE` (0.5 = half
 speed), `N_PATIENTS`, `ARRIVALS_PER_MINUTE`… The building itself is a map you draw in
 [Tiled](https://www.mapeditor.org/), one map per floor: [`hospital2d/maps/`](hospital2d/maps/). Three floors:
-emergencies on the ground floor, doctors' rooms on the first, surgeries, storage and rest on the second; `PgUp` /
+emergencies (and the stretchers' storage) on the ground floor, doctors' rooms on the first, surgeries and rest on
+the second; `PgUp` /
 `PgDn` (or the floor buttons) show another one.
 
 ## How it works, in short

@@ -266,7 +266,8 @@ straight instead of zig-zagging.
   an ambulance is still bringing someone.
 * **Cars** ([`vehicles.py`](vehicles.py)): everyone else comes by car. A `Car` is an actor with its own thread: it
   comes in from where a road leaves the map, drives along the lanes block by block (`Layout.drive_path`, a
-  breadth-first search that only goes the way each lane goes), parks nose first in a free bay of the lot, and its
+  breadth-first search that only goes the way each lane goes; in a crossing too, each block only lets it go
+  the ways of its own row's and column's lanes, so it keeps right when it turns and never drives against the traffic), parks nose first in a free bay of the lot, and its
   patient gets out onto the pavement at the bay's nose; it waits there until the patient comes back, backs out and drives off to the city.
   The bays are a shared resource (`Hospital.claim_bay` / `free_bay`, a list under a lock): with none free, a taxi
   brings the patient to a drop-off bay and leaves (that patient goes home on foot). A car takes up the block of road

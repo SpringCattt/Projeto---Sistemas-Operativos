@@ -764,8 +764,9 @@ class WardNurse(TaskStaff):
         if not lifts:
             return False
         near = self.lay.distances_from((train[0].tx, train[0].ty))
-        # the one with the shortest queue (two elevators share the work), then the closest
-        lift = min(lifts, key=lambda e: (len(e.queue) + (e.rider is not None), near.get(e.stops[here][0][0], 10 ** 6)))
+        # the one with the shortest queue (two elevators share the work), already on this floor, then the closest
+        lift = min(lifts, key=lambda e: (len(e.queue) + (e.rider is not None), e.floor != here,
+                                         near.get(e.stops[here][0][0], 10 ** 6)))
         self.doing = 'going to the elevator'
         try:
             # first close by, off the tiles in front of its door, and only then in the queue: it's for whoever gets
@@ -773,7 +774,19 @@ class WardNurse(TaskStaff):
             self.roll(train, self.near_lift(lift.stops[here][0], train), with_patient=with_patient, timeout=120)
             self.doing = 'waiting for the elevator'
             lift.call(self, here)
-            if not self.wait_until(lambda: lift.take(self), timeout=600) \
+
+            def take():  # its turn in this one; or the other one is here, empty and free: that one, then
+                nonlocal lift
+                if lift.take(self):
+                    return True
+                other = next((e for e in lifts if e is not lift and e.free_at(here)), None)
+                if other is None:
+                    return False
+                lift.leave(self)
+                lift = other
+                lift.call(self, here)
+                return lift.take(self)
+            if not self.wait_until(take, timeout=600) \
                     or not self.roll(train, lift.stops[here][0][0], with_patient=with_patient, timeout=120):
                 return False
             with self.world.lock:  # in: off the floor

@@ -25,11 +25,15 @@ FURNITURE = {
     'biohazard': H + 'room_biohazard_bin', 'poster': H + 'room_anatomy_poster', 'cabinet': H + 'room_cabinet',
     'bedside': H + 'room_bedside_table', 'armchair': H + 'room_armchair', 'fridge': H + 'lab_refrigerator',
     'tray': H + 'operation_accessories_table_full', 'ultrasound': H + 'operation_ultrasound_machine',
-    'books': H + 'lab_books', 'ambulance': C + 'ambulance', 'elevator': C + 'elevator',
+    'books': H + 'lab_books', 'ambulance': C + 'ambulance', 'elevator': C + 'elevator', 'chair_up': C + 'chair_up',
+    'big_tv': C + 'big_tv', 'call_screen': C + 'call_screen', 'speaker': C + 'speaker',
 }
 STACKED = {'shelf'}  # one image repeated on every tile of the footprint
 # Animated pieces: kind -> (its frames custom/<name>_0.., frames per second). main.py picks the frame by time
-ANIMATED = {'tv': ('tv', 8, 1.5), 'vending': ('vending', 3, 1.2), 'coffee': ('coffee', 3, 3.0), 'pc': ('pc', 4, 2.0)}
+ANIMATED = {'tv': ('tv', 8, 1.5), 'vending': ('vending', 3, 1.2), 'coffee': ('coffee', 3, 3.0),
+            'pc': ('pc_back', 3, 1.0),  # (seen from behind: its screen faces whoever sits at it)
+            'big_tv': ('big_tv', 12, 2.0)}
+FACING_AWAY = {'chair_up'}  # its back to us: drawn over whoever sits on it
 VARIANTS = {'custom/floor_grass': ('grass', 4), 'custom/floor_street': ('street', 3)}  # (so they don't look tiled)
 LIFT = {'pc': 9, 'bell': 9, 'cake': 9, 'donuts': 9, 'books': 9}  # pixels up: they stand on a counter/desk top
 
@@ -69,7 +73,7 @@ def furniture_sprites(lay):
     for f in lay.furniture:
         if f.kind in ('ambulance', 'elevator'):  # animated: main.py draws them (the ambulance comes and goes)
             continue
-        depth = (f.y + f.h) * T if f.solid else f.y * T
+        depth = (f.y + f.h) * T if f.solid or f.kind in FACING_AWAY else f.y * T
         if f.kind == 'counter':
             left, right = (f.x - 1, f.y) in counters, (f.x + 1, f.y) in counters
             piece = 'm' if left and right else 'r' if left else 'l'

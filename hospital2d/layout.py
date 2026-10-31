@@ -17,7 +17,7 @@ GROUND = {'wall': WALL, 'door': DOOR, 'floor_grass': EMPTY,  # what a ground til
           'road_l': EMPTY, 'road_r': EMPTY}  # (the ambulance's road: nobody walks on it)
 STAIRS = 'stairs'  # a stairs tile goes to the stairs tile at the same place on the floor above and below
 FLOOR_GAP = 4  # the floors lie side by side in one grid (grass between them: nobody walks across)
-SEATS = {'chair', 'office_chair', 'bench', 'sofa'}  # furniture people sit on (every tile of a bench is a seat)
+SEATS = {'chair', 'chair_up', 'office_chair', 'bench', 'sofa'}  # furniture people sit on (every tile of a bench)
 # Just for looks: left out wherever it would leave a way through only one tile wide (see Layout)
 DECOR = {'plant', 'sanitizer', 'trash_bin', 'cabinet', 'biohazard', 'iv_stand', 'bp_monitor', 'eye_chart', 'poster',
          'clock', 'tv', 'vending', 'soda', 'snacks', 'fridge', 'bedside', 'armchair', 'coffee', 'map_stand',
@@ -188,6 +188,9 @@ class Layout:
             self.solid = {t for f in self.furniture if f.solid for t in f.tiles()}
 
         self.seats = {t for f in self.furniture if f.kind in SEATS for t in f.tiles()}
+        # which way whoever sits there faces: down, except on a chair turned the other way (towards a nurse, a
+        # doctor, the waiting room's TV)
+        self.seat_facing = {t: 'up' for f in self.furniture if f.kind == 'chair_up' for t in f.tiles()}
 
         self.staff_only = staff_only  # behind the counters (reception, bar): patients never walk there
         self._find_spots(near_door, stretchers)
@@ -234,7 +237,7 @@ class Layout:
                              for r in self.rooms_of('triage') for f in furniture_in(r, 'office_chair')]
         self.doctor_desks = {}  # room -> (doctor seat, patient chair)
         for r in self.rooms_of('doctor'):
-            seats, chairs = furniture_in(r, 'office_chair'), furniture_in(r, 'chair')
+            seats, chairs = furniture_in(r, 'office_chair'), furniture_in(r, 'chair') + furniture_in(r, 'chair_up')
             if seats and chairs:
                 self.doctor_desks[r] = ((seats[0].x, seats[0].y), (chairs[0].x, chairs[0].y))
         self.surgery_spots = {}  # room -> (patient tile, doctor tile), on each side of the operating table

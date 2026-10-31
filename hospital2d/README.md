@@ -153,7 +153,9 @@ been blocked too long steps aside and finds a new route.
 ### A patient's visit ([`patients.py`](patients.py))
 
 street → reception line → registration (says why it came) → waits for triage → triage nurse assigns the urgency
-(Green / Yellow, from the complaint) → its waiting room → a doctor calls it → consultation → street. Red patients
+(Green / Yellow, from the complaint) → its waiting room → a doctor calls it: its name and the room come up on
+the waiting room's call screen and the loudspeaker says them, and only once it has heard it (`ANNOUNCE_S`) does it
+get up → consultation → street. Red patients
 can't walk: they come by ambulance, onto a bed in Emergency, and always go to surgery on a stretcher.
 
 While it waits, its **patience** runs down and its **condition can get worse** (Green → Yellow; never Red: it walked
@@ -271,10 +273,17 @@ straight instead of zig-zagging.
 | `dialogue.py` | picks what people say from `data/dialogue.txt` |
 | `data/` | names, complaints and dialogue lines, one per line |
 
+**Seats face their way.** Patients' chairs in the waiting rooms, triage and the doctors' rooms are turned
+(`chair_up`, seen from behind): patients face the nurse, the doctor, the waiting room's TV and call screen. Anyone
+sitting is drawn from the waist up, the chair or desk in front covering the rest; PCs are seen from behind, their
+screens facing whoever works at them.
+
 **Animations.** Besides the people walking (the character sheets' frames, now with a shadow under their feet):
 ambulances flash their lights and open their back doors while the paramedics unload, the elevator's doors slide
-open when the car is at that floor for someone (`elevator_0..2`), automatic doors open while someone is at them (a
-double door as one), TVs show a wildlife programme and the news, vending machines blink, coffee machines steam,
+open when the car is at that floor for someone (`elevator_0..2`) and its indicator shows the floor the car is
+on, the up or down arrow lit while it's going, automatic doors open while someone is at them (a
+double door as one), each waiting room's big TV shows football, the news and the weather, small TVs a wildlife
+programme and the news, vending machines blink, coffee machines steam,
 PC screens scroll, heart monitors sweep their beat across a screen on top of the cart, receptionists type, cleaners
 mop (`art.ANIMATED`: frames by time, frozen while paused). Outside gets dark at night and warm at dawn and dusk,
 following the day's clock (`main.SKY`); inside, the lights are on. Grass and street come in a few variants,

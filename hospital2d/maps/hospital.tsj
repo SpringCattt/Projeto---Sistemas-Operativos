@@ -6,8 +6,8 @@
  "columns": 0,
  "margin": 0,
  "spacing": 0,
- "tilecount": 62,
- "tilewidth": 48,
+ "tilecount": 66,
+ "tilewidth": 64,
  "tileheight": 52,
  "objectalignment": "bottomleft",
  "grid": {
@@ -758,6 +758,68 @@
    "image": "../assets/custom/road_r.png",
    "imagewidth": 16,
    "imageheight": 16
+  },
+  {
+   "id": 62,
+   "image": "../assets/custom/chair_up.png",
+   "imagewidth": 16,
+   "imageheight": 20,
+   "properties": [
+    {
+     "name": "kind",
+     "type": "string",
+     "value": "chair_up"
+    }
+   ]
+  },
+  {
+   "id": 63,
+   "image": "../assets/custom/big_tv.png",
+   "imagewidth": 48,
+   "imageheight": 30,
+   "properties": [
+    {
+     "name": "kind",
+     "type": "string",
+     "value": "big_tv"
+    },
+    {
+     "name": "w",
+     "type": "int",
+     "value": 3
+    }
+   ]
+  },
+  {
+   "id": 64,
+   "image": "../assets/custom/call_screen.png",
+   "imagewidth": 64,
+   "imageheight": 32,
+   "properties": [
+    {
+     "name": "kind",
+     "type": "string",
+     "value": "call_screen"
+    },
+    {
+     "name": "w",
+     "type": "int",
+     "value": 4
+    }
+   ]
+  },
+  {
+   "id": 65,
+   "image": "../assets/custom/speaker.png",
+   "imagewidth": 16,
+   "imageheight": 12,
+   "properties": [
+    {
+     "name": "kind",
+     "type": "string",
+     "value": "speaker"
+    }
+   ]
   }
  ]
 }

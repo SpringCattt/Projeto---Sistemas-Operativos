@@ -76,6 +76,7 @@ class Summons:
         self.arrived, self.done = threading.Event(), threading.Event()
         self.cancelled = False
         self.result = None
+        self.ready_at = 0.0  # called on the loudspeaker: it only goes from then (Hospital.announce)
 
     def cancel(self):
         self.cancelled = True

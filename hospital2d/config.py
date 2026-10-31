@@ -32,7 +32,7 @@ SNAPSHOT_HZ = 60  # times per second the simulation writes where everyone is (sh
 WORDS_HZ = 10  # ...and sends the words (names, speech, cards, stats) through the snapshots queue
 
 # Arrivals (the arrivals process)
-ARRIVALS_PER_MINUTE = 6
+ARRIVALS_PER_MINUTE = 9  # (the hospital opens empty: enough of them to pay the wages)
 SURGE_EVERY_S = 240  # on average a surge starts this often...
 SURGE_SECONDS = 20  # ...lasts this long...
 SURGE_MULTIPLIER = 6  # ...and multiplies arrivals by this

@@ -107,8 +107,49 @@ def draw_layout(lay):
                 else:
                     surf.blit(door_band['h'], (x * T, y * T + 4))
             else:
-                surf.blit(tile_image(lay, x, y), (x * T, y * T))
+                surf.blit(road_joins(lay, x, y, name.rsplit('/', 1)[-1]), (x * T, y * T))
     return surf
+
+
+ASPHALT, KERB, MIDDLE = (51, 60, 87), (236, 238, 242), (232, 210, 75)  # the city's roads (road_*.png)
+KERB_LINES = (((-1, 0), (1, 0, 1, T)), ((1, 0), (T - 2, 0, 1, T)), ((0, -1), (0, 1, T, 1)), ((0, 1), (0, T - 2, T, 1)))
+
+
+def road_joins(lay, x, y, base):
+    """A road tile as it meets the others: a crossing gets the kerb line on each side where the road doesn't go on;
+    a lane's kerb line stops where another road joins it; the ambulances' road is asphalt like the city's."""
+    img = tile_image(lay, x, y)
+    if not base.startswith(('road_', 'lot_x')):
+        return img
+    road = lambda nx, ny: not (0 <= nx < lay.width and 0 <= ny < lay.height) or \
+        lay.ground[ny][nx].rsplit('/', 1)[-1].startswith(('road_', 'lot_'))
+    img = img.copy()
+    if base in ('road_l', 'road_r'):
+        for px in range(T):
+            for py in range(T):
+                c = tuple(img.get_at((px, py)))[:3]
+                img.set_at((px, py), ASPHALT if c == (86, 90, 98) else KERB if c == (150, 154, 160) else c)
+        return img
+    if base == 'road_x':  # a T: the road that goes on keeps its middle line across it (the one that ends doesn't)
+        def end(dx, dy):
+            nx, ny = x + dx, y + dy
+            while 0 <= nx < lay.width and 0 <= ny < lay.height and lay.ground[ny][nx].endswith('road_x'):
+                nx, ny = nx + dx, ny + dy
+            return (nx, ny) if road(nx, ny) and 0 <= nx < lay.width and 0 <= ny < lay.height else None
+        ends = {d: end(*d) for d in ((0, -1), (0, 1), (-1, 0), (1, 0))}
+        through = [d for d, e in (((0, -1), ends[(0, -1)] and ends[(0, 1)]), ((-1, 0), ends[(-1, 0)] and ends[(1, 0)])) if e]
+        if len(through) == 1:
+            lane = tile_image(lay, *ends[through[0]])
+            for px in range(T):
+                for py in range(T):
+                    if tuple(lane.get_at((px, py)))[:3] == MIDDLE:
+                        img.set_at((px, py), MIDDLE)
+    for (dx, dy), line in KERB_LINES:
+        if base in ('road_x', 'lot_x') and not road(x + dx, y + dy):
+            img.fill(KERB, line)
+        elif base.endswith('_edge') and road(x + dx, y + dy) and tuple(img.get_at(line[:2]))[:3] == KERB:
+            img.fill(ASPHALT, line)
+    return img
 
 
 def furniture_sprites(lay, night=False):

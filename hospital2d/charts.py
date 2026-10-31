@@ -54,6 +54,10 @@ def main():
 
     a = ax[1][2]
     a.plot(rounds, column(rows, 'call_in_at'), color='tab:orange', label='call in at (tasks more than free staff)')
+    a.plot(rounds, [4 * v if v is not None else None for v in column(rows, 'max_on_call')], color='tab:red',
+           label='how many on call it may use (x4)')
+    a.plot(rounds, [v - 12 if v is not None else None for v in column(rows, 'rush_from_hour')], color='tab:purple',
+           label='hurries from (hour - 12)')
     a.set(title='Staff on call: what it learned', xlabel='round', ylabel='tasks')
     b = a.twinx()
     b.plot(rounds, column(rows, 'send_home_after_s'), color='tab:brown', label='send home after (s, right)')

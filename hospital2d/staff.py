@@ -290,6 +290,9 @@ class Doctor(TaskStaff):
         else:
             s = Summons(self, self.chair, 'consult', allow={'corridor', 'doctor'}, stage=f'going to {self.room.name}')
         self.talk('doctor_call', name=p.first_name())
+        # From the moment it's called, this doctor sees this patient through: nobody is sent back to the waiting
+        # room half-way because the Boss found the doctor something more urgent (before the call, it still can)
+        self.h.dispatcher.set_preemptable(task, False)
         try:
             if not self.call(p, s, timeout=240 if s.stretcher else 120):
                 if not p.gone:

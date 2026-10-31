@@ -103,6 +103,8 @@ def draw_day_report(screen, font, small, r):
              ('', TEXT),
              (f'Patients paid      {r["income"]:10,.0f}', green),
              (f'Wages              {-r["wages"]:10,.0f}', red),
+             (f'  of it overtime   {-r["overtime"]:10,.0f}  ({r["overtime_min"]:.0f} min past midnight)',
+              red if r['overtime'] else MUTED),
              (f'Profit             {r["profit"]:10,.0f}', green if r['profit'] >= 0 else red),
              (f'Staff bonus ({100 * config.BONUS_SHARE:.0f}%)  {r["bonus"]:10,.0f}', HIGHLIGHT),
              ('', TEXT)]

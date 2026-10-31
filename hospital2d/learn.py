@@ -36,10 +36,12 @@ from world import Dispatcher, start_policy
 HERE = os.path.dirname(os.path.abspath(__file__))
 CSV = os.path.join(HERE, 'learning.csv')
 FIELDS = ['round', 'profit', 'best', 'worst', 'w_waited', 'w_impatience', 'call_in_at', 'send_home_after_s',
-          'treated', 'gave_up', 'red_wait_min', 'called_in', 'tasks', 'error_s', 'vs_start']
+          'max_on_call', 'rush_from_hour', 'treated', 'gave_up', 'red_wait_min', 'called_in', 'overtime', 'tasks',
+          'error_s', 'vs_start']
 NOISE = 2.0  # how big the nudges are...
-SCALES = (1.0, 1.0, 0.5, 20.0)  # ...for each part of the policy: weights, weights, tasks, seconds
-LOWEST = (0.0, 0.0, 1.0, 10.0)  # (no negative weights; call in at 1 task more at least; wait 10 s at least)
+SCALES = (1.0, 1.0, 0.5, 20.0, 0.25, 0.75)  # ...for each part of the policy: weights, weights, tasks, s, share, hours
+LOWEST = (0.0, 0.0, 1.0, 10.0, 0.0, 12.0)  # (no negative weights; call in at 1 task more at least; ...)
+HIGHEST = (50.0, 50.0, 20.0, 600.0, 3.0, 24.0)
 STEP = 1.0  # how far the policy moves each round (at most about one nudge)
 
 
@@ -70,7 +72,8 @@ def hospital(i, speed, jobs, reports):
             day = h.day_over
             red = sum(h.waits.get(2, [])) / 60
             reports.put((i, {'profit': day['profit'], 'treated': day['treated'], 'gave_up': day['gave_up'], 'red': red,
-                             'called_in': day['called_in'], 'brain': d.brain, 'tasks': d.learned,
+                             'called_in': day['called_in'], 'overtime': day['overtime'], 'brain': d.brain,
+                             'tasks': d.learned,
                              'errors': d.error_sum, 'keep_up': h.keep_up}))
     except KeyboardInterrupt:
         pass
@@ -127,8 +130,8 @@ def main(speed, n):
                     e = [rng.gauss(0, 1) for _ in boss.policy]
                     noises += [e, [-x for x in e]]
                 noises += [[0.0] * len(boss.policy)] * ((n - compare) % 2)
-                plays = [[max(low, w + NOISE * k * x) for w, x, k, low in zip(boss.policy, e, SCALES, LOWEST)]
-                         for e in noises]
+                plays = [[min(high, max(low, w + NOISE * k * x))
+                          for w, x, k, low, high in zip(boss.policy, e, SCALES, LOWEST, HIGHEST)] for e in noises]
                 seeds = [seed] * len(plays)
                 for day in days:
                     plays += [list(boss.policy), start_policy()]
@@ -152,7 +155,7 @@ def main(speed, n):
                 if m >= 2 and spread > 0:  # towards the nudges that did better than the average
                     for k in range(len(boss.policy)):
                         move = sum((x - mean) / spread * e[k] for x, e in zip(rewards, noises)) / m
-                        boss.policy[k] = max(LOWEST[k], boss.policy[k] + STEP * NOISE * SCALES[k] * move)
+                        boss.policy[k] = min(HIGHEST[k], max(LOWEST[k], boss.policy[k] + STEP * NOISE * SCALES[k] * move))
                 kinds = {k for r in results for k in r['brain']}  # how long tasks take: averaged
                 boss.brain = {k: [sum(ws) / len(ws) for ws in zip(*(r['brain'][k] for r in results if k in r['brain']))]
                               for k in kinds}
@@ -160,7 +163,7 @@ def main(speed, n):
                 boss.learned += tasks
                 boss.error_sum += errors
                 boss.save(BRAIN)
-                avg = [sum(r[k] for r in results) / n for k in ('treated', 'gave_up', 'red', 'called_in')]
+                avg = [sum(r[k] for r in results) / n for k in ('treated', 'gave_up', 'red', 'called_in', 'overtime')]
                 out.writerow([rnd, round(mean), round(max(rewards)), round(min(rewards)),
                               *[round(w, 2) for w in boss.policy], *[round(x, 1) for x in avg], tasks,
                               round(errors / tasks, 1) if tasks else '', vs_start])
@@ -168,7 +171,8 @@ def main(speed, n):
                 keep_up = min(r['keep_up'] for r in results)
                 print(f'day {rnd}: profit {mean:,.0f} (best {max(rewards):,.0f}, worst {min(rewards):,.0f}); '
                       f'weights waited {boss.policy[0]:.1f}, impatience {boss.policy[1]:.1f}; call in at '
-                      f'{boss.policy[2]:.1f} more tasks, home after {boss.policy[3]:.0f} s; '
+                      f'{boss.policy[2]:.1f} more tasks, home after {boss.policy[3]:.0f} s, at most '
+                      f'{boss.policy[4]:.2f} of the on-call staff, hurrying from {boss.policy[5]:.1f} h; '
                       f'vs start {vs_start}; keeping up {100 * keep_up:.0f}%'
                       + ('  << too many hospitals for this PC: use fewer' if keep_up < 0.9 else ''))
     except KeyboardInterrupt:

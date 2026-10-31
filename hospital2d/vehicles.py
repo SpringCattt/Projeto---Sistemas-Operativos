@@ -54,9 +54,11 @@ class Car(Actor):
                 self.bay = self.h.claim_bay('dropoff')
             self.hidden = False
         self.doing = 'coming from the city'
-        self.drive([self.block] + lay.drive_path(self.block, [self.bay['lane']]))
+        route = [self.block] + lay.drive_path(self.block, [self.bay['lane']])
+        self.drive(route[:-1])
         self.doing = 'parking'
-        self.take(self.bay['tiles'], keep=self.held)  # (nobody walks through a parked car)
+        self.take(self.bay['tiles'], keep=self.held)  # the bay first, from a block back: whoever is in it gets out
+        self.drive(route[-1:])  # by the lane in front (it would shut them in), then in front of it
         self.glide(self.bay['stop'], self.bay['nose'], config.CAR_SPEED / 3)
         self.release(keep=self.bay['tiles'])
         self.tx, self.ty = self.bay['tiles'][0]

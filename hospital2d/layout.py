@@ -15,13 +15,14 @@ EMPTY, WALL, FLOOR, DOOR = 0, 1, 2, 3
 MAPS = os.path.join(os.path.dirname(__file__), 'maps')  # the floors, drawn in the Tiled map editor (see README)
 # The city's roads (outside floor 0): a lane each way, each lane 2 tiles wide and one way.
 # Cars drive on 2 x 2 blocks of tiles (x and y even); the top-left tile of a block says which way: n, s, e, w, or x
-# (a crossing: any way). The parking lot's lanes ('lot_') are roads too, but people may walk on them
+# (a crossing: any way). The parking lot's lanes ('lot_') are roads too; people walk over them only on a crossing
 DRIVE = {f'road_{way}_{part}': way for way in 'nsew' for part in ('edge', 'mid')}
-DRIVE.update({'road_x': 'x', 'lot_e': 'e', 'lot_n': 'n', 'lot_s': 's', 'lot_x': 'x'})
+DRIVE.update({'road_x': 'x', 'lot_e': 'e', 'lot_n': 'n', 'lot_s': 's', 'lot_x': 'x', 'lot_cross': 'e'})
 STEP = {'n': (0, -2), 's': (0, 2), 'e': (2, 0), 'w': (-2, 0)}  # (from one block to the next)
 GROUND = {'wall': WALL, 'door': DOOR, 'floor_grass': EMPTY,  # what a ground tile is; any other one is floor
           'road_l': EMPTY, 'road_r': EMPTY}  # (the ambulance's road: nobody walks on it)
-GROUND.update({name: EMPTY for name in DRIVE if name.startswith('road_')})
+GROUND.update({name: EMPTY for name in DRIVE if name != 'lot_cross'})  # (people cross the lot's lane only at
+GROUND.update({name: EMPTY for name in ('lot_bay_l', 'lot_bay', 'lot_bay_r')})  # its zebra crossings; bays: cars')
 STAIRS = 'stairs'  # a stairs tile goes to the stairs tile at the same place on the floor above and below
 FLOOR_GAP = 4  # the floors lie side by side in one grid (grass between them: nobody walks across)
 MARKERS = {'parking', 'dropoff'}  # where cars park (2 x 4 tiles; 'dropoff': taxis, and cars taking someone home)
@@ -37,7 +38,7 @@ DECOR = {'plant', 'sanitizer', 'trash_bin', 'cabinet', 'biohazard', 'iv_stand', 
          'sofa_beige', 'sofa_corner', 'sofa_grey', 'chaise', 'bookcase', 'grandfather_clock', 'wardrobe', 'dresser',
          'sideboard', 'pc_desk', 'desk_white', 'workbench', 'folding_screen',
          'console_curved', 'lab_desk', 'holo_table', 'monitor_wall', 'sci_device', 'scan_bed', 'robot_desk',
-         'sleep_pod', 'command_desk', 'command_desk_2', 'energy_core', 'gaming_chair'}
+         'sleep_pod', 'command_desk', 'command_desk_2', 'energy_core', 'gaming_chair', 'tv_back'}
 DIRECTIONS = ((1, 0), (-1, 0), (0, 1), (0, -1))
 TURN = 0.001  # extra cost of a turn when planning a route
 
@@ -333,7 +334,9 @@ class Layout:
             if lane:
                 below = lane[1] > f.y  # (the lane below the bay: it drives in upwards)
                 self.bays[f.kind].append({'kind': f.kind, 'tiles': f.tiles(), 'lane': lane, 'stop': (f.x + f.w / 2, f.y + f.h / 2),
-                                          'nose': 'up' if below else 'down', 'door': (f.x, lane[1] + (0 if below else 1))})
+                                          'nose': 'up' if below else 'down',
+                                          'door': (f.x, f.y - 1) if below else (f.x, f.y + f.h)})  # (the pavement at
+                # its nose: people get out there, never onto the lane)
 
     def walkable(self, x, y):
         return 0 <= x < self.width and 0 <= y < self.height \
@@ -400,8 +403,8 @@ class Layout:
         limit: only routes up to this many tiles (gives up much sooner when there's no such route).
         stairs: may take the stairs to another floor (a stretcher can't: it takes the elevator)."""
         def ok(x, y):
-            if not self.walkable(x, y) or (x, y) in blocked:
-                return False
+            if not self.walkable(x, y) or (x, y) in blocked or (x, y) in self.seats and (x, y) != goal:
+                return False  # (a seat only as where it's going: nobody walks over the chairs)
             room = self.room_at[y][x]  # None on door tiles
             return room is None or room.kind not in avoid
 

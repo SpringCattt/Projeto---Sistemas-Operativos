@@ -330,6 +330,8 @@ def run_ui(snapshots, commands, positions, sim=None):
                 doorway[d] = group
                 door_look[d] = (way, 0 if d == ordered[0] else 1 if d == ordered[-1] else None)
     keyboard = [image('custom/keyboard_0'), image('custom/keyboard_1')]
+    tops = {(x, y) for f in lay.furniture if f.kind in ('counter', 'desk', 'boss_desk')  # where a keyboard can go
+            for x in range(f.x, f.x + f.w) for y in range(f.y, f.y + f.h)}
     mop, bucket = [image(f'custom/mop_{i}') for i in (0, 1, 2, 1)], image('custom/bucket')
 
     def centred(img, x, y, depth):  # (depth, image, world x, world y) like furniture, centred on (x, y) in tiles
@@ -513,8 +515,9 @@ def run_ui(snapshots, commands, positions, sim=None):
                 extras.append(centred(cart_img(a.pushing, facing), x, y, (y + 0.5) * T))
             if getattr(a, 'wheelchair', False):  # sitting in it, being wheeled out
                 extras.append(centred(wheelchair[a.facing], a.px, a.py + 0.2, depth(a) - 1))
-            if a.action == 'typing':  # on the counter, beside its screen (the patient stands in front of the screen)
-                extras.append(centred(keyboard[int(beat * 8) % 2], a.px + 0.9, a.ty + 1.35, (a.ty + 2) * T + 1))
+            if a.action == 'typing':  # on the counter, beside its screen (the patient stands in front of the screen):
+                side = 0.9 if (a.tx + 1, a.ty + 1) in tops else -0.9  # on whichever side the counter goes on
+                extras.append(centred(keyboard[int(beat * 8) % 2], a.px + side, a.ty + 1.35, (a.ty + 2) * T + 1))
             if a.action == 'mopping':
                 extras.append(centred(bucket, a.px + 0.8, a.py + 0.2, (a.py + FEET) * T))
                 extras.append(centred(mop[int(beat * 5) % 4], a.px - 0.35, a.py, (a.py + FEET) * T + 1))

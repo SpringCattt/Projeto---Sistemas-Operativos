@@ -45,8 +45,8 @@ class Staff(Actor):
 
 
 def about(task):
-    """Id of the person a task is about (the patient, or whoever started a fight), if any."""
-    who = task.patient or task.target
+    """Id of the person a task is about (the patient, or whoever started a fight, or is going home), if any."""
+    who = task.patient or task.target or getattr(task, 'discharged', None)
     return who.id if who is not None else None
 
 
@@ -436,34 +436,6 @@ class Cleaner(TaskStaff):
         self.tire(config.FATIGUE_PER_TASK['clean'])
 
 
-class Bartender(Staff):
-    """Sells coffee and snacks behind the bar's counter: whoever comes up to its side of the counter is served."""
-    role = 'bartender'
-
-    def __init__(self, h, spot, front, rng):
-        super().__init__(h, [spot], rng)
-        self.spot, self.front = spot, front  # where it stands, and where a customer stands across the counter
-
-    def life(self):
-        serving = None
-        while True:
-            if self.quitting:
-                raise OffShift
-            if (self.tx, self.ty) != self.spot:
-                self.go(self.spot, timeout=30)
-                continue
-            self.facing = 'down' if self.front[1] > self.spot[1] else 'up'
-            customer = self.world.occupied.get(self.front)
-            customer = customer if getattr(customer, 'at_bar', False) else None
-            if customer is not serving and customer is not None:
-                self.speech, self.speech_until = self.rng.choice(('Coffee?', 'Here you go!', 'Anything else?')), \
-                    self.h.clock() + 2
-            serving = customer
-            self.action = 'typing' if serving else None
-            self.doing = f'serving {serving.name}' if serving else 'at the bar'
-            self.tick()
-
-
 class Cart:
     """The empty stretcher (or wheelchair): it takes up a tile like a person does, but has no thread (nurses move
     it)."""
@@ -480,7 +452,7 @@ def neighbours(tile):
     return [(x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)]
 
 
-PATIENT_NEVER = ('bar', 'control', 'storage', 'rest', 'disinfection')  # a stretcher with someone on it neither
+PATIENT_NEVER = ('control', 'storage', 'rest', 'disinfection')  # a stretcher with someone on it neither
 
 
 class WardNurse(TaskStaff):
@@ -653,7 +625,7 @@ class WardNurse(TaskStaff):
             p.lying, p.px, p.py = False, p.tx + 0.5, p.ty + 0.5  # off the bed / table...
             self.swap(train, chair, p)  # ...into the chair
             p.on_stretcher, p.wheelchair, self.pushing = False, True, None
-            p.driver = (self, train)
+            p.driver, p.stage = (self, train), 'going home in a wheelchair'
             self.drive(train, self.lay.street_line[0], with_patient=True)
             self.h.give_back_theatre(p)
             self.doing = f'waiting with {p.name} for the car'
@@ -773,11 +745,13 @@ class WardNurse(TaskStaff):
         near = self.lay.distances_from((train[0].tx, train[0].ty))
         # the one with the shortest queue (two elevators share the work), then the closest
         lift = min(lifts, key=lambda e: (len(e.queue) + (e.rider is not None), near.get(e.stops[here][0][0], 10 ** 6)))
-        self.doing = 'waiting for the elevator'
-        lift.call(self, here)
+        self.doing = 'going to the elevator'
         try:
-            # first close by (not holding it while it's still far away), off the tiles in front of its door
+            # first close by, off the tiles in front of its door, and only then in the queue: it's for whoever gets
+            # there first, not whoever called it from far away
             self.roll(train, self.near_lift(lift.stops[here][0], train), with_patient=with_patient, timeout=120)
+            self.doing = 'waiting for the elevator'
+            lift.call(self, here)
             if not self.wait_until(lambda: lift.take(self), timeout=600) \
                     or not self.roll(train, lift.stops[here][0][0], with_patient=with_patient, timeout=120):
                 return False
@@ -833,7 +807,7 @@ class WardNurse(TaskStaff):
                 return True
         for a in in_the_way:
             if hasattr(a, 'make_way'):
-                a.make_way = True
+                a.make_way = frozenset(column)
         return False
 
     def roll(self, train, goal, last=None, with_patient=False, timeout=180, yielding=False):
@@ -862,8 +836,8 @@ class WardNurse(TaskStaff):
                     return True
                 other = self.world.occupied.get(path[0])
                 other_train = getattr(other, 'driver', None)
-                if other_train is None and other is not None and blocked_for > 0.3:
-                    other.make_way = True
+                if other_train is None and other is not None and blocked_for > 0.3 and hasattr(other, 'make_way'):
+                    other.make_way = frozenset(path[:8]) | {(m.tx, m.ty) for m in train}  # off the train's way
                 elif other_train and other_train[0] is not self and not yielding and blocked_for > 1 \
                         and self.rank(train) < other_train[0].rank(other_train[1]):
                     self.back_off(train, path[0], with_patient)
@@ -1051,7 +1025,7 @@ class Ambulance(Actor):
             there = [self.world.occupied[t] for t in tiles if t in self.world.occupied]
         for a in there:
             if hasattr(a, 'make_way'):
-                a.make_way = True
+                a.make_way = frozenset(tiles)
         return not there
 
     def unload(self):

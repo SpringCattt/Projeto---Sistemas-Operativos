@@ -16,7 +16,7 @@ from actors import ROW
 from arrivals import new_patient
 from layout import load_layout
 from patients import Patient
-from staff import Ambulance, Bartender, Boss, Cart, Cleaner, Doctor, Receptionist, Security, TriageNurse, WardNurse
+from staff import Ambulance, Boss, Cart, Cleaner, Doctor, Receptionist, Security, TriageNurse, WardNurse
 from vehicles import Car
 
 SPEEDS = (0.25, 0.5, 1, 2, 4, 8)  # what the admin tablet offers
@@ -73,8 +73,6 @@ class Hospital:
             self.world.occupied[spot] = Cart(spot, 'wheelchair')
         staff = [Receptionist(self, seat, front, rng) for seat, front in lay.reception_desks]
         staff += [TriageNurse(self, room, seat, chair, rng) for room, seat, chair in lay.triage_desks]
-        spread = lay.bar_spots[::max(1, len(lay.bar_spots) // config.BARTENDERS)][:config.BARTENDERS]
-        staff += [Bartender(self, spot, front, rng) for spot, front in spread]
         rooms = lay.rooms_of('doctor')[:n_doctors]
         if on_call:  # the farthest rooms wait for the doctors on call
             rooms = rooms[:max(1, len(rooms) - config.ON_CALL.get('Doctor', 0))]
@@ -535,13 +533,6 @@ class Hospital:
                 who = p.helpers.get(step, [])
                 for a in who:
                     self.credit[a.label()] += pay * share / len(who)
-
-    def bar_sale(self, bartender):
-        """A coffee or a snack sold at the bar: income, credited to whoever sold it."""
-        with self.stats_lock:
-            self.stats['income'] += config.BAR_PRICE
-            self.stats['bar_sales'] += 1
-            self.credit[bartender.label()] += config.BAR_PRICE
 
     def credit_for(self, actor, kind):
         """Security and cleaners: what a fight stopped or a mess cleaned counts for the bonus (config.CREDIT)."""

@@ -296,7 +296,7 @@ def start_policy():
 
 class Elevator:
     """An elevator, shared by the stretcher trains (a stretcher fills it: one train at a time). A monitor: a train
-    calls it to its floor and waits its turn, first come first served; the car, with its own thread
+    calls it to its floor once it's there, by the door, and waits its turn: first come (there) first served; the car, with its own thread
     (Hospital.run_lift), goes to whoever's turn it is, waits with the doors open until the train is in, takes it to
     its floor and waits again until it's out. The train holds it from its turn until it's out, so two trains never
     meet at its door (one waiting to get in where the other has to get out)."""

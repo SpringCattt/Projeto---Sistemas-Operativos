@@ -325,6 +325,11 @@ class Elevator:
                 return True
             return False
 
+    def free_at(self, floor):
+        """Here, doors open, and nobody using it or waiting for it."""
+        with self.cond:
+            return self.rider is None and not self.queue and self.open and self.floor == floor
+
     def send(self, floor):
         with self.cond:
             self.to = floor

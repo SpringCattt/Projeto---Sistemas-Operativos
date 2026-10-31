@@ -319,6 +319,21 @@ class Layout:
         # rest of the city), and leave where one goes out
         self.drive = {(x, y): DRIVE[self.ground[y][x].rsplit('/', 1)[-1]] for y in range(0, self.height - 1, 2)
                       for x in range(0, self.width - 1, 2) if self.ground[y][x].rsplit('/', 1)[-1] in DRIVE}
+        # Keep right in a crossing too: each block of it is on a lane of each road that crosses there (the one
+        # along its row, the one along its column), and a car in it may only go those two ways: never along the
+        # other lane, against the traffic
+        self.cross_ways = {}
+        for b, way in self.drive.items():
+            if way == 'x':
+                ways = set()
+                for d in STEP.values():
+                    n = (b[0] + d[0], b[1] + d[1])
+                    while self.drive.get(n) == 'x':
+                        n = (n[0] + d[0], n[1] + d[1])
+                    lane = self.drive.get(n)
+                    if lane in STEP and (STEP[lane][0] == 0) == (d[0] == 0):  # (a lane along that row / column)
+                        ways.add(lane)
+                self.cross_ways[b] = ways
         beyond = lambda x, y: not (0 <= x < self.stride - FLOOR_GAP and 0 <= y < self.height)
         amb = self.ambulance_spot  # (no car comes in down the ambulances' lane: it's theirs)
         self.city_in = [b for b, way in self.drive.items() if way in STEP and beyond(b[0] - STEP[way][0], b[1] - STEP[way][1])
@@ -354,10 +369,15 @@ class Layout:
                 return route[::-1]
             for way, (dx, dy) in STEP.items():
                 n = (b[0] + dx, b[1] + dy)
-                if n not in came and self.drive[b] in (way, 'x') and self.drive.get(n) in (way, 'x'):
+                if n not in came and way in self.ways(b) and way in self.ways(n):
                     came[n] = b
                     todo.append(n)
         return []
+
+    def ways(self, block):
+        """The ways a car may go in this block of road (none off the road)."""
+        way = self.drive.get(block)
+        return self.cross_ways[block] if way == 'x' else (way,) if way else ()
 
     def floor_of(self, x):
         """Which floor a tile (or a position) is on, from its x."""

@@ -66,6 +66,7 @@ class OffShift(Exception):
 class Actor:
     _ids = itertools.count(1)
     role = None
+    takes_tasks = False  # gets its work from the dispatcher (TaskStaff): no walk to its place first
     pace = (3, 8, 0.5)  # idle wandering: (min pause, max pause in seconds, chance of walking when it ends)
 
     def __init__(self, h, candidates, rng, name=None, look=None):
@@ -116,8 +117,8 @@ class Actor:
         self._last = time.perf_counter()
         try:
             try:
-                if self.commute:  # just hired: walks in from the street first
-                    self.go(self.commute, timeout=240)
+                if self.commute and not self.takes_tasks:  # just hired: walks in from the street first (staff
+                    self.go(self.commute, timeout=240)  # with tasks: see TaskStaff.idle)
                 self.life()
             except OffShift:
                 self.doing = 'going home'

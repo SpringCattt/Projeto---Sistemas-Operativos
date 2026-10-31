@@ -88,7 +88,7 @@ the next time it starts:
   unless the piece has its own `w`, `h`. `stretcher` pieces are where stretchers park. An `elevator` stops on
   every floor that has one at the same place; it opens downwards, onto three free tiles (where a stretcher gets in
   and out). `parking` and `dropoff` pieces (2 x 4 tiles, only marks: not drawn) are the parking lot's bays, each
-  right above or below a lane; drop-off bays are for taxis and for cars taking someone home.
+  right above or below a lane; drop-off bays are for taxis and for cars taking someone home (with none free, those park in any bay).
 * **scenery** (optional) — pieces that are only drawn, anywhere, never in anyone's way: the city's buildings,
   lamps, trees, benches (the City Pack's pieces). Buildings and lamps light up at night.
 * **Roads** are ground tiles: every lane is 2 tiles wide and one way, and cars drive on 2 x 2 blocks (x and y

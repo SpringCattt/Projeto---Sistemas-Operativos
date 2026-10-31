@@ -257,8 +257,14 @@ def text_bubble(font, text):
         if words.get_width() + 2 * BUBBLE_PAD <= image(f'custom/{name}').get_width():
             break
     surf = image(f'custom/{name}').copy()
-    room = surf.get_width() - 2 * BUBBLE_PAD
-    if words.get_width() > room:  # longer than the biggest bubble: cut (keep the lines in dialogue.txt short)
-        words = words.subsurface((0, 0, room, words.get_height()))
+    w = words.get_width() + 2 * BUBBLE_PAD
+    if w > surf.get_width():  # longer than the biggest bubble: stretch its middle column (long names)
+        base, mid = surf, surf.get_width() // 2
+        surf = pygame.Surface((w, base.get_height()), pygame.SRCALPHA)
+        surf.blit(base, (0, 0), (0, 0, mid, base.get_height()))
+        right = base.get_width() - mid
+        surf.blit(base, (w - right, 0), (mid, 0, right, base.get_height()))
+        column = base.subsurface((mid, 0, 1, base.get_height()))
+        surf.blit(pygame.transform.scale(column, (w - base.get_width(), base.get_height())), (mid, 0))
     surf.blit(words, ((surf.get_width() - words.get_width()) // 2, (BUBBLE_TEXT_H - words.get_height()) // 2))
     return surf

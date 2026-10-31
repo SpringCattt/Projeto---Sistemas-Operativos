@@ -4,7 +4,7 @@ import os
 import pygame
 
 import config
-from layout import DOOR, MARKERS, WALL, WALL_MOUNTED
+from layout import DOOR, FLOOR_GAP, MARKERS, WALL, WALL_MOUNTED
 
 T = config.TILE
 ASSETS = os.path.join(os.path.dirname(__file__), 'assets')
@@ -109,6 +109,11 @@ def draw_layout(lay):
             else:
                 surf.blit(road_joins(lay, x, y, name.rsplit('/', 1)[-1]), (x * T, y * T))
     middle_lines(surf, lay)
+    for edge in range(lay.stride - FLOOR_GAP - 1, lay.width, lay.stride):  # the grass between floors (the camera may
+        column = surf.subsurface((edge * T, 0, T, surf.get_height())).copy()  # show it) goes on like each floor's
+        for i in range(1, FLOOR_GAP + 1):  # edge: the streets run on to the end of the view
+            if (edge + i) * T < surf.get_width():
+                surf.blit(column, ((edge + i) * T, 0))
     return surf
 
 

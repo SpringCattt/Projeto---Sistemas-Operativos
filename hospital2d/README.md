@@ -43,7 +43,7 @@ The hospital is drawn in the free [Tiled](https://www.mapeditor.org/) map editor
 game shows one floor at a time: `PgUp` / `PgDn` or the floor buttons, and the view follows whoever you've clicked
 when they go up or down.
 
-* **Ground floor:** emergencies. Street, reception, triage, waiting rooms, bar, Emergency (with its ambulance
+* **Ground floor:** emergencies. Street, reception, triage, waiting rooms, Emergency (with its ambulance
   bay), storage right next to it (the stretchers and wheelchairs start there) and the Boss's control room — the
   AI's room, with its servers. Round the grounds, the **city**: a ring road, streets out to the four edges of the
   map (the rest of the city: cars come from there and go back there), pavements, buildings, lamps, traffic lights,
@@ -69,7 +69,7 @@ glowing in its ring
 (sealed: no doors; the Boss sits in the exact centre and nobody else goes in). The main corridor runs through the
 hall and out to both sides, and ends in an exit at each end: whoever has seen a doctor leaves that way, so they
 don't walk back against the people coming in through reception and the waiting rooms. Under the hall is the base
-block: street → reception → a triage room on each side → the two waiting rooms, plus the bar; Emergency and
+block: street → reception → a triage room on each side → the two waiting rooms; Emergency and
 storage are on top of the hall.
 
 **Editing the building.** Open a floor (`maps/floorN.tmj`, 0 = ground floor) in Tiled (turn on *View → Snapping →
@@ -80,7 +80,7 @@ the next time it starts:
   place on the floor above and below.
 * **rooms** — a rectangle over each room, walls included (an ellipse for a round one). Its *name* is shown in the
   game; its *class* is its kind: `waiting`, `reception`, `triage`, `doctor`, `emergency`, `surgery`, `disinfection`,
-  `storage`, `rest`, `bar`, `control`, `corridor`, `street`. Custom properties: `partner` (the room it works with:
+  `storage`, `rest`, `control`, `corridor`, `street`. Custom properties: `partner` (the room it works with:
   triage → its waiting room, surgery → its disinfection room) and `walls` = false for the street. Rectangles of
   class `staff_only` mark where patients never go (behind the counters). Streets named `Exit` are the ways out
   after a visit; the one named `Ambulance Bay` is where ambulances leave patients.
@@ -161,12 +161,15 @@ structures ([`world.py`](world.py)):
 | `Theatres` | counting `Semaphore` + `Lock` | how many operating rooms are free, and which |
 | `Transfer` | `Condition` + `Event`s | two nurses meet at storage with a stretcher, then pick up and deliver a Red patient |
 | ambulance bay | `Semaphore(1)` | one ambulance there at a time: the next one waits up the road |
-| `Elevator` | monitor (`Condition`) + the car's own thread | stretchers between floors: they call it and wait their turn (first come, first served); it goes to whoever's turn it is, waits until the stretcher is in, takes it to its floor and waits until it's out. A stretcher waits its turn a few steps away and holds the elevator until it's out, so two never block each other at its door |
+| `Elevator` | monitor (`Condition`) + the car's own thread | stretchers between floors: they call it once they're by its door and wait their turn (first there, first served: never held for one still on its way); it goes to whoever's turn it is, waits until the stretcher is in, takes it to its floor and waits until it's out. A stretcher waits its turn a few steps away and holds the elevator until it's out, so two never block each other at its door |
 | disinfection rooms | counting `Semaphore` (one per room) | as many doctors washing at once as the room has sinks |
 
 **Deadlocks.** No thread ever holds two of those locks at the same time, so there is no lock-ordering deadlock.
-People blocking each other in a narrow spot (each waiting for the other's tile) is the other kind: whoever has
-been blocked too long steps aside and finds a new route.
+People blocking each other in a narrow spot (each waiting for the other's tile) is the other kind: only one of
+the two gives way (the newer one, at once; the other waits, and gives way itself only if that one had nowhere to
+go), so they never both turn aside into each other again. Giving way means getting off the other one's way, not
+just its next tile: to the closest free tile off it, a few steps along it if need be (a door, a corridor). Whoever
+just stands in someone's way is asked to do the same, and so is anyone in the way of a stretcher or a car.
 
 ### A patient's visit ([`patients.py`](patients.py))
 
@@ -270,9 +273,6 @@ straight instead of zig-zagging.
   other's way can't deadlock). It never drives onto someone on a zebra crossing: it waits and asks them to step
   off its way; people plan their routes round cars. It claims its bay a block before reaching it, so nobody is
   standing in it when it turns in. The day doesn't end while a car is still bringing someone.
-* **The bar** sells coffee and snacks: two `Bartender`s behind its counter (`config.BARTENDERS`); a patient waiting
-  for a doctor goes over now and then (`BAR_CHANCE_PER_S`), is served across the counter and pays (`BAR_PRICE`, the
-  day's income, credited to whoever served it). A doctor's call waits for it to come back.
 * **Going home in a wheelchair:** a Red patient can't walk, so once cured it stays on the operating table (the
   operating room stays its own: the next surgery waits) until a nurse comes with a wheelchair from storage — in the
   elevator if need be, the nurse and the chair a train of two, with the same code as the stretchers — and wheels it

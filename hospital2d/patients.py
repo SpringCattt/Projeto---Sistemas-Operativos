@@ -34,7 +34,6 @@ class Patient(Actor):
         self.provoke = None  # 'fight' / 'vomit': ordered from the admin tablet (done by its own thread)
         self.car = None  # the car that brought it and waits for it (vehicles.Car), if any
         self.wheelchair = False  # being wheeled out (staff.WardNurse.wheelchair)
-        self.at_bar = False  # at the bar's counter, being served
 
     def label(self):
         return f'{self.name} ({config.URGENCY_NAMES[self.rank]})' if self.rank is not None else self.name
@@ -185,28 +184,6 @@ class Patient(Actor):
             self.h.log(f'{self.name} is getting worse: now {config.URGENCY_NAMES[self.rank]}')
         if not self.path and self.rng.random() < config.VOMIT_CHANCE_PER_S[self.rank] * dt:
             self.vomit()
-        elif not self.path and self.waiting_room is not None and self.waiting_room.kind == 'waiting' \
-                and self.rng.random() < config.BAR_CHANCE_PER_S * dt:
-            self.bar_trip()
-
-    def bar_trip(self):
-        """A coffee or a snack at the bar while it waits (a doctor's call waits for it to come back)."""
-        with self.world.lock:
-            open_ = [(front, self.world.occupied[spot]) for spot, front in self.lay.bar_spots
-                     if front not in self.world.occupied and getattr(self.world.occupied.get(spot), 'role', None) == 'bartender']
-        if not open_:
-            return
-        front, bartender = min(open_, key=lambda o: abs(o[0][0] - self.tx) + abs(o[0][1] - self.ty))
-        self.stage, self.allowed = 'going to the bar', BASE_ROOMS | {'bar', 'corridor'}
-        if self.go(front, timeout=60):
-            self.facing = 'up' if bartender.ty < self.ty else 'down'
-            self.at_bar = True
-            self.wait(self.rng.uniform(*config.BAR_S))
-            self.at_bar = False
-            self.h.bar_sale(bartender)
-            self.say('<3', 2)
-        self.go_wait()
-        self.stage = 'waiting for a doctor'
 
     def vomit(self):
         x, y = self.tx, self.ty

@@ -8,6 +8,7 @@ import random
 import struct
 import time
 import traceback
+from collections import deque
 
 import config
 import dialogue
@@ -33,16 +34,18 @@ ACTIONS = (None, 'typing', 'mopping', 'siren', 'open')  # ('open': an ambulance 
 
 ROLE_LABEL = {'doctor': 'Doctor', 'nurse': 'Nurse', 'receptionist': 'Receptionist', 'security': 'Security',
               'cleaner': 'Cleaner', 'patient': 'Patient', 'dispatcher': 'Dispatcher', 'paramedic': 'Paramedic',
-              'ambulance': 'Ambulance', 'car': 'Car', 'bartender': 'Bartender'}
+              'ambulance': 'Ambulance', 'car': 'Car'}
 # Which character sheets (assets/third_party/characters/NNN.png) each role may look like
 STAFF_LOOKS = {'doctor': [17, 21, 23], 'nurse': [2, 13, 22], 'receptionist': [4, 14, 18],
                'security': [6, 7], 'cleaner': [24, 25], 'dispatcher': [5],
-               'paramedic': [9, 10, 11], 'bartender': [12, 19]}  # (red and white: the ambulance crew)  # 5: bald, shades: the boss
+               'paramedic': [9, 10, 11]}  # (red and white: the ambulance crew)  # 5: bald, shades: the boss
 # 30-39 are fantasy (angel, zombie, devils...) so they stay out of the hospital for now
 PATIENT_LOOKS = [i for i in range(30) if all(i not in v for v in STAFF_LOOKS.values())]
 
 
 STEP_ASIDE_AFTER = 3.0  # simulated seconds blocked before giving way
+HEAD_ON_S = 0.3  # ...or this, when it's the one of two head on that gives way
+ASIDE_RADIUS = 6  # how far someone asked to make way may walk to get off the way
 AROUND_RADIUS = 8  # going round people: only those this close count (the far ones will have moved by then)
 LOOK_AHEAD = 4  # tiles a runner looks ahead for someone slower in its way
 
@@ -250,13 +253,16 @@ class Actor:
             other = w.occupied.get(nxt)
             self.blocked_for += dt
             self.stuck_for += dt
-            if self.stuck_for > 1 and hasattr(other, 'make_way') and not other.path:
-                other.make_way = True  # someone just standing in the way: "excuse me" (it steps aside if it can)
+            if self.stuck_for > 0.5 and hasattr(other, 'make_way') and not other.path:
+                # someone just standing in the way: "excuse me" (it gets off the way I'm going)
+                other.make_way = frozenset(self.path[:LOOK_AHEAD * 2]) | {(self.tx, self.ty)}
             if getattr(other, 'driver', None) is not None and self.driver is None:
                 self.give_way(nxt)
-            elif self.stuck_for > STEP_ASIDE_AFTER and getattr(other, 'path', None) \
-                    and other.path[0] == (self.tx, self.ty):  # head on, each wanting the other's tile: one gives
-                self.step_aside(nxt)  # way (anyone else in the way: it waits, rather than walk about in circles)
+            elif getattr(other, 'path', None) and other.path[0] == (self.tx, self.ty):
+                # head on, each wanting the other's tile: only one gives way (the newer one), off the other's whole
+                # way; the other waits for it (and gives way itself only if that one had nowhere to go)
+                if self.stuck_for > (HEAD_ON_S if self.id > other.id else STEP_ASIDE_AFTER):
+                    self.give_way(frozenset(other.path[:LOOK_AHEAD * 2]) | {nxt})
             elif self.blocked_for > (0.1 if self.speed > 1 and self.in_my_way(other) else self.give_way_after):
                 self.blocked_for, self.give_way_after = 0.0, self.rng.uniform(0.4, 1.2)
                 self.detour(extra=12)
@@ -289,7 +295,8 @@ class Actor:
         self.anim_t += dt * self.speed
 
     def give_way(self, blocked_tile=None):
-        """A stretcher always goes first: out of its way (even mid-route) and stay there a moment."""
+        """Out of someone's way (a stretcher, a car, the one it met head on), even mid-route, and stay there a
+        moment."""
         self.step_aside(blocked_tile)
         self.aside, self.yield_until = list(self.path), self.h.clock() + 1.5
 
@@ -297,17 +304,33 @@ class Actor:
         """Two actors can block each other forever in a narrow spot (each waiting for the other's tile: a
         deadlock). Whoever has waited too long gives way: it moves to a free tile next to it, and its caller works
         out a new route from there."""
-        x, y = self.tx, self.ty
         no_go, avoid = self.no_go(), self.avoid()
+        off = blocked_tile if isinstance(blocked_tile, frozenset) else {blocked_tile}
+        # The closest free tile off `off` (the way the other one needs), a few steps off if need be: next to it
+        # there may be none (a door, a corridor), and then it walks on along that way until it can step off it
+        came, todo = {(self.tx, self.ty): None}, deque([(self.tx, self.ty)])
         with self.world.lock:
-            off = blocked_tile if isinstance(blocked_tile, frozenset) else {blocked_tile}
-            options = [t for t in ((x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1))
-                       if t not in off and self.lay.walkable(*t) and t not in self.world.occupied
-                       and t not in no_go and t not in self.world.messes
-                       and (self.lay.room_at[t[1]][t[0]] is None or self.lay.room_at[t[1]][t[0]].kind not in avoid)]
+            while todo:
+                t = todo.popleft()
+                if t not in off and t != (self.tx, self.ty):
+                    break
+                x, y = t
+                for n in ((x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)):
+                    if n not in came and abs(n[0] - self.tx) + abs(n[1] - self.ty) <= ASIDE_RADIUS \
+                            and self.lay.walkable(*n) and n not in self.world.occupied and n not in no_go \
+                            and n not in self.world.messes and n not in self.lay.links \
+                            and (self.lay.room_at[n[1]][n[0]] is None or self.lay.room_at[n[1]][n[0]].kind not in avoid):
+                        came[n] = t
+                        todo.append(n)
+            else:
+                t = None
         self.stuck_for = 0.0
-        if options:  # (with nowhere to go it keeps its way: clearing it would leave it standing there for good)
-            self.set_path([self.rng.choice(options)])
+        if t is not None:  # (with nowhere to go it keeps its way: clearing it would leave it standing there for good)
+            way = []
+            while t != (self.tx, self.ty):
+                way.append(t)
+                t = came[t]
+            self.set_path(way[::-1])
 
     def walk_to(self, goal, around_people=False):
         """Walks to `goal` tick by tick. False if it can't get there right now (blocked or unreachable)."""

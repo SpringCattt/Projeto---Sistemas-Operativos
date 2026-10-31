@@ -95,11 +95,7 @@ PRICE = [60, 150, 400]  # Green, Yellow, Red
 SURGERY_PRICE = 800
 ON_TIME_S = [240, 120, 45]
 LATE_PAYS = 0.4
-WAGE = {'doctor': 10, 'nurse': 5, 'receptionist': 3, 'security': 3, 'cleaner': 3, 'bartender': 3}
-BARTENDERS = 2  # behind the bar's counter
-BAR_CHANCE_PER_S = 0.004  # a patient waiting for a doctor goes for a coffee or a snack (per second)...
-BAR_S = (4, 8)  # ...being served takes this long...
-BAR_PRICE = 6  # ...and it pays this (the day's income)
+WAGE = {'doctor': 10, 'nurse': 5, 'receptionist': 3, 'security': 3, 'cleaner': 3}
 ON_CALL_PAY = 1.5
 # The bonus: BONUS_SHARE of the day's profit (if there is any), shared among the staff by what each one brought
 # in. Of each payment, SHARE goes to whoever did each step for that patient (a step nobody did, like the stretcher

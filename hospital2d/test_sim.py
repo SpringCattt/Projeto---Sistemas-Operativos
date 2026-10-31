@@ -15,7 +15,7 @@ from arrivals import new_patient, run_arrivals  # noqa: E402 (after the speed-up
 from sim import JOBS, Hospital, new_positions, read_positions, write_positions  # noqa: E402
 from world import Dispatcher, Line, Task, Theatres  # noqa: E402
 
-PATIENT_ONLY_NOT = {'control', 'storage', 'rest', 'disinfection'}  # rooms a patient never enters (the bar: it buys a coffee)
+PATIENT_ONLY_NOT = {'control', 'storage', 'rest', 'disinfection'}  # rooms a patient never enters
 
 
 @contextlib.contextmanager
@@ -543,19 +543,6 @@ def test_wheelchair():
     assert not any(walked), 'a Red patient walked'
     assert len(h.theatres.free) == 1, 'the operating room was never given back'
     assert all(c.home == (c.tx, c.ty) for c in h.world.occupied.values() if getattr(c, 'kind', None) == 'wheelchair')
-
-
-def test_bar():
-    """Patients waiting for a doctor go for a coffee: the bartender behind the counter serves them, and it's paid."""
-    with settings(BAR_CHANCE_PER_S=0.2):
-        h = Hospital(seed=6, n_doctors=0, n_surgeries=0, n_patients=4)
-        h.start()
-        try:
-            assert sum(a.role == 'bartender' for a in h.actors) == 2
-            assert until(lambda: h.stats['bar_sales'] >= 1, 40), 'nobody bought anything at the bar'
-            assert h.stats['income'] >= config.BAR_PRICE
-        finally:
-            stop(h)
 
 
 if __name__ == '__main__':

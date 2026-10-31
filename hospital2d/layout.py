@@ -220,7 +220,7 @@ class Layout:
             if (x, y - 1) in tables or (x, y + 1) in tables:
                 self.seat_facing[(x, y)] = 'up' if (x, y - 1) in tables else 'down'
 
-        self.staff_only = staff_only  # behind the counters (reception, bar): patients never walk there
+        self.staff_only = staff_only  # behind the counters (reception): patients never walk there
         self._find_spots(near_door, stretchers)
 
     def squeezes(self, f):
@@ -315,11 +315,6 @@ class Layout:
         self.waiting_seats = {r: [t for t in self.free_tiles(r) if t in self.seats] for r in self.rooms_of('waiting')}
         self.control_seat = next((f.x, f.y) for r in self.rooms_of('control') for f in furniture_in(r, 'office_chair'))
         self.rest_spots = [t for r in self.rooms_of('rest') for t in self.free_tiles(r) if t in self.seats]
-        # The bar: where a bartender stands behind the counter, and the tile across it where a customer stands
-        self.bar_spots = [((f.x, f.y + d), (f.x, f.y - d)) for r in self.rooms_of('bar') for f in furniture_in(r, 'counter')
-                          for d in (-1, 1) if (f.x, f.y + d) in self.staff_only and self.walkable(f.x, f.y + d)
-                          and self.walkable(f.x, f.y - d) and (f.x, f.y - d) not in self.staff_only]
-
         # The city's roads, by blocks (DRIVE); cars come in where a lane enters floor 0 from beyond its edge (the
         # rest of the city), and leave where one goes out
         self.drive = {(x, y): DRIVE[self.ground[y][x].rsplit('/', 1)[-1]] for y in range(0, self.height - 1, 2)

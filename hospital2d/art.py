@@ -116,7 +116,9 @@ def draw_layout(lay):
                     surf.blit(image('custom/road_x'), (x * T, y * T))
             s = lay.ambulance_spot
             if s is not None:
-                box = pygame.Rect(s.x * T - 3, s.y * T - 3, s.w * T + 6, s.h * T + 6)
+                w, h = image('custom/ambulance').get_size()  # (drawn centred on the spot)
+                box = pygame.Rect(0, 0, w + 6, h + 6)
+                box.center = (round((s.x + s.w / 2) * T), round((s.y + s.h / 2) * T))
                 for edge in ((box.left, box.top, 1, box.h), (box.right - 1, box.top, 1, box.h),
                              (box.left, box.bottom - 1, box.w, 1)):
                     surf.fill(KERB, edge)

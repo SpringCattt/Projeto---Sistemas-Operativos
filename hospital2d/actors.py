@@ -33,11 +33,11 @@ ACTIONS = (None, 'typing', 'mopping', 'siren', 'open')  # ('open': an ambulance 
 
 ROLE_LABEL = {'doctor': 'Doctor', 'nurse': 'Nurse', 'receptionist': 'Receptionist', 'security': 'Security',
               'cleaner': 'Cleaner', 'patient': 'Patient', 'dispatcher': 'Dispatcher', 'paramedic': 'Paramedic',
-              'ambulance': 'Ambulance'}
+              'ambulance': 'Ambulance', 'car': 'Car', 'bartender': 'Bartender'}
 # Which character sheets (assets/third_party/characters/NNN.png) each role may look like
 STAFF_LOOKS = {'doctor': [17, 21, 23], 'nurse': [2, 13, 22], 'receptionist': [4, 14, 18],
                'security': [6, 7], 'cleaner': [24, 25], 'dispatcher': [5],
-               'paramedic': [9, 10, 11]}  # (red and white: the ambulance crew)  # 5: bald, shades: the boss
+               'paramedic': [9, 10, 11], 'bartender': [12, 19]}  # (red and white: the ambulance crew)  # 5: bald, shades: the boss
 # 30-39 are fantasy (angel, zombie, devils...) so they stay out of the hospital for now
 PATIENT_LOOKS = [i for i in range(30) if all(i not in v for v in STAFF_LOOKS.values())]
 
@@ -129,12 +129,12 @@ class Actor:
         raise NotImplementedError
 
     # ---- time -----------------------------------------------------------------------------------------------
-    def tick(self):
-        """Waits one tick (1/ACTOR_HZ s) and returns how much simulated time passed. Raises Stopped at shutdown,
-        and whatever upkeep() raises (Interrupted)."""
+    def tick(self, hz=None):
+        """Waits one tick (1/ACTOR_HZ s, or 1/hz) and returns how much simulated time passed. Raises Stopped at
+        shutdown, and whatever upkeep() raises (Interrupted)."""
         # Wait until the next deadline rather than a fixed time: Windows rounds waits up to ~15.6 ms, and this way
         # a long wait is followed by a shorter one, so the average stays at ACTOR_HZ
-        period = 1 / (config.ACTOR_HZ if self.path else config.IDLE_HZ)
+        period = 1 / (hz or (config.ACTOR_HZ if self.path else config.IDLE_HZ))
         self._next = (self._next or self._last) + period
         delay = self._next - time.perf_counter()
         if delay < -period:  # far behind (overloaded): don't try to catch up in a burst
@@ -150,9 +150,9 @@ class Actor:
             self.bubble, self.bubble_until = None, 0.0
         self.upkeep(dt)
         if self.make_way:
-            self.make_way = False
+            off, self.make_way = self.make_way, False  # (True, or the tiles to get off: where a car is going)
             if not self.lying and self.driver is None and (self.tx, self.ty) not in self.lay.seats:
-                self.give_way()
+                self.give_way(off if off is not True else None)
         return dt
 
     def upkeep(self, dt):
@@ -200,6 +200,7 @@ class Actor:
         with self.world.lock:
             if self.role != 'cleaner':  # everyone walks around a mess, except whoever comes to clean it
                 blocked |= self.world.messes.keys()
+            blocked |= {t for t, a in self.world.occupied.items() if getattr(a, 'role', None) == 'car' and t != goal}
             if around_people:
                 blocked |= {t for t, a in self.world.occupied.items() if a is not self and t != goal
                             and abs(t[0] - self.tx) + abs(t[1] - self.ty) <= AROUND_RADIUS}
@@ -253,8 +254,9 @@ class Actor:
                 other.make_way = True  # someone just standing in the way: "excuse me" (it steps aside if it can)
             if getattr(other, 'driver', None) is not None and self.driver is None:
                 self.give_way(nxt)
-            elif self.stuck_for > STEP_ASIDE_AFTER:
-                self.step_aside(nxt)
+            elif self.stuck_for > STEP_ASIDE_AFTER and getattr(other, 'path', None) \
+                    and other.path[0] == (self.tx, self.ty):  # head on, each wanting the other's tile: one gives
+                self.step_aside(nxt)  # way (anyone else in the way: it waits, rather than walk about in circles)
             elif self.blocked_for > (0.1 if self.speed > 1 and self.in_my_way(other) else self.give_way_after):
                 self.blocked_for, self.give_way_after = 0.0, self.rng.uniform(0.4, 1.2)
                 self.detour(extra=12)
@@ -298,12 +300,14 @@ class Actor:
         x, y = self.tx, self.ty
         no_go, avoid = self.no_go(), self.avoid()
         with self.world.lock:
+            off = blocked_tile if isinstance(blocked_tile, frozenset) else {blocked_tile}
             options = [t for t in ((x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1))
-                       if t != blocked_tile and self.lay.walkable(*t) and t not in self.world.occupied
+                       if t not in off and self.lay.walkable(*t) and t not in self.world.occupied
                        and t not in no_go and t not in self.world.messes
                        and (self.lay.room_at[t[1]][t[0]] is None or self.lay.room_at[t[1]][t[0]].kind not in avoid)]
         self.stuck_for = 0.0
-        self.set_path([self.rng.choice(options)] if options else [])
+        if options:  # (with nowhere to go it keeps its way: clearing it would leave it standing there for good)
+            self.set_path([self.rng.choice(options)])
 
     def walk_to(self, goal, around_people=False):
         """Walks to `goal` tick by tick. False if it can't get there right now (blocked or unreachable)."""
@@ -389,6 +393,7 @@ class Actor:
         room = self.lay.room_at[self.ty][self.tx]
         return {'id': self.id, 'role': self.role, 'name': self.name, 'look': self.look,
                 'path': list(self.path), 'state': self.state(),
+                'pushing': getattr(self.pushing, 'kind', None),
                 'room': room.name if room else 'doorway', 'bubble': self.bubble, 'mark': None,
                 'speech': self.speech if self.h.clock() < self.speech_until else None,
                 'card': [('Doing', self.doing)] + self.card()}

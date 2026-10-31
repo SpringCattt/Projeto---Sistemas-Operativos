@@ -369,10 +369,13 @@ class Doctor(TaskStaff):
                 self.h.log(f'{self.label()} finished the surgery of {p.label()}')
                 p.helpers['doctor'] = [self]
                 self.h.treated(p, surgery=True)
+                if p.base_urgency == 2 and self.lay.city_in:  # it leaves in a wheelchair: the room is its until then
+                    p.theatre = room
             s.finish('done')
         finally:
             self.extra_avoid = ()
-            self.h.theatres.give_back(room)
+            if getattr(p, 'theatre', None) is not room:
+                self.h.theatres.give_back(room)
 
     def disinfect(self, room):
         sem = self.h.disinfection[room]
@@ -433,13 +436,43 @@ class Cleaner(TaskStaff):
         self.tire(config.FATIGUE_PER_TASK['clean'])
 
 
+class Bartender(Staff):
+    """Sells coffee and snacks behind the bar's counter: whoever comes up to its side of the counter is served."""
+    role = 'bartender'
+
+    def __init__(self, h, spot, front, rng):
+        super().__init__(h, [spot], rng)
+        self.spot, self.front = spot, front  # where it stands, and where a customer stands across the counter
+
+    def life(self):
+        serving = None
+        while True:
+            if self.quitting:
+                raise OffShift
+            if (self.tx, self.ty) != self.spot:
+                self.go(self.spot, timeout=30)
+                continue
+            self.facing = 'down' if self.front[1] > self.spot[1] else 'up'
+            customer = self.world.occupied.get(self.front)
+            customer = customer if getattr(customer, 'at_bar', False) else None
+            if customer is not serving and customer is not None:
+                self.speech, self.speech_until = self.rng.choice(('Coffee?', 'Here you go!', 'Anything else?')), \
+                    self.h.clock() + 2
+            serving = customer
+            self.action = 'typing' if serving else None
+            self.doing = f'serving {serving.name}' if serving else 'at the bar'
+            self.tick()
+
+
 class Cart:
-    """The empty stretcher: it takes up a tile like a person does, but has no thread (two nurses move it)."""
+    """The empty stretcher (or wheelchair): it takes up a tile like a person does, but has no thread (nurses move
+    it)."""
     speed, path, anim_t, driver, hidden = 0.0, (), 0.0, None, False
 
-    def __init__(self, tile):
+    def __init__(self, tile, kind='stretcher'):
         self.tx, self.ty = tile
         self.px, self.py, self.facing = tile[0] + 0.5, tile[1] + 0.5, 'down'
+        self.kind, self.home = kind, tile  # (home: where it's kept)
 
 
 def neighbours(tile):
@@ -457,6 +490,8 @@ class WardNurse(TaskStaff):
     pace = (2, 5, 0.8)
 
     def handle(self, task):
+        if task.kind == 'wheelchair':
+            return self.wheelchair(task)
         t = task.transfer
         self.h.dispatcher.set_preemptable(task, False)  # nobody leaves a stretcher half-way
         self.speed = config.STRETCHER_SPEED
@@ -577,7 +612,8 @@ class WardNurse(TaskStaff):
                 occ = self.world.occupied
                 free = lambda x, who: self.lay.walkable(*x) and occ.get(x) in (None, who)
                 options = sorted(((near.get(x, 10 ** 6) + far.get(k, 10 ** 6), c, x, k)
-                                 for c in occ.values() if isinstance(c, Cart) and c.driver is None
+                                 for c in occ.values() if isinstance(c, Cart) and c.kind == 'stretcher'
+                                 and c.driver is None
                                  for x in neighbours((c.tx, c.ty)) if free(x, self)
                                   for k in neighbours((c.tx, c.ty)) if k != x and free(k, back)), key=lambda o: o[0])
                 if options:
@@ -591,6 +627,82 @@ class WardNurse(TaskStaff):
             if self.go(x, timeout=30):
                 return cart
             cart.driver = None  # couldn't get to it: this transfer fails (the doctor will call again)
+            return None
+        return None
+
+    def wheelchair(self, task):
+        """A cured Red patient can't walk home: a wheelchair from storage to it (in the elevator if it's upstairs), it
+        sits in, out to the car waiting for it in the parking lot (once out: the operating room it was in is free
+        again), and the wheelchair back to storage."""
+        p, car = task.discharged, task.car
+        self.h.dispatcher.set_preemptable(task, False)
+        self.doing = f'getting a wheelchair for {p.name}'
+        chair = self.take_chair()
+        if chair is None:  # all out: try again in a while
+            self.wait(5)
+            return self.h.dispatcher.submit(task)
+        train = [chair, self]  # (the chair in front: the nurse pushes it)
+        for m in train:
+            m.driver = (self, train)
+        self.pushing, self.doing = chair, f'wheelchair for {p.name}'
+        try:
+            beside, _ = self.stop_beside(self.bed((p.px, p.py)) if p.lying else [(p.tx, p.ty)], train)
+            if not self.drive(train, beside):
+                self.h.dispatcher.submit(task)  # couldn't get to it: again later
+                return
+            p.lying, p.px, p.py = False, p.tx + 0.5, p.ty + 0.5  # off the bed / table...
+            self.swap(train, chair, p)  # ...into the chair
+            p.on_stretcher, p.wheelchair, self.pushing = False, True, None
+            p.driver = (self, train)
+            self.drive(train, self.lay.street_line[0], with_patient=True)
+            self.h.give_back_theatre(p)
+            self.doing = f'waiting with {p.name} for the car'
+            self.wait_until(car.parked.is_set)
+            self.drive(train, car.bay['door'], with_patient=True, timeout=120)
+            with self.world.lock:  # into the car: the chair is left where the patient was
+                chair.tx, chair.ty, chair.px, chair.py, chair.facing = p.tx, p.ty, p.px, p.py, p.facing
+                self.world.occupied[(p.tx, p.ty)] = chair
+                p.hidden = True
+            train[train.index(p)], p.driver, p.wheelchair = chair, None, False
+            self.h.log(f'{self.label()} helps {p.label()} into the car taking it home')
+            p.home.set()
+            self.pushing, self.doing = chair, 'taking the wheelchair back'
+            self.drive(train, self.lay.street_line[0], timeout=60)  # off the lane first: then the car can go
+            car.back.set()
+            self.tire(config.FATIGUE_PER_TASK['wheelchair'])
+            self.drive(train, chair.home, timeout=180)
+        finally:
+            self.pushing = None
+            self.h.give_back_theatre(p)
+            for m in (self, chair, p):
+                m.driver = None
+            with self.world.lock:  # shortcut: a chair that couldn't be pushed back reappears where it's kept
+                if (chair.tx, chair.ty) != chair.home and chair.home not in self.world.occupied \
+                        and self.world.occupied.get((chair.tx, chair.ty)) is chair:
+                    del self.world.occupied[(chair.tx, chair.ty)]
+                    chair.tx, chair.ty = chair.home
+                    chair.px, chair.py, chair.facing = chair.tx + 0.5, chair.ty + 0.5, 'down'
+                    self.world.occupied[chair.home] = chair
+
+    def take_chair(self):
+        """Walks up to a free wheelchair in storage, now this nurse's. None if none is free in time."""
+        end = self.h.clock() + 90
+        while self.h.clock() < end:
+            near = self.lay.distances_from((self.tx, self.ty))
+            with self.world.lock:
+                occ = self.world.occupied
+                options = [(near.get(x, 10 ** 6), i, c, x) for i, c in enumerate(occ.values())
+                           if isinstance(c, Cart) and c.kind == 'wheelchair' and c.driver is None
+                           for x in neighbours((c.tx, c.ty)) if self.lay.walkable(*x) and occ.get(x) in (None, self)]
+                if options:
+                    _, _, chair, x = min(options, key=lambda o: o[:2])
+                    chair.driver = (self, [self, chair])  # claimed
+            if not options:
+                self.tick()
+                continue
+            if self.go(x, timeout=40):
+                return chair
+            chair.driver = None
             return None
         return None
 
@@ -692,7 +804,8 @@ class WardNurse(TaskStaff):
             taken = set(self.world.occupied) - mine
         near = self.lay.distances_from((train[0].tx, train[0].ty))
         around = self.lay.distances_from(column[0])
-        ok = lambda t: self.lay.floor_of(t[0]) == floor and t not in column and t not in taken
+        ok = lambda t: self.lay.floor_of(t[0]) == floor and t not in column and t not in taken \
+            and t not in self.lay.links  # (never on the stairs: everyone else going up or down would be stuck)
         beside = [t for t, d in around.items() if d <= 4 and abs(t[0] - column[0][0]) >= 2
                   and column[0][1] <= t[1] <= column[-1][1] and ok(t)]
         spots = beside or [t for t, d in around.items() if 4 <= d <= 8 and ok(t)]
@@ -789,11 +902,13 @@ class WardNurse(TaskStaff):
         blocked = set(self.lay.staff_only) if with_patient else set()
         with self.world.lock:
             blocked |= self.world.messes.keys()
+            blocked |= {x for x, a in self.world.occupied.items() if getattr(a, 'role', None) == 'car' and x != goal}
             if around:
                 blocked |= {x for x, a in self.world.occupied.items()
                             if a not in train and abs(x[0] - self.tx) + abs(x[1] - self.ty) <= 8}
         options = []
-        for order in (train, train[::-1]):  # forwards, or turned round
+        for order in (train, train[::-1]) if len(train) == 3 else (train,):  # forwards, or turned round (a
+            # stretcher; a wheelchair always goes first)
             start = (order[0].tx, order[0].ty)
             r = [] if start == goal else self.lay.path(start, goal, avoid, blocked | {(m.tx, m.ty) for m in order[1:]},
                                                         stairs=False)
@@ -828,8 +943,8 @@ class WardNurse(TaskStaff):
                 m.anim_t += dt * self.speed
         with self.world.lock:
             occ = self.world.occupied
-            last = (train[2].tx, train[2].ty)
-            if occ.get(last) is train[2]:
+            last = (train[-1].tx, train[-1].ty)  # (the back: a stretcher's nurse, or a wheelchair's)
+            if occ.get(last) is train[-1]:
                 del occ[last]
             for m, x in zip(train, targets):
                 occ[x] = m
@@ -860,7 +975,7 @@ class WardNurse(TaskStaff):
                 goal = (onto[0], onto[1] - 0.1) if onto else (to[0] + 0.5, to[1] + 0.5)  # as Actor.lie_on
                 mover = old
                 old.on_stretcher = False
-        train[1] = new
+        train[train.index(old)] = new
         while (mover.px, mover.py) != goal:  # it climbs on / off
             dx, dy = goal[0] - mover.px, goal[1] - mover.py
             d, stride = (dx * dx + dy * dy) ** 0.5, 2.0 * self.tick()
@@ -897,8 +1012,10 @@ class Ambulance(Actor):
         self.doing = 'waiting for the ambulance bay'
 
     def life(self):
+        self.hidden = True  # (up the road, out of sight, until it's its turn)
         while not self.h.ambulance_bay.acquire(timeout=1 / config.ACTOR_HZ):
             self.tick()
+        self.hidden = False
         try:
             self.doing = 'arriving'
             self.drive_to(self.spot.y + self.spot.h / 2)
@@ -915,7 +1032,7 @@ class Ambulance(Actor):
 
     def drive_to(self, y):
         while abs(self.py - y) > 1e-3:
-            step = config.AMBULANCE_SPEED * self.tick()
+            step = config.AMBULANCE_SPEED * self.tick(config.ACTOR_HZ)
             self.py = y if abs(y - self.py) <= step else self.py + step * (1 if y > self.py else -1)
             self.anim_t += step
 
@@ -924,7 +1041,7 @@ class Ambulance(Actor):
         starts = [(m.px, m.py) for m in movers]
         done = 0.0
         while done < 1:
-            done = min(1.0, done + 1.5 * self.tick())
+            done = min(1.0, done + 1.5 * self.tick(config.ACTOR_HZ))
             for m, (sx, sy), (gx, gy) in zip(movers, starts, goals):
                 m.px, m.py = sx + (gx - sx) * done, sy + (gy - sy) * done
 

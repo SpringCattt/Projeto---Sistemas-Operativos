@@ -19,6 +19,8 @@ MIN_FPS = 30
 ACTOR_SPEED = 1.5  # tiles per second
 LIFT_FLOOR_S = 3.0  # the elevator, per floor (stretchers can't take the stairs)
 AMBULANCE_SPEED = 4.0  # tiles per second, coming down the road to the ambulance bay (and leaving)
+CAR_SPEED = 3.0  # tiles per second, the cars of the city (a third of it parking and backing out)
+CAR_COLORS = 7  # (art.CAR_PAINTS)
 RUN_SPEED = [1.4, 1.8, 2.4]  # x ACTOR_SPEED: staff run to a task in another room, faster the more urgent
 STRETCHER_SPEED = 2.4  # the two nurses pushing a stretcher (and the patient on it)
 TIME_SCALE = 1.0  # 2.0 = everything (walking, waiting, arrivals) happens twice as fast
@@ -93,7 +95,11 @@ PRICE = [60, 150, 400]  # Green, Yellow, Red
 SURGERY_PRICE = 800
 ON_TIME_S = [240, 120, 45]
 LATE_PAYS = 0.4
-WAGE = {'doctor': 10, 'nurse': 5, 'receptionist': 3, 'security': 3, 'cleaner': 3}
+WAGE = {'doctor': 10, 'nurse': 5, 'receptionist': 3, 'security': 3, 'cleaner': 3, 'bartender': 3}
+BARTENDERS = 2  # behind the bar's counter
+BAR_CHANCE_PER_S = 0.004  # a patient waiting for a doctor goes for a coffee or a snack (per second)...
+BAR_S = (4, 8)  # ...being served takes this long...
+BAR_PRICE = 6  # ...and it pays this (the day's income)
 ON_CALL_PAY = 1.5
 # The bonus: BONUS_SHARE of the day's profit (if there is any), shared among the staff by what each one brought
 # in. Of each payment, SHARE goes to whoever did each step for that patient (a step nobody did, like the stretcher
@@ -107,7 +113,7 @@ STRETCHERS = 4  # parked at the back of storage: with all of them out, a Red pat
 
 # Fatigue (0-100)
 FATIGUE_PER_TASK = {'consult': (6, 9, 13), 'surgery': 25, 'fight': 10, 'clean': 6,
-                    'register': 2, 'stretcher': 8, 'complaint': 3, 'triage': 3}
+                    'register': 2, 'stretcher': 8, 'complaint': 3, 'triage': 3, 'wheelchair': 5}
 REST_AT = 70  # idle and this tired: goes to the rest room...
 RESTED_AT = 20  # ...until it's down to this
 RECOVER_PER_S = 0.15  # idle

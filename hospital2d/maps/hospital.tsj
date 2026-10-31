@@ -6,9 +6,9 @@
  "columns": 0,
  "margin": 0,
  "spacing": 0,
- "tilecount": 80,
- "tilewidth": 64,
- "tileheight": 52,
+ "tilecount": 125,
+ "tilewidth": 77,
+ "tileheight": 64,
  "objectalignment": "bottomleft",
  "grid": {
   "orientation": "orthogonal",
@@ -26,11 +26,6 @@
      "name": "kind",
      "type": "string",
      "value": "ai_core"
-    },
-    {
-     "name": "w",
-     "type": "int",
-     "value": 2
     }
    ]
   },
@@ -134,9 +129,9 @@
   },
   {
    "id": 7,
-   "image": "../assets/third_party/moderntown/sprites/shadow/16px/waiting/bench_waiting_3.png",
+   "image": "../assets/custom/bench_up.png",
    "imagewidth": 48,
-   "imageheight": 16,
+   "imageheight": 20,
    "properties": [
     {
      "name": "kind",
@@ -179,8 +174,8 @@
   {
    "id": 10,
    "image": "../assets/custom/big_tv.png",
-   "imagewidth": 48,
-   "imageheight": 30,
+   "imagewidth": 32,
+   "imageheight": 14,
    "properties": [
     {
      "name": "kind",
@@ -190,7 +185,7 @@
     {
      "name": "w",
      "type": "int",
-     "value": 3
+     "value": 2
     }
    ]
   },
@@ -209,6 +204,24 @@
   },
   {
    "id": 12,
+   "image": "../assets/third_party/furniture/Furniture (475).png",
+   "imagewidth": 47,
+   "imageheight": 49,
+   "properties": [
+    {
+     "name": "kind",
+     "type": "string",
+     "value": "bookcase"
+    },
+    {
+     "name": "w",
+     "type": "int",
+     "value": 3
+    }
+   ]
+  },
+  {
+   "id": 13,
    "image": "../assets/third_party/hospital/Pngs/lab_books.png",
    "imagewidth": 16,
    "imageheight": 16,
@@ -221,7 +234,25 @@
    ]
   },
   {
-   "id": 13,
+   "id": 14,
+   "image": "../assets/custom/boss_desk_0.png",
+   "imagewidth": 48,
+   "imageheight": 26,
+   "properties": [
+    {
+     "name": "kind",
+     "type": "string",
+     "value": "boss_desk"
+    },
+    {
+     "name": "w",
+     "type": "int",
+     "value": 3
+    }
+   ]
+  },
+  {
+   "id": 15,
    "image": "../assets/third_party/moderntown/sprites/shadow/16px/exam/bp_monitor.png",
    "imagewidth": 16,
    "imageheight": 32,
@@ -234,7 +265,7 @@
    ]
   },
   {
-   "id": 14,
+   "id": 16,
    "image": "../assets/third_party/hospital/Pngs/room_cabinet.png",
    "imagewidth": 16,
    "imageheight": 32,
@@ -247,7 +278,7 @@
    ]
   },
   {
-   "id": 15,
+   "id": 17,
    "image": "../assets/third_party/moderntown/sprites/shadow/16px/bakery/cake_dome.png",
    "imagewidth": 16,
    "imageheight": 16,
@@ -260,10 +291,10 @@
    ]
   },
   {
-   "id": 16,
+   "id": 18,
    "image": "../assets/custom/call_screen.png",
-   "imagewidth": 64,
-   "imageheight": 32,
+   "imagewidth": 48,
+   "imageheight": 12,
    "properties": [
     {
      "name": "kind",
@@ -273,12 +304,12 @@
     {
      "name": "w",
      "type": "int",
-     "value": 4
+     "value": 3
     }
    ]
   },
   {
-   "id": 17,
+   "id": 19,
    "image": "../assets/third_party/hospital/Pngs/maternity_chair.png",
    "imagewidth": 16,
    "imageheight": 20,
@@ -291,7 +322,7 @@
    ]
   },
   {
-   "id": 18,
+   "id": 20,
    "image": "../assets/custom/chair_up.png",
    "imagewidth": 16,
    "imageheight": 20,
@@ -304,7 +335,25 @@
    ]
   },
   {
-   "id": 19,
+   "id": 21,
+   "image": "../assets/third_party/furniture/Furniture (1000).png",
+   "imagewidth": 51,
+   "imageheight": 28,
+   "properties": [
+    {
+     "name": "kind",
+     "type": "string",
+     "value": "chaise"
+    },
+    {
+     "name": "w",
+     "type": "int",
+     "value": 3
+    }
+   ]
+  },
+  {
+   "id": 22,
    "image": "../assets/third_party/moderntown/sprites/shadow/16px/board/clock_round.png",
    "imagewidth": 16,
    "imageheight": 16,
@@ -317,7 +366,7 @@
    ]
   },
   {
-   "id": 20,
+   "id": 23,
    "image": "../assets/custom/coat_rack.png",
    "imagewidth": 16,
    "imageheight": 26,
@@ -330,7 +379,7 @@
    ]
   },
   {
-   "id": 21,
+   "id": 24,
    "image": "../assets/custom/coffee.png",
    "imagewidth": 16,
    "imageheight": 22,
@@ -343,7 +392,61 @@
    ]
   },
   {
-   "id": 22,
+   "id": 25,
+   "image": "../assets/third_party/furniture/Furniture (994).png",
+   "imagewidth": 47,
+   "imageheight": 34,
+   "properties": [
+    {
+     "name": "kind",
+     "type": "string",
+     "value": "command_desk"
+    },
+    {
+     "name": "w",
+     "type": "int",
+     "value": 3
+    }
+   ]
+  },
+  {
+   "id": 26,
+   "image": "../assets/third_party/furniture/Furniture (1034).png",
+   "imagewidth": 44,
+   "imageheight": 32,
+   "properties": [
+    {
+     "name": "kind",
+     "type": "string",
+     "value": "command_desk_2"
+    },
+    {
+     "name": "w",
+     "type": "int",
+     "value": 3
+    }
+   ]
+  },
+  {
+   "id": 27,
+   "image": "../assets/third_party/furniture/Furniture (88).png",
+   "imagewidth": 55,
+   "imageheight": 30,
+   "properties": [
+    {
+     "name": "kind",
+     "type": "string",
+     "value": "console_curved"
+    },
+    {
+     "name": "w",
+     "type": "int",
+     "value": 3
+    }
+   ]
+  },
+  {
+   "id": 28,
    "image": "../assets/custom/counter_m.png",
    "imagewidth": 16,
    "imageheight": 14,
@@ -356,7 +459,7 @@
    ]
   },
   {
-   "id": 23,
+   "id": 29,
    "image": "../assets/third_party/hospital/Pngs/lab_medium_table.png",
    "imagewidth": 32,
    "imageheight": 16,
@@ -374,7 +477,25 @@
    ]
   },
   {
-   "id": 24,
+   "id": 30,
+   "image": "../assets/third_party/furniture/Furniture (292).png",
+   "imagewidth": 35,
+   "imageheight": 27,
+   "properties": [
+    {
+     "name": "kind",
+     "type": "string",
+     "value": "desk_white"
+    },
+    {
+     "name": "w",
+     "type": "int",
+     "value": 2
+    }
+   ]
+  },
+  {
+   "id": 31,
    "image": "../assets/third_party/moderntown/sprites/shadow/16px/bakery/bakery_case_donut.png",
    "imagewidth": 16,
    "imageheight": 16,
@@ -387,7 +508,25 @@
    ]
   },
   {
-   "id": 25,
+   "id": 32,
+   "image": "../assets/third_party/furniture/Furniture (40).png",
+   "imagewidth": 34,
+   "imageheight": 31,
+   "properties": [
+    {
+     "name": "kind",
+     "type": "string",
+     "value": "dresser"
+    },
+    {
+     "name": "w",
+     "type": "int",
+     "value": 2
+    }
+   ]
+  },
+  {
+   "id": 33,
    "image": "../assets/custom/elevator.png",
    "imagewidth": 32,
    "imageheight": 40,
@@ -410,7 +549,25 @@
    ]
   },
   {
-   "id": 26,
+   "id": 34,
+   "image": "../assets/third_party/furniture/Furniture (1038).png",
+   "imagewidth": 33,
+   "imageheight": 34,
+   "properties": [
+    {
+     "name": "kind",
+     "type": "string",
+     "value": "energy_core"
+    },
+    {
+     "name": "w",
+     "type": "int",
+     "value": 2
+    }
+   ]
+  },
+  {
+   "id": 35,
    "image": "../assets/third_party/hospital/Pngs/room_bed_v.png",
    "imagewidth": 16,
    "imageheight": 32,
@@ -428,7 +585,7 @@
    ]
   },
   {
-   "id": 27,
+   "id": 36,
    "image": "../assets/third_party/moderntown/sprites/shadow/16px/sign/sign_exit.png",
    "imagewidth": 16,
    "imageheight": 16,
@@ -441,7 +598,7 @@
    ]
   },
   {
-   "id": 28,
+   "id": 37,
    "image": "../assets/third_party/moderntown/sprites/shadow/16px/exam/eye_chart.png",
    "imagewidth": 16,
    "imageheight": 16,
@@ -454,7 +611,7 @@
    ]
   },
   {
-   "id": 29,
+   "id": 38,
    "image": "../assets/custom/fire_extinguisher.png",
    "imagewidth": 16,
    "imageheight": 18,
@@ -467,7 +624,7 @@
    ]
   },
   {
-   "id": 30,
+   "id": 39,
    "image": "../assets/custom/first_aid.png",
    "imagewidth": 16,
    "imageheight": 16,
@@ -480,7 +637,25 @@
    ]
   },
   {
-   "id": 31,
+   "id": 40,
+   "image": "../assets/third_party/furniture/Furniture (746).png",
+   "imagewidth": 36,
+   "imageheight": 34,
+   "properties": [
+    {
+     "name": "kind",
+     "type": "string",
+     "value": "folding_screen"
+    },
+    {
+     "name": "w",
+     "type": "int",
+     "value": 2
+    }
+   ]
+  },
+  {
+   "id": 41,
    "image": "../assets/third_party/hospital/Pngs/lab_refrigerator.png",
    "imagewidth": 16,
    "imageheight": 32,
@@ -493,7 +668,56 @@
    ]
   },
   {
-   "id": 32,
+   "id": 42,
+   "image": "../assets/third_party/furniture/Furniture (925).png",
+   "imagewidth": 26,
+   "imageheight": 45,
+   "properties": [
+    {
+     "name": "kind",
+     "type": "string",
+     "value": "gaming_chair"
+    },
+    {
+     "name": "w",
+     "type": "int",
+     "value": 2
+    }
+   ]
+  },
+  {
+   "id": 43,
+   "image": "../assets/third_party/furniture/Furniture (591).png",
+   "imagewidth": 17,
+   "imageheight": 33,
+   "properties": [
+    {
+     "name": "kind",
+     "type": "string",
+     "value": "grandfather_clock"
+    }
+   ]
+  },
+  {
+   "id": 44,
+   "image": "../assets/third_party/furniture/Furniture (523).png",
+   "imagewidth": 49,
+   "imageheight": 35,
+   "properties": [
+    {
+     "name": "kind",
+     "type": "string",
+     "value": "holo_table"
+    },
+    {
+     "name": "w",
+     "type": "int",
+     "value": 3
+    }
+   ]
+  },
+  {
+   "id": 45,
    "image": "../assets/third_party/hospital/Pngs/room_iv_stand_w.png",
    "imagewidth": 16,
    "imageheight": 32,
@@ -506,7 +730,25 @@
    ]
   },
   {
-   "id": 33,
+   "id": 46,
+   "image": "../assets/third_party/furniture/Furniture (106).png",
+   "imagewidth": 42,
+   "imageheight": 38,
+   "properties": [
+    {
+     "name": "kind",
+     "type": "string",
+     "value": "lab_desk"
+    },
+    {
+     "name": "w",
+     "type": "int",
+     "value": 3
+    }
+   ]
+  },
+  {
+   "id": 47,
    "image": "../assets/custom/magazine_rack.png",
    "imagewidth": 16,
    "imageheight": 18,
@@ -519,7 +761,7 @@
    ]
   },
   {
-   "id": 34,
+   "id": 48,
    "image": "../assets/third_party/moderntown/sprites/shadow/16px/sign/map_stand.png",
    "imagewidth": 32,
    "imageheight": 32,
@@ -537,7 +779,7 @@
    ]
   },
   {
-   "id": 35,
+   "id": 49,
    "image": "../assets/third_party/hospital/Pngs/room_ecg_cart.png",
    "imagewidth": 16,
    "imageheight": 32,
@@ -550,7 +792,25 @@
    ]
   },
   {
-   "id": 36,
+   "id": 50,
+   "image": "../assets/third_party/furniture/Furniture (639).png",
+   "imagewidth": 44,
+   "imageheight": 37,
+   "properties": [
+    {
+     "name": "kind",
+     "type": "string",
+     "value": "monitor_wall"
+    },
+    {
+     "name": "w",
+     "type": "int",
+     "value": 3
+    }
+   ]
+  },
+  {
+   "id": 51,
    "image": "../assets/custom/notice_board.png",
    "imagewidth": 32,
    "imageheight": 16,
@@ -568,7 +828,7 @@
    ]
   },
   {
-   "id": 37,
+   "id": 52,
    "image": "../assets/custom/office_chair.png",
    "imagewidth": 16,
    "imageheight": 15,
@@ -581,7 +841,7 @@
    ]
   },
   {
-   "id": 38,
+   "id": 53,
    "image": "../assets/third_party/hospital/Pngs/operation_table.png",
    "imagewidth": 32,
    "imageheight": 48,
@@ -604,7 +864,7 @@
    ]
   },
   {
-   "id": 39,
+   "id": 54,
    "image": "../assets/custom/painting_0.png",
    "imagewidth": 16,
    "imageheight": 14,
@@ -617,7 +877,7 @@
    ]
   },
   {
-   "id": 40,
+   "id": 55,
    "image": "../assets/custom/painting_1.png",
    "imagewidth": 16,
    "imageheight": 14,
@@ -630,7 +890,7 @@
    ]
   },
   {
-   "id": 41,
+   "id": 56,
    "image": "../assets/custom/pc.png",
    "imagewidth": 16,
    "imageheight": 11,
@@ -643,7 +903,25 @@
    ]
   },
   {
-   "id": 42,
+   "id": 57,
+   "image": "../assets/third_party/furniture/Furniture (433).png",
+   "imagewidth": 42,
+   "imageheight": 35,
+   "properties": [
+    {
+     "name": "kind",
+     "type": "string",
+     "value": "pc_desk"
+    },
+    {
+     "name": "w",
+     "type": "int",
+     "value": 3
+    }
+   ]
+  },
+  {
+   "id": 58,
    "image": "../assets/third_party/hospital/Pngs/room_flower.png",
    "imagewidth": 16,
    "imageheight": 16,
@@ -656,7 +934,7 @@
    ]
   },
   {
-   "id": 43,
+   "id": 59,
    "image": "../assets/third_party/hospital/Pngs/room_anatomy_poster.png",
    "imagewidth": 16,
    "imageheight": 16,
@@ -669,7 +947,25 @@
    ]
   },
   {
-   "id": 44,
+   "id": 60,
+   "image": "../assets/third_party/furniture/Furniture (892).png",
+   "imagewidth": 36,
+   "imageheight": 41,
+   "properties": [
+    {
+     "name": "kind",
+     "type": "string",
+     "value": "robot_desk"
+    },
+    {
+     "name": "w",
+     "type": "int",
+     "value": 2
+    }
+   ]
+  },
+  {
+   "id": 61,
    "image": "../assets/third_party/hospital/Pngs/room_hand_sanitizer.png",
    "imagewidth": 16,
    "imageheight": 16,
@@ -682,7 +978,48 @@
    ]
   },
   {
-   "id": 45,
+   "id": 62,
+   "image": "../assets/third_party/furniture/Furniture (658).png",
+   "imagewidth": 51,
+   "imageheight": 44,
+   "properties": [
+    {
+     "name": "kind",
+     "type": "string",
+     "value": "scan_bed"
+    },
+    {
+     "name": "w",
+     "type": "int",
+     "value": 3
+    },
+    {
+     "name": "h",
+     "type": "int",
+     "value": 2
+    }
+   ]
+  },
+  {
+   "id": 63,
+   "image": "../assets/third_party/furniture/Furniture (640).png",
+   "imagewidth": 34,
+   "imageheight": 40,
+   "properties": [
+    {
+     "name": "kind",
+     "type": "string",
+     "value": "sci_device"
+    },
+    {
+     "name": "w",
+     "type": "int",
+     "value": 2
+    }
+   ]
+  },
+  {
+   "id": 64,
    "image": "../assets/custom/server_rack.png",
    "imagewidth": 16,
    "imageheight": 32,
@@ -695,7 +1032,7 @@
    ]
   },
   {
-   "id": 46,
+   "id": 65,
    "image": "../assets/third_party/hospital/Pngs/room_pharmacy_shelf.png",
    "imagewidth": 16,
    "imageheight": 16,
@@ -708,7 +1045,25 @@
    ]
   },
   {
-   "id": 47,
+   "id": 66,
+   "image": "../assets/third_party/furniture/Furniture (438).png",
+   "imagewidth": 49,
+   "imageheight": 30,
+   "properties": [
+    {
+     "name": "kind",
+     "type": "string",
+     "value": "sideboard"
+    },
+    {
+     "name": "w",
+     "type": "int",
+     "value": 3
+    }
+   ]
+  },
+  {
+   "id": 67,
    "image": "../assets/third_party/hospital/Pngs/lab_sink.png",
    "imagewidth": 32,
    "imageheight": 32,
@@ -726,7 +1081,25 @@
    ]
   },
   {
-   "id": 48,
+   "id": 68,
+   "image": "../assets/third_party/furniture/Furniture (895).png",
+   "imagewidth": 53,
+   "imageheight": 36,
+   "properties": [
+    {
+     "name": "kind",
+     "type": "string",
+     "value": "sleep_pod"
+    },
+    {
+     "name": "w",
+     "type": "int",
+     "value": 3
+    }
+   ]
+  },
+  {
+   "id": 69,
    "image": "../assets/third_party/moderntown/sprites/shadow/16px/shelf/shelf_canned_food.png",
    "imagewidth": 16,
    "imageheight": 32,
@@ -739,7 +1112,7 @@
    ]
   },
   {
-   "id": 49,
+   "id": 70,
    "image": "../assets/third_party/moderntown/sprites/shadow/16px/shelf/endcap_soda.png",
    "imagewidth": 16,
    "imageheight": 32,
@@ -752,7 +1125,7 @@
    ]
   },
   {
-   "id": 50,
+   "id": 71,
    "image": "../assets/custom/sofa_m.png",
    "imagewidth": 16,
    "imageheight": 14,
@@ -770,7 +1143,71 @@
    ]
   },
   {
-   "id": 51,
+   "id": 72,
+   "image": "../assets/third_party/furniture/Furniture (173).png",
+   "imagewidth": 75,
+   "imageheight": 33,
+   "properties": [
+    {
+     "name": "kind",
+     "type": "string",
+     "value": "sofa_beige"
+    },
+    {
+     "name": "w",
+     "type": "int",
+     "value": 5
+    }
+   ]
+  },
+  {
+   "id": 73,
+   "image": "../assets/third_party/furniture/Furniture (208).png",
+   "imagewidth": 77,
+   "imageheight": 44,
+   "properties": [
+    {
+     "name": "kind",
+     "type": "string",
+     "value": "sofa_corner"
+    },
+    {
+     "name": "w",
+     "type": "int",
+     "value": 5
+    },
+    {
+     "name": "h",
+     "type": "int",
+     "value": 2
+    }
+   ]
+  },
+  {
+   "id": 74,
+   "image": "../assets/third_party/furniture/Furniture (422).png",
+   "imagewidth": 58,
+   "imageheight": 41,
+   "properties": [
+    {
+     "name": "kind",
+     "type": "string",
+     "value": "sofa_grey"
+    },
+    {
+     "name": "w",
+     "type": "int",
+     "value": 4
+    },
+    {
+     "name": "h",
+     "type": "int",
+     "value": 2
+    }
+   ]
+  },
+  {
+   "id": 75,
    "image": "../assets/custom/speaker.png",
    "imagewidth": 16,
    "imageheight": 12,
@@ -783,7 +1220,7 @@
    ]
   },
   {
-   "id": 52,
+   "id": 76,
    "image": "../assets/custom/stretcher_v.png",
    "imagewidth": 14,
    "imageheight": 26,
@@ -796,7 +1233,7 @@
    ]
   },
   {
-   "id": 53,
+   "id": 77,
    "image": "../assets/third_party/hospital/Pngs/maternity_table.png",
    "imagewidth": 13,
    "imageheight": 13,
@@ -809,7 +1246,7 @@
    ]
   },
   {
-   "id": 54,
+   "id": 78,
    "image": "../assets/third_party/hospital/Pngs/room_trash_bin.png",
    "imagewidth": 16,
    "imageheight": 16,
@@ -822,7 +1259,7 @@
    ]
   },
   {
-   "id": 55,
+   "id": 79,
    "image": "../assets/third_party/hospital/Pngs/operation_accessories_table_full.png",
    "imagewidth": 16,
    "imageheight": 16,
@@ -835,7 +1272,7 @@
    ]
   },
   {
-   "id": 56,
+   "id": 80,
    "image": "../assets/custom/tv.png",
    "imagewidth": 16,
    "imageheight": 12,
@@ -848,7 +1285,7 @@
    ]
   },
   {
-   "id": 57,
+   "id": 81,
    "image": "../assets/third_party/hospital/Pngs/operation_ultrasound_machine.png",
    "imagewidth": 32,
    "imageheight": 32,
@@ -866,7 +1303,7 @@
    ]
   },
   {
-   "id": 58,
+   "id": 82,
    "image": "../assets/custom/vending.png",
    "imagewidth": 16,
    "imageheight": 15,
@@ -879,7 +1316,25 @@
    ]
   },
   {
-   "id": 59,
+   "id": 83,
+   "image": "../assets/third_party/furniture/Furniture (35).png",
+   "imagewidth": 27,
+   "imageheight": 36,
+   "properties": [
+    {
+     "name": "kind",
+     "type": "string",
+     "value": "wardrobe"
+    },
+    {
+     "name": "w",
+     "type": "int",
+     "value": 2
+    }
+   ]
+  },
+  {
+   "id": 84,
    "image": "../assets/custom/water_cooler.png",
    "imagewidth": 16,
    "imageheight": 26,
@@ -892,7 +1347,25 @@
    ]
   },
   {
-   "id": 60,
+   "id": 85,
+   "image": "../assets/third_party/furniture/Furniture (241).png",
+   "imagewidth": 40,
+   "imageheight": 37,
+   "properties": [
+    {
+     "name": "kind",
+     "type": "string",
+     "value": "workbench"
+    },
+    {
+     "name": "w",
+     "type": "int",
+     "value": 2
+    }
+   ]
+  },
+  {
+   "id": 86,
    "image": "../assets/custom/xray_viewer.png",
    "imagewidth": 24,
    "imageheight": 16,
@@ -905,118 +1378,404 @@
    ]
   },
   {
-   "id": 61,
+   "id": 87,
    "image": "../assets/custom/floor_bar.png",
    "imagewidth": 16,
    "imageheight": 16
   },
   {
-   "id": 62,
+   "id": 88,
    "image": "../assets/custom/floor_control.png",
    "imagewidth": 16,
    "imageheight": 16
   },
   {
-   "id": 63,
+   "id": 89,
    "image": "../assets/custom/floor_corridor.png",
    "imagewidth": 16,
    "imageheight": 16
   },
   {
-   "id": 64,
+   "id": 90,
    "image": "../assets/custom/floor_disinfection.png",
    "imagewidth": 16,
    "imageheight": 16
   },
   {
-   "id": 65,
+   "id": 91,
    "image": "../assets/custom/floor_doctor.png",
    "imagewidth": 16,
    "imageheight": 16
   },
   {
-   "id": 66,
+   "id": 92,
    "image": "../assets/custom/floor_emergency.png",
    "imagewidth": 16,
    "imageheight": 16
   },
   {
-   "id": 67,
+   "id": 93,
    "image": "../assets/custom/floor_grass.png",
    "imagewidth": 16,
    "imageheight": 16
   },
   {
-   "id": 68,
+   "id": 94,
    "image": "../assets/custom/floor_reception.png",
    "imagewidth": 16,
    "imageheight": 16
   },
   {
-   "id": 69,
+   "id": 95,
    "image": "../assets/custom/floor_rest.png",
    "imagewidth": 16,
    "imageheight": 16
   },
   {
-   "id": 70,
+   "id": 96,
    "image": "../assets/custom/floor_storage.png",
    "imagewidth": 16,
    "imageheight": 16
   },
   {
-   "id": 71,
+   "id": 97,
    "image": "../assets/custom/floor_street.png",
    "imagewidth": 16,
    "imageheight": 16
   },
   {
-   "id": 72,
+   "id": 98,
    "image": "../assets/custom/floor_surgery.png",
    "imagewidth": 16,
    "imageheight": 16
   },
   {
-   "id": 73,
+   "id": 99,
    "image": "../assets/custom/floor_triage.png",
    "imagewidth": 16,
    "imageheight": 16
   },
   {
-   "id": 74,
+   "id": 100,
    "image": "../assets/custom/floor_waiting.png",
    "imagewidth": 16,
    "imageheight": 16
   },
   {
-   "id": 75,
+   "id": 101,
    "image": "../assets/custom/wall.png",
    "imagewidth": 16,
    "imageheight": 16
   },
   {
-   "id": 76,
+   "id": 102,
    "image": "../assets/custom/door.png",
    "imagewidth": 16,
    "imageheight": 16
   },
   {
-   "id": 77,
+   "id": 103,
    "image": "../assets/custom/stairs.png",
    "imagewidth": 16,
    "imageheight": 16
   },
   {
-   "id": 78,
+   "id": 104,
    "image": "../assets/custom/road_l.png",
    "imagewidth": 16,
    "imageheight": 16
   },
   {
-   "id": 79,
+   "id": 105,
    "image": "../assets/custom/road_r.png",
    "imagewidth": 16,
    "imageheight": 16
+  },
+  {
+   "id": 106,
+   "image": "../assets/custom/road_n_edge.png",
+   "imagewidth": 16,
+   "imageheight": 16
+  },
+  {
+   "id": 107,
+   "image": "../assets/custom/road_n_mid.png",
+   "imagewidth": 16,
+   "imageheight": 16
+  },
+  {
+   "id": 108,
+   "image": "../assets/custom/road_s_edge.png",
+   "imagewidth": 16,
+   "imageheight": 16
+  },
+  {
+   "id": 109,
+   "image": "../assets/custom/road_s_mid.png",
+   "imagewidth": 16,
+   "imageheight": 16
+  },
+  {
+   "id": 110,
+   "image": "../assets/custom/road_e_edge.png",
+   "imagewidth": 16,
+   "imageheight": 16
+  },
+  {
+   "id": 111,
+   "image": "../assets/custom/road_e_mid.png",
+   "imagewidth": 16,
+   "imageheight": 16
+  },
+  {
+   "id": 112,
+   "image": "../assets/custom/road_w_edge.png",
+   "imagewidth": 16,
+   "imageheight": 16
+  },
+  {
+   "id": 113,
+   "image": "../assets/custom/road_w_mid.png",
+   "imagewidth": 16,
+   "imageheight": 16
+  },
+  {
+   "id": 114,
+   "image": "../assets/custom/road_x.png",
+   "imagewidth": 16,
+   "imageheight": 16
+  },
+  {
+   "id": 115,
+   "image": "../assets/custom/lot_e.png",
+   "imagewidth": 16,
+   "imageheight": 16
+  },
+  {
+   "id": 116,
+   "image": "../assets/custom/lot_n.png",
+   "imagewidth": 16,
+   "imageheight": 16
+  },
+  {
+   "id": 117,
+   "image": "../assets/custom/lot_s.png",
+   "imagewidth": 16,
+   "imageheight": 16
+  },
+  {
+   "id": 118,
+   "image": "../assets/custom/lot_x.png",
+   "imagewidth": 16,
+   "imageheight": 16
+  },
+  {
+   "id": 119,
+   "image": "../assets/custom/lot_bay_l.png",
+   "imagewidth": 16,
+   "imageheight": 16
+  },
+  {
+   "id": 120,
+   "image": "../assets/custom/lot_bay.png",
+   "imagewidth": 16,
+   "imageheight": 16
+  },
+  {
+   "id": 121,
+   "image": "../assets/custom/lot_bay_r.png",
+   "imagewidth": 16,
+   "imageheight": 16
+  },
+  {
+   "id": 122,
+   "image": "../assets/third_party/citypack/pieces/pavement.png",
+   "imagewidth": 16,
+   "imageheight": 16
+  },
+  {
+   "id": 123,
+   "image": "../assets/custom/parking.png",
+   "imagewidth": 32,
+   "imageheight": 64,
+   "properties": [
+    {
+     "name": "kind",
+     "type": "string",
+     "value": "parking"
+    },
+    {
+     "name": "w",
+     "type": "int",
+     "value": 2
+    },
+    {
+     "name": "h",
+     "type": "int",
+     "value": 4
+    }
+   ]
+  },
+  {
+   "id": 124,
+   "image": "../assets/custom/dropoff.png",
+   "imagewidth": 32,
+   "imageheight": 64,
+   "properties": [
+    {
+     "name": "kind",
+     "type": "string",
+     "value": "dropoff"
+    },
+    {
+     "name": "w",
+     "type": "int",
+     "value": 2
+    },
+    {
+     "name": "h",
+     "type": "int",
+     "value": 4
+    }
+   ]
+  },
+  {
+   "id": 125,
+   "image": "../assets/third_party/citypack/pieces/building_5.png",
+   "imagewidth": 64,
+   "imageheight": 48
+  },
+  {
+   "id": 126,
+   "image": "../assets/third_party/citypack/pieces/building_6.png",
+   "imagewidth": 48,
+   "imageheight": 48
+  },
+  {
+   "id": 127,
+   "image": "../assets/third_party/citypack/pieces/building_1.png",
+   "imagewidth": 48,
+   "imageheight": 96
+  },
+  {
+   "id": 128,
+   "image": "../assets/third_party/citypack/pieces/building_8.png",
+   "imagewidth": 48,
+   "imageheight": 48
+  },
+  {
+   "id": 129,
+   "image": "../assets/third_party/citypack/pieces/building_0.png",
+   "imagewidth": 48,
+   "imageheight": 96
+  },
+  {
+   "id": 130,
+   "image": "../assets/third_party/citypack/pieces/building_3.png",
+   "imagewidth": 80,
+   "imageheight": 96
+  },
+  {
+   "id": 131,
+   "image": "../assets/third_party/citypack/pieces/building_9.png",
+   "imagewidth": 48,
+   "imageheight": 42
+  },
+  {
+   "id": 132,
+   "image": "../assets/third_party/citypack/pieces/building_2.png",
+   "imagewidth": 48,
+   "imageheight": 96
+  },
+  {
+   "id": 133,
+   "image": "../assets/third_party/citypack/pieces/building_7.png",
+   "imagewidth": 64,
+   "imageheight": 54
+  },
+  {
+   "id": 134,
+   "image": "../assets/third_party/citypack/pieces/building_11.png",
+   "imagewidth": 48,
+   "imageheight": 96
+  },
+  {
+   "id": 135,
+   "image": "../assets/third_party/citypack/pieces/building_4.png",
+   "imagewidth": 64,
+   "imageheight": 42
+  },
+  {
+   "id": 136,
+   "image": "../assets/third_party/citypack/pieces/building_10.png",
+   "imagewidth": 32,
+   "imageheight": 48
+  },
+  {
+   "id": 137,
+   "image": "../assets/third_party/citypack/pieces/lamp_1.png",
+   "imagewidth": 36,
+   "imageheight": 32
+  },
+  {
+   "id": 138,
+   "image": "../assets/third_party/citypack/pieces/lamp_0.png",
+   "imagewidth": 31,
+   "imageheight": 32
+  },
+  {
+   "id": 139,
+   "image": "../assets/third_party/citypack/pieces/lamp_2.png",
+   "imagewidth": 31,
+   "imageheight": 32
+  },
+  {
+   "id": 140,
+   "image": "../assets/third_party/citypack/pieces/traffic_light_0_0.png",
+   "imagewidth": 8,
+   "imageheight": 30
+  },
+  {
+   "id": 141,
+   "image": "../assets/third_party/citypack/pieces/traffic_light_3_0.png",
+   "imagewidth": 7,
+   "imageheight": 30
+  },
+  {
+   "id": 142,
+   "image": "../assets/third_party/citypack/pieces/traffic_light_4_0.png",
+   "imagewidth": 7,
+   "imageheight": 30
+  },
+  {
+   "id": 143,
+   "image": "../assets/third_party/citypack/pieces/tree_0.png",
+   "imagewidth": 16,
+   "imageheight": 30
+  },
+  {
+   "id": 144,
+   "image": "../assets/third_party/citypack/pieces/tree_1.png",
+   "imagewidth": 18,
+   "imageheight": 27
+  },
+  {
+   "id": 145,
+   "image": "../assets/third_party/citypack/pieces/billboard_0.png",
+   "imagewidth": 48,
+   "imageheight": 66
+  },
+  {
+   "id": 146,
+   "image": "../assets/third_party/citypack/pieces/billboard_1.png",
+   "imagewidth": 48,
+   "imageheight": 66
+  },
+  {
+   "id": 147,
+   "image": "../assets/third_party/citypack/pieces/billboard_2.png",
+   "imagewidth": 48,
+   "imageheight": 66
   }
  ]
 }

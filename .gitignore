@@ -3,3 +3,4 @@ __pycache__/
 hospital2d/assets/third_party/
 hospital2d/learning_old*.csv
 hospital2d/charts*.png
+hospital2d/graphify-out/

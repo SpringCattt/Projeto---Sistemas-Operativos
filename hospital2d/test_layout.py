@@ -78,6 +78,14 @@ for lay in [load_layout()]:
     assert lay.ambulance_spot and all(lay.walkable(*t) for t in lay.unload_column)
     route = lay.path(lay.unload_column[0], lay.emergency_beds[em][0][0], stairs=False)
     assert route and {lay.room_at[y][x].kind for x, y in route if lay.room_at[y][x]} <= {'street', 'emergency'}
+    # The city: cars come in and go out, and from every way in they reach every bay of the parking lot (each in
+    # front of a lane, its door tile walkable) and get back out to the city from it
+    assert lay.city_in and lay.city_out and lay.bays['parking'] and lay.bays['dropoff']
+    for bay in lay.bays['parking'] + lay.bays['dropoff']:
+        assert lay.walkable(*bay['door']), bay
+        assert all(lay.drive_path(start, [bay['lane']]) for start in lay.city_in), bay
+        assert lay.drive_path(bay['lane'], lay.city_out), bay
+    assert len(lay.wheelchair_spots) == 2
     # Decorations never leave a way through only one tile wide
     assert not [f for f in lay.furniture if f.kind in DECOR and f.solid and lay.squeezes(f)]
 # Old plans are freed (learn.py builds a new one every round)

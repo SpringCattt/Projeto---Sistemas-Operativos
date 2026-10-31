@@ -6,7 +6,7 @@
  "columns": 0,
  "margin": 0,
  "spacing": 0,
- "tilecount": 125,
+ "tilecount": 127,
  "tilewidth": 77,
  "tileheight": 64,
  "objectalignment": "bottomleft",
@@ -1286,6 +1286,19 @@
   },
   {
    "id": 81,
+   "image": "../assets/custom/tv_back.png",
+   "imagewidth": 16,
+   "imageheight": 16,
+   "properties": [
+    {
+     "name": "kind",
+     "type": "string",
+     "value": "tv_back"
+    }
+   ]
+  },
+  {
+   "id": 82,
    "image": "../assets/third_party/hospital/Pngs/operation_ultrasound_machine.png",
    "imagewidth": 32,
    "imageheight": 32,
@@ -1303,7 +1316,7 @@
    ]
   },
   {
-   "id": 82,
+   "id": 83,
    "image": "../assets/custom/vending.png",
    "imagewidth": 16,
    "imageheight": 15,
@@ -1316,7 +1329,7 @@
    ]
   },
   {
-   "id": 83,
+   "id": 84,
    "image": "../assets/third_party/furniture/Furniture (35).png",
    "imagewidth": 27,
    "imageheight": 36,
@@ -1334,7 +1347,7 @@
    ]
   },
   {
-   "id": 84,
+   "id": 85,
    "image": "../assets/custom/water_cooler.png",
    "imagewidth": 16,
    "imageheight": 26,
@@ -1347,7 +1360,7 @@
    ]
   },
   {
-   "id": 85,
+   "id": 86,
    "image": "../assets/third_party/furniture/Furniture (241).png",
    "imagewidth": 40,
    "imageheight": 37,
@@ -1365,7 +1378,7 @@
    ]
   },
   {
-   "id": 86,
+   "id": 87,
    "image": "../assets/custom/xray_viewer.png",
    "imagewidth": 24,
    "imageheight": 16,
@@ -1378,223 +1391,229 @@
    ]
   },
   {
-   "id": 87,
+   "id": 88,
    "image": "../assets/custom/floor_bar.png",
    "imagewidth": 16,
    "imageheight": 16
   },
   {
-   "id": 88,
+   "id": 89,
    "image": "../assets/custom/floor_control.png",
    "imagewidth": 16,
    "imageheight": 16
   },
   {
-   "id": 89,
+   "id": 90,
    "image": "../assets/custom/floor_corridor.png",
    "imagewidth": 16,
    "imageheight": 16
   },
   {
-   "id": 90,
+   "id": 91,
    "image": "../assets/custom/floor_disinfection.png",
    "imagewidth": 16,
    "imageheight": 16
   },
   {
-   "id": 91,
+   "id": 92,
    "image": "../assets/custom/floor_doctor.png",
    "imagewidth": 16,
    "imageheight": 16
   },
   {
-   "id": 92,
+   "id": 93,
    "image": "../assets/custom/floor_emergency.png",
    "imagewidth": 16,
    "imageheight": 16
   },
   {
-   "id": 93,
+   "id": 94,
    "image": "../assets/custom/floor_grass.png",
    "imagewidth": 16,
    "imageheight": 16
   },
   {
-   "id": 94,
+   "id": 95,
    "image": "../assets/custom/floor_reception.png",
    "imagewidth": 16,
    "imageheight": 16
   },
   {
-   "id": 95,
+   "id": 96,
    "image": "../assets/custom/floor_rest.png",
    "imagewidth": 16,
    "imageheight": 16
   },
   {
-   "id": 96,
+   "id": 97,
    "image": "../assets/custom/floor_storage.png",
    "imagewidth": 16,
    "imageheight": 16
   },
   {
-   "id": 97,
+   "id": 98,
    "image": "../assets/custom/floor_street.png",
    "imagewidth": 16,
    "imageheight": 16
   },
   {
-   "id": 98,
+   "id": 99,
    "image": "../assets/custom/floor_surgery.png",
    "imagewidth": 16,
    "imageheight": 16
   },
   {
-   "id": 99,
+   "id": 100,
    "image": "../assets/custom/floor_triage.png",
    "imagewidth": 16,
    "imageheight": 16
   },
   {
-   "id": 100,
+   "id": 101,
    "image": "../assets/custom/floor_waiting.png",
    "imagewidth": 16,
    "imageheight": 16
   },
   {
-   "id": 101,
+   "id": 102,
    "image": "../assets/custom/wall.png",
    "imagewidth": 16,
    "imageheight": 16
   },
   {
-   "id": 102,
+   "id": 103,
    "image": "../assets/custom/door.png",
    "imagewidth": 16,
    "imageheight": 16
   },
   {
-   "id": 103,
+   "id": 104,
    "image": "../assets/custom/stairs.png",
    "imagewidth": 16,
    "imageheight": 16
   },
   {
-   "id": 104,
+   "id": 105,
    "image": "../assets/custom/road_l.png",
    "imagewidth": 16,
    "imageheight": 16
   },
   {
-   "id": 105,
+   "id": 106,
    "image": "../assets/custom/road_r.png",
    "imagewidth": 16,
    "imageheight": 16
   },
   {
-   "id": 106,
+   "id": 107,
    "image": "../assets/custom/road_n_edge.png",
    "imagewidth": 16,
    "imageheight": 16
   },
   {
-   "id": 107,
+   "id": 108,
    "image": "../assets/custom/road_n_mid.png",
    "imagewidth": 16,
    "imageheight": 16
   },
   {
-   "id": 108,
+   "id": 109,
    "image": "../assets/custom/road_s_edge.png",
    "imagewidth": 16,
    "imageheight": 16
   },
   {
-   "id": 109,
+   "id": 110,
    "image": "../assets/custom/road_s_mid.png",
    "imagewidth": 16,
    "imageheight": 16
   },
   {
-   "id": 110,
+   "id": 111,
    "image": "../assets/custom/road_e_edge.png",
    "imagewidth": 16,
    "imageheight": 16
   },
   {
-   "id": 111,
+   "id": 112,
    "image": "../assets/custom/road_e_mid.png",
    "imagewidth": 16,
    "imageheight": 16
   },
   {
-   "id": 112,
+   "id": 113,
    "image": "../assets/custom/road_w_edge.png",
    "imagewidth": 16,
    "imageheight": 16
   },
   {
-   "id": 113,
+   "id": 114,
    "image": "../assets/custom/road_w_mid.png",
    "imagewidth": 16,
    "imageheight": 16
   },
   {
-   "id": 114,
+   "id": 115,
    "image": "../assets/custom/road_x.png",
    "imagewidth": 16,
    "imageheight": 16
   },
   {
-   "id": 115,
+   "id": 116,
    "image": "../assets/custom/lot_e.png",
    "imagewidth": 16,
    "imageheight": 16
   },
   {
-   "id": 116,
+   "id": 117,
    "image": "../assets/custom/lot_n.png",
    "imagewidth": 16,
    "imageheight": 16
   },
   {
-   "id": 117,
+   "id": 118,
    "image": "../assets/custom/lot_s.png",
    "imagewidth": 16,
    "imageheight": 16
   },
   {
-   "id": 118,
+   "id": 119,
    "image": "../assets/custom/lot_x.png",
    "imagewidth": 16,
    "imageheight": 16
   },
   {
-   "id": 119,
-   "image": "../assets/custom/lot_bay_l.png",
-   "imagewidth": 16,
-   "imageheight": 16
-  },
-  {
    "id": 120,
-   "image": "../assets/custom/lot_bay.png",
+   "image": "../assets/custom/lot_cross.png",
    "imagewidth": 16,
    "imageheight": 16
   },
   {
    "id": 121,
-   "image": "../assets/custom/lot_bay_r.png",
+   "image": "../assets/custom/lot_bay_l.png",
    "imagewidth": 16,
    "imageheight": 16
   },
   {
    "id": 122,
-   "image": "../assets/third_party/citypack/pieces/pavement.png",
+   "image": "../assets/custom/lot_bay.png",
    "imagewidth": 16,
    "imageheight": 16
   },
   {
    "id": 123,
+   "image": "../assets/custom/lot_bay_r.png",
+   "imagewidth": 16,
+   "imageheight": 16
+  },
+  {
+   "id": 124,
+   "image": "../assets/third_party/citypack/pieces/pavement.png",
+   "imagewidth": 16,
+   "imageheight": 16
+  },
+  {
+   "id": 125,
    "image": "../assets/custom/parking.png",
    "imagewidth": 32,
    "imageheight": 64,
@@ -1617,7 +1636,7 @@
    ]
   },
   {
-   "id": 124,
+   "id": 126,
    "image": "../assets/custom/dropoff.png",
    "imagewidth": 32,
    "imageheight": 64,
@@ -1640,139 +1659,139 @@
    ]
   },
   {
-   "id": 125,
+   "id": 127,
    "image": "../assets/third_party/citypack/pieces/building_5.png",
    "imagewidth": 64,
    "imageheight": 48
   },
   {
-   "id": 126,
+   "id": 128,
    "image": "../assets/third_party/citypack/pieces/building_6.png",
    "imagewidth": 48,
    "imageheight": 48
   },
   {
-   "id": 127,
+   "id": 129,
    "image": "../assets/third_party/citypack/pieces/building_1.png",
    "imagewidth": 48,
    "imageheight": 96
   },
   {
-   "id": 128,
+   "id": 130,
    "image": "../assets/third_party/citypack/pieces/building_8.png",
    "imagewidth": 48,
    "imageheight": 48
   },
   {
-   "id": 129,
+   "id": 131,
    "image": "../assets/third_party/citypack/pieces/building_0.png",
    "imagewidth": 48,
    "imageheight": 96
   },
   {
-   "id": 130,
+   "id": 132,
    "image": "../assets/third_party/citypack/pieces/building_3.png",
    "imagewidth": 80,
    "imageheight": 96
   },
   {
-   "id": 131,
+   "id": 133,
    "image": "../assets/third_party/citypack/pieces/building_9.png",
    "imagewidth": 48,
    "imageheight": 42
   },
   {
-   "id": 132,
+   "id": 134,
    "image": "../assets/third_party/citypack/pieces/building_2.png",
    "imagewidth": 48,
    "imageheight": 96
   },
   {
-   "id": 133,
+   "id": 135,
    "image": "../assets/third_party/citypack/pieces/building_7.png",
    "imagewidth": 64,
    "imageheight": 54
   },
   {
-   "id": 134,
+   "id": 136,
    "image": "../assets/third_party/citypack/pieces/building_11.png",
    "imagewidth": 48,
    "imageheight": 96
   },
   {
-   "id": 135,
+   "id": 137,
    "image": "../assets/third_party/citypack/pieces/building_4.png",
    "imagewidth": 64,
    "imageheight": 42
   },
   {
-   "id": 136,
+   "id": 138,
    "image": "../assets/third_party/citypack/pieces/building_10.png",
    "imagewidth": 32,
    "imageheight": 48
   },
   {
-   "id": 137,
+   "id": 139,
    "image": "../assets/third_party/citypack/pieces/lamp_1.png",
    "imagewidth": 36,
    "imageheight": 32
   },
   {
-   "id": 138,
+   "id": 140,
    "image": "../assets/third_party/citypack/pieces/lamp_0.png",
    "imagewidth": 31,
    "imageheight": 32
   },
   {
-   "id": 139,
+   "id": 141,
    "image": "../assets/third_party/citypack/pieces/lamp_2.png",
    "imagewidth": 31,
    "imageheight": 32
   },
   {
-   "id": 140,
+   "id": 142,
    "image": "../assets/third_party/citypack/pieces/traffic_light_0_0.png",
    "imagewidth": 8,
    "imageheight": 30
   },
   {
-   "id": 141,
+   "id": 143,
    "image": "../assets/third_party/citypack/pieces/traffic_light_3_0.png",
    "imagewidth": 7,
    "imageheight": 30
   },
   {
-   "id": 142,
+   "id": 144,
    "image": "../assets/third_party/citypack/pieces/traffic_light_4_0.png",
    "imagewidth": 7,
    "imageheight": 30
   },
   {
-   "id": 143,
+   "id": 145,
    "image": "../assets/third_party/citypack/pieces/tree_0.png",
    "imagewidth": 16,
    "imageheight": 30
   },
   {
-   "id": 144,
+   "id": 146,
    "image": "../assets/third_party/citypack/pieces/tree_1.png",
    "imagewidth": 18,
    "imageheight": 27
   },
   {
-   "id": 145,
+   "id": 147,
    "image": "../assets/third_party/citypack/pieces/billboard_0.png",
    "imagewidth": 48,
    "imageheight": 66
   },
   {
-   "id": 146,
+   "id": 148,
    "image": "../assets/third_party/citypack/pieces/billboard_1.png",
    "imagewidth": 48,
    "imageheight": 66
   },
   {
-   "id": 147,
+   "id": 149,
    "image": "../assets/third_party/citypack/pieces/billboard_2.png",
    "imagewidth": 48,
    "imageheight": 66

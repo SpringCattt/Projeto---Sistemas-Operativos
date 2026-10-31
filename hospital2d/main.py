@@ -20,7 +20,7 @@ from arrivals import run_arrivals
 from art import ASSETS, BUBBLE_TAIL_X, CHAR_H, CHAR_W, car_images, character, door_floor, draw_layout, furniture_sprites, glows, \
     icon_bubble, image, LIFT, lying, text_bubble
 from eventlog import run_log
-from layout import EMPTY, FLOOR, FLOOR_GAP, load_layout
+from layout import EMPTY, FLOOR, FLOOR_GAP, WALL, load_layout
 from sim import new_positions, read_positions, run_simulation
 
 T = config.TILE
@@ -499,14 +499,15 @@ def run_ui(snapshots, commands, positions, sim=None):
         if not snap['paused']:  # the little work animations freeze too
             beat = time.perf_counter()
         night = not NIGHT[1] <= snap['hour'] % 24 < NIGHT[0]
-        depth = lambda a: (a.py + (1.5 if a.role == 'ambulance' else 1.4 if a.role == 'car' else 1.7 if a.lying else
-                                   FEET)) * T
+        depth = lambda a: (a.py + (1.5 if a.role == 'ambulance' else 1.4 if a.role == 'car' else 1.0 if a.stretcher
+                                   else 1.7 if a.lying else FEET)) * T  # (on a stretcher: under whoever pushes it
+        # from in front, over whoever is behind)
         bodies = sorted(((depth(a), None, a) for a in here), key=lambda s: s[0])
         extras = [centred(cart_img(kind, facing), x, y, (y + 0.5) * T)  # parked in storage: stretchers, wheelchairs
                   for x, y, facing, kind in snap.get('parked', []) if shown(x)]  # (keyboards, buckets too, below)
         for a in here:
             if a.stretcher:
-                extras.append(centred(stretcher[a.facing in ("left", "right")], a.px, a.py, (a.py + 1.7) * T - 1))
+                extras.append(centred(stretcher[a.facing in ("left", "right")], a.px, a.py, (a.py + 1.0) * T - 1))
             if a.cart:
                 x, y, facing = a.cart  # the empty stretcher (or wheelchair) it's moving
                 extras.append(centred(cart_img(a.pushing, facing), x, y, (y + 0.5) * T))
@@ -603,7 +604,7 @@ def run_ui(snapshots, commands, positions, sim=None):
                 if a.action == 'typing':  # bobs with the keystrokes
                     y -= zoom * (int(beat * 8) % 2)
                 if seated:  # a little lower: on the seat (a backrest, desk or counter in front covers the legs)
-                    y += SIT_DROP * zoom
+                    y += SIT_DROP * zoom if lay.tiles[a.ty + 1][a.tx] != WALL else 0  # (not over a wall below)
                     blit_scaled(frame(a), x, y)
                 else:
                     blit_scaled(shadow, *to_screen(a.px - shadow.get_width() / 2 / T, a.py + FEET - 3 / T))

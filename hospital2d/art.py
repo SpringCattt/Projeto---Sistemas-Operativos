@@ -34,6 +34,7 @@ FURNITURE = {
     'painting': C + 'painting_0', 'painting_2': C + 'painting_1', 'notice_board': C + 'notice_board',
     'xray_viewer': C + 'xray_viewer', 'big_plant': C + 'big_plant_0', 'big_plant_2': C + 'big_plant_1',
     'coat_rack': C + 'coat_rack', 'first_aid': C + 'first_aid', 'boss_desk': C + 'boss_desk_0',
+    'tv_back': C + 'tv_back',
 }
 # The furniture pack (assets/third_party/furniture, see README): kind -> its number there
 PACK = {'sofa_beige': 173, 'sofa_corner': 208, 'sofa_grey': 422, 'chaise': 1000, 'bookcase': 475,

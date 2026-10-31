@@ -271,6 +271,8 @@ class Doctor(TaskStaff):
 
     def handle(self, task):
         if task.kind == 'consult':
+            # a doctor with a patient always runs (to its desk, to disinfection, to the theatre): never a stroll
+            self.speed = config.RUN_SPEED[max(1, task.urgency)]
             self.consult(task)
 
     def consult(self, task):

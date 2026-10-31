@@ -286,9 +286,11 @@ class Dispatcher:
 
 def start_policy():
     """The Boss's policy before it learns anything: [w_waited, w_impatience] (who goes first within a colour),
-    then when to call in staff on call (CALL_IN_AT tasks more than free staff) and send them home (after
-    SEND_HOME_AFTER_S with nothing waiting)."""
-    return [*config.PRIORITY_START, config.CALL_IN_AT, config.SEND_HOME_AFTER_S]
+    then staff on call: when to call them in (CALL_IN_AT tasks more than free staff), when to send them home (after
+    SEND_HOME_AFTER_S with nothing waiting), how many it may call (MAX_ON_CALL of ON_CALL) and from what hour it
+    hurries to be done by midnight (RUSH_FROM_HOUR)."""
+    return [*config.PRIORITY_START, config.CALL_IN_AT, config.SEND_HOME_AFTER_S, config.MAX_ON_CALL,
+            config.RUSH_FROM_HOUR]
 
 
 class Elevator:

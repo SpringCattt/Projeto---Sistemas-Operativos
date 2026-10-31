@@ -37,11 +37,12 @@ semaphores.
 on · `B` see what the Boss is doing · `L` event log · `ESC` close · `Tab` **admin tablet** (pause, speed, send
 patients, trigger events, hire/send home staff) · `Space` pause · `+`/`-` speed · `Enter` start the next day.
 
-**Days and money.** It starts on day 0; a day is 24 hours, one every 30 seconds (12 minutes at x1). At midnight the
-doors close, the patients still inside are seen to, and when the last one is gone the day ends: the game pauses on
-the day's report (what the patients paid, the wages, the profit and the staff bonus) until you start the next day.
-Patients pay by urgency, less the longer they waited for a doctor, nothing if they gave up; staff are paid by the
-hour; 30 % of the profit is the staff bonus, shared out by what each one brought in. All the numbers are in
+**Days and money.** It starts on day 0; a day is 24 hours, one every 30 seconds (12 minutes at x1). At 23:00 the
+doors close; everyone inside should be seen to by midnight, and every minute past it is overtime (wages x1.5). When
+the last patient is gone the day ends: the game pauses on the day's report (what the patients paid, the wages and
+how much of it was overtime, the profit and the staff bonus) until you start the next day. Patients pay by
+urgency, less the longer they waited for a doctor, nothing if they gave up; staff are paid by the hour; 30 % of the
+profit is the staff bonus, shared out by what each one brought in, so a bigger profit is a bigger bonus. All the numbers are in
 [`config.py`](hospital2d/config.py) (`PRICE`, `WAGE`, `BONUS_SHARE`...).
 
 To make it calmer or bigger, change [`hospital2d/config.py`](hospital2d/config.py): `TIME_SCALE` (0.5 = half
@@ -71,7 +72,7 @@ change now and then: they go through a queue, which copies them and does its own
 68 people, moving data to the UI went from 5.3 % of a CPU core (everything through the queue, 60 times a second)
 to 2.1 %.
 
-At midnight the simulation clears a shared **Event**, "doors open", and the arrivals process sleeps on it until the
+At closing time the simulation clears a shared **Event**, "doors open", and the arrivals process sleeps on it until the
 next day (it used to keep sending patients nobody let in). If the simulation process dies, the window says so
 instead of showing a world frozen for no reason.
 
@@ -98,8 +99,8 @@ They share the building, so they synchronise:
 | Two people blocking each other in a doorway | whoever has waited too long steps aside (no deadlock) |
 
 **Things happen:** surges of patients, patients getting worse while they wait, people running out of patience
-(they leave, complain at reception or start a fight — security comes), vomit (cleaners come), doctors dropping a
-Green patient for a Red one, tired staff going to rest. Everyone talks in speech bubbles.
+(they leave, complain at reception or start a fight — security comes), vomit (cleaners come), tired staff going
+to rest. Everyone talks in speech bubbles.
 
 **Limit:** about 900 people (threads) on a Ryzen 5 3600 before the simulation can't keep up (Python's GIL).
 

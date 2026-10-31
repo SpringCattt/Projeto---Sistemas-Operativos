@@ -182,7 +182,8 @@ weights: minutes waited and impatience (how close the patient is to giving up). 
 
 **Days, money and the bonus.** The simulation runs in days of `DAY_HOURS` hours of `HOUR_S` simulated seconds
 (24 × 30 s), from day 0, kept by its own thread (`Hospital.run_day`): it pays the wages by the hour, closes the
-doors at midnight, and when the last patient is gone it writes the day's report and pauses the world until the
+doors at `CLOSE_HOUR` (23:00), pays `OVERTIME_PAY` (x1.5) for every minute past midnight with patients still
+inside, and when the last patient is gone it writes the day's report and pauses the world until the
 next day is started (`next_day`; in the game, the report's button or Enter; pause can't skip it). A treated
 patient pays `PRICE` by urgency (+ `SURGERY_PRICE`), all of it if it saw a doctor within `ON_TIME_S`, less the later
 (down to `LATE_PAYS` of it); nothing if it gave up. Each payment is credited to whoever did each step for that
@@ -192,8 +193,12 @@ of the day's profit, shared out by those credits. The staff don't decide anythin
 them, so making the bonus big is the Boss's job.
 
 **What the Boss learns.** `learn.py` plays whole days and keeps what makes more profit (the bonus is a share of it).
-Its policy has four numbers: the two weights above, and when to call in staff on call (`CALL_IN_AT`: how many
-tasks more than free staff) and when to send them home (`SEND_HOME_AFTER_S` with nothing waiting). It's an
+Its policy has six numbers: the two weights above, and four for the staff on call: when to call them in
+(`CALL_IN_AT`: how many tasks more than free staff), when to send them home (`SEND_HOME_AFTER_S` with nothing
+waiting), how many it may bring in (`MAX_ON_CALL`: a share of `ON_CALL`) and from what hour it hurries to be done
+by midnight (`RUSH_FROM_HOUR`: from then it calls them in at half `CALL_IN_AT`). That's the trade-off it learns:
+more staff cost wages (x1.5 called in), too few leave patients waiting (they pay less, or give up) and the day
+running into overtime. It's an
 **evolution strategy**: every hospital plays the same day (same seed) with the policy nudged a bit (half one way,
 half the opposite), each one's score is that day's profit, and the policy moves towards the nudges that made more.
 Some hospitals play other days with the learned policy and with the one it started from: that difference
@@ -221,7 +226,8 @@ straight instead of zig-zagging.
 
 * A busy actor is only **interrupted** when the new task is at least `PREEMPT_GAP` (2) urgency levels above what
   it's doing — a Red patient takes a doctor away from a Green one, never from a Yellow one, so doctors don't keep
-  jumping between similar tasks. The interrupted patient goes back to the waiting room, keeping its place.
+  jumping between similar tasks. And a doctor is only taken away before calling its patient: once called, it sees
+  that patient through, so nobody walking to a consultation is ever sent back to the waiting room.
 * **Surgery** is never interrupted. The doctor takes a free operating room (semaphore), washes in its disinfection
   room (semaphore) and only then goes in, from the disinfection room — never straight from the corridor.
 * **Ambulances:** every Red patient arrives by ambulance (and needs surgery), already triaged: they never walk. An

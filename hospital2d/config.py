@@ -73,12 +73,16 @@ ON_CALL = {'Doctor': 3, 'WardNurse': 2, 'Security': 1, 'Cleaner': 1}
 CALL_IN_AT = 3
 CALL_EVERY_S = 30
 SEND_HOME_AFTER_S = 90
+MAX_ON_CALL = 1.0  # how much of ON_CALL the Boss may call in at most (learned: 0 = nobody, 2 = twice as many)
+RUSH_FROM_HOUR = 22  # from this hour it calls staff in sooner (at half CALL_IN_AT), to be done by midnight (learned)
 
 # A day: DAY_HOURS hours of HOUR_S simulated seconds (24 x 30 s: 12 minutes at x1), from day 0. At midnight the
 # doors close: whoever is inside is seen to (or gives up), and once the last patient is gone the day is over. In the
 # game it then waits, paused, on the day's report until you start the next day.
 HOUR_S = 30
 DAY_HOURS = 24
+CLOSE_HOUR = 23  # no new patients from this hour: everyone inside should be seen to by DAY_HOURS (midnight)
+OVERTIME_PAY = 1.5  # past midnight, with patients still inside, every wage costs this many times more
 
 # Money (game numbers). A treated patient pays PRICE for its urgency at triage (+ SURGERY_PRICE if operated on):
 # all of it if it saw a doctor within ON_TIME_S, less the longer it waited (LATE_PAYS of it at 3 x ON_TIME_S or

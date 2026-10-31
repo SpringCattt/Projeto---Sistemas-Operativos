@@ -187,20 +187,20 @@ def test_flow_and_rules():
 
 
 def test_preemption():
-    """A doctor in a long Green consultation drops it for a Red patient; the Green one goes back to waiting."""
-    with settings(CONSULT_S=[(400, 400), (400, 400), (8, 8)]):
+    """A doctor who has called a patient sees it through: a Red one arriving meanwhile waits for a free doctor, and
+    the called one is never sent back to the waiting room (before calling, the Boss may still give the doctor the
+    more urgent task)."""
+    with settings(CONSULT_S=[(25, 25), (25, 25), (8, 8)]):
         h = Hospital(seed=4, n_doctors=1, n_surgeries=0, n_patients=0)
         green = h.add_waiting(info(0))
         h.start()
         try:
-            assert until(lambda: green.stage.startswith('going to') or 'sees' in str(list(h.events)), 30)
             assert until(lambda: any('sees' in t for _, t in h.events), 30), 'the Green consultation never started'
+            stages = []
             red = h.add_waiting(info(2))
-            assert until(lambda: h.stats['interruptions'] >= 1, 20), 'the doctor was not interrupted'
-            assert until(lambda: h.waits.get(2), 30), 'the Red patient was not seen'
-            assert until(lambda: green.stage in ('going to the waiting room', 'waiting for a doctor')
-                         or green.stage.startswith('going to'), 10)
-            assert not red.gone or h.stats['treated'] >= 1
+            assert until(lambda: stages.append(green.stage) or h.stats['treated'] >= 1, 30), 'Green never seen through'
+            assert h.stats['interruptions'] == 0 and 'going to the waiting room' not in stages, stages
+            assert until(lambda: h.waits.get(2), 60), 'the Red patient was not seen after'
         finally:
             stop(h)
 
@@ -391,7 +391,7 @@ def test_money():
 def test_day():
     """At midnight the doors close; once the last patient is gone the day is over and the world waits, paused,
     until the next day is started (pause can't skip it). Wages are paid by the hour."""
-    with settings(HOUR_S=1, DAY_HOURS=4):
+    with settings(HOUR_S=1, DAY_HOURS=4, CLOSE_HOUR=3):
         h = Hospital(seed=14, n_doctors=1, n_surgeries=0, n_patients=0)
         h.start()
         try:
@@ -400,7 +400,7 @@ def test_day():
             assert h.admit(new_patient(h.rng)) is None  # closed: nobody else comes in
             assert until(lambda: h.day_over is not None, 60), 'the day never ended'
             report = h.day_over
-            assert h.speed == 0 and report['wages'] > 0 and report['day'] == 0
+            assert h.speed == 0 and report['wages'] > 0 and report['day'] == 0 and report['overtime'] >= 0
             assert abs(report['profit'] - (report['income'] - report['wages'])) < 1e-6
             h.command(('pause',))
             assert h.speed == 0  # only starting the next day goes on

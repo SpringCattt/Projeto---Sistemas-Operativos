@@ -130,11 +130,16 @@ class Hospital:
             with self.actors_lock:
                 staff = [a for a in self.actors if a.role != 'patient']
             hourly = sum(config.WAGE.get(a.role, 0) * (config.ON_CALL_PAY if a.on_call else 1) for a in staff)
-            self.count('wages', hourly * (now - last) / config.HOUR_S)
+            hour = (now - self.day_start) / config.HOUR_S
+            overtime = hour >= config.DAY_HOURS  # past midnight: everyone still here is on overtime
+            paid = hourly * (now - last) / config.HOUR_S * (config.OVERTIME_PAY if overtime else 1)
+            self.count('wages', paid)
+            if overtime:
+                self.count('overtime', paid)
             last = now
-            if not self.closed and now - self.day_start >= config.DAY_HOURS * config.HOUR_S:
+            if not self.closed and hour >= config.CLOSE_HOUR:
                 self.closed = True
-                self.log(f'Midnight: no more patients today. The ones inside are seen to')
+                self.log(f'{config.CLOSE_HOUR}:00: no more patients today. The ones inside are seen to by midnight')
             if self.closed and self.day_over is None and not self.patients() \
                     and not any(a.role == 'ambulance' for a in self.actors):  # (still bringing someone)
                 self.end_day()
@@ -155,7 +160,9 @@ class Hospital:
         pool = config.BONUS_SHARE * max(0.0, profit)
         total = sum(credit.values())
         bonus = sorted(((pool * c / total, who) for who, c in credit.items()), reverse=True) if total else []
+        late = max(0.0, (self.clock() - self.day_start) / config.HOUR_S - config.DAY_HOURS) * 60  # game minutes
         self.day_over = {'day': self.day, 'income': today['income'], 'wages': today['wages'], 'profit': profit,
+                         'overtime': today['overtime'], 'overtime_min': late,
                          'bonus': pool, 'treated': today['treated'], 'gave_up': today['gave_up'],
                          'expelled': today['expelled'], 'surgeries': today['surgeries'],
                          'called_in': today['called_in'], 'staff_bonus': bonus}
@@ -394,7 +401,10 @@ class Hospital:
             job = JOBS[name]
             called = [a for a in self.working(job) if a.on_call]
             places = self.places(job)
-            call_in_at, send_home_after = d.policy[2:4]  # (learned: learn.py)
+            call_in_at, send_home_after, max_on_call, rush_from = d.policy[2:6]  # (learned: learn.py)
+            if (now - self.day_start) / config.HOUR_S >= rush_from:  # racing the clock to be done by midnight
+                call_in_at /= 2
+            most = round(most * max_on_call)
             if waiting[job.role] >= free[job.role] + call_in_at:
                 self.quiet_since[name] = None
                 room = places is None or len(self.working(job)) < len(places)

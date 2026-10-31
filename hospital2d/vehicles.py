@@ -30,6 +30,7 @@ class Car(Actor):
                 del self.world.occupied[(self.tx, self.ty)]
         dx, dy = STEP[self.lay.drive[start]]
         self.block, self.held = start, []
+        self.entering = None  # the crossing it's about to go into (the cars on its left give way to it)
         self.px, self.py = start[0] + 1 - 1.5 * dx, start[1] + 1 - 1.5 * dy  # just off the map, coming in
         self.facing = FACE[self.lay.drive[start]]
         self.info, self.bay, self.pickup = info, bay, pickup
@@ -98,12 +99,31 @@ class Car(Actor):
             while self.lay.drive[blocks[i + n - 1]] == 'x' and i + n < len(blocks):
                 n += 1
             run, before = blocks[i:i + n], self.block
+            if self.lay.drive[run[0]] == 'x':  # a crossing: priority to the right (Portugal), then in
+                self.entering, end = run[0], self.h.clock() + config.YIELD_MAX_S
+                if self.car_on_right(run[0]):
+                    was, self.doing = self.doing, 'giving way to the car on its right'
+                    self.wait_until(lambda: not self.car_on_right(run[0]) or self.h.clock() > end)
+                    self.doing = was
             self.take([t for b in run for t in BLOCK(b)], keep=self.held)
             for b in run:
                 self.glide((b[0] + 1, b[1] + 1))
                 self.block, self.tx, self.ty = b, b[0], b[1]
             self.release(keep=BLOCK(run[-1]) + BLOCK(run[-2] if n > 1 else before))
+            self.entering = None
             i += n
+
+    def car_on_right(self, crossing):
+        """Another car about to go into the same crossing, coming from this one's right (it goes first)."""
+        way = self.lay.drive[self.block]
+        if way == 'x':
+            return False
+        dx, dy = STEP[way]
+        right = (dy, -dx)  # (y grows downwards: going east, the one on its right comes up from the south)
+        with self.h.actors_lock:
+            cars = [a for a in self.h.actors if a is not self and getattr(a, 'entering', None) is not None]
+        return any(self.lay.drive[c.block] != 'x' and STEP[self.lay.drive[c.block]] == right
+                   and abs(c.entering[0] - crossing[0]) + abs(c.entering[1] - crossing[1]) <= 4 for c in cars)
 
     def take(self, tiles, keep=()):
         """Takes up `tiles` (as well as `keep`) once nobody else is on them: cars wait their turn, and wait for

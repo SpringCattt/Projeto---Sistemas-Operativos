@@ -271,7 +271,8 @@ straight instead of zig-zagging.
   The bays are a shared resource (`Hospital.claim_bay` / `free_bay`, a list under a lock): with none free, a taxi
   brings the patient to a drop-off bay and leaves (that patient goes home on foot). A car takes up the block of road
   it's on and the one it just left (`world.occupied`, like people's tiles: a car is longer than a block), so cars
-  queue a block apart and never touch. A crossing it takes whole, all the way across and the block after it, at once
+  queue a block apart and never touch. At a crossing it gives way to a car coming from its right, as in Portugal (at most
+  `YIELD_MAX_S`: four at once would otherwise wait for ever). A crossing it takes whole, all the way across and the block after it, at once
   or not at all — never holding part of it while waiting for the rest (no hold-and-wait: two cars crossing each
   other's way can't deadlock). It never drives onto someone on a zebra crossing, nor asks them to move: people go
   first, and it waits for them to pass; people plan their routes round cars. It claims its bay a block before reaching it, so nobody is

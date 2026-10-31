@@ -85,7 +85,7 @@ for lay in [load_layout()]:
         assert lay.walkable(*bay['door']), bay
         assert all(lay.drive_path(start, [bay['lane']]) for start in lay.city_in), bay
         assert lay.drive_path(bay['lane'], lay.city_out), bay
-    assert len(lay.wheelchair_spots) == 2
+    assert len(lay.wheelchair_spots) == config.WHEELCHAIRS
     # Decorations never leave a way through only one tile wide
     assert not [f for f in lay.furniture if f.kind in DECOR and f.solid and lay.squeezes(f)]
 # Old plans are freed (learn.py builds a new one every round)

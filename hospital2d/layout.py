@@ -295,8 +295,9 @@ class Layout:
         self.stretcher_lane = {(x + dx, y + dy) for x, y in stretchers for dx in (-1, 0, 1) for dy in (-1, 0, 1)}
         self.stretcher_spots = [t for r in self.rooms_of('storage') for t in self.free_tiles(r)
                                 if t not in self.stretcher_lane]
-        # The wheelchairs (cured Red patients leave in one) are kept in the last two of those
-        self.wheelchair_spots, self.stretcher_spots = self.stretcher_spots[-2:], self.stretcher_spots[:-2]
+        # The wheelchairs (cured Red patients leave in one) are kept in the last of those
+        n = config.WHEELCHAIRS
+        self.wheelchair_spots, self.stretcher_spots = self.stretcher_spots[-n:], self.stretcher_spots[:-n]
         # Elevators: the same box at the same place on each floor it serves. It opens downwards, onto a column of
         # three tiles where a stretcher train (nurse, stretcher, nurse) waits to get in and comes out
         shafts = {}

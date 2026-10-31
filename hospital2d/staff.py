@@ -290,6 +290,8 @@ class Doctor(TaskStaff):
         else:
             s = Summons(self, self.chair, 'consult', allow={'corridor', 'doctor'}, stage=f'going to {self.room.name}')
         self.talk('doctor_call', name=p.first_name())
+        if not s.stretcher and p.waiting_room is not None and p.waiting_room.kind == 'waiting':
+            s.ready_at = self.h.announce(p, self.room)  # its name on the screen and the loudspeaker first
         # From the moment it's called, this doctor sees this patient through: nobody is sent back to the waiting
         # room half-way because the Boss found the doctor something more urgent (before the call, it still can)
         self.h.dispatcher.set_preemptable(task, False)
@@ -402,6 +404,7 @@ class Security(TaskStaff):
                 if task.result == 'expelled':
                     self.talk('security_out')
                 task.done.set()
+                self.h.count('fights_stopped')
                 self.h.credit_for(self, 'fight')
                 self.tire(config.FATIGUE_PER_TASK['fight'])
                 return

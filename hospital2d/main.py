@@ -26,6 +26,7 @@ from sim import new_positions, read_positions, run_simulation
 T = config.TILE
 ZOOM_MIN, ZOOM_MAX = 1, 6  # integer zoom keeps the pixel art crisp
 FEET = 6 / T  # how far below the tile centre the feet are drawn, in tiles
+SEATED_H, SIT_DROP = 22, 5  # someone sitting: the top of the sprite, this many pixels lower
 WALK_CYCLE = [0, 1, 2, 1]  # sheet columns: step, idle, step, idle
 CARD_W, ROW_H, LIST_ROWS = 320, 20, 12  # info card width, row height, people listed at once
 TEXT, MUTED, HOVER, HIGHLIGHT = (240, 240, 240), (150, 160, 175), (60, 66, 80), (250, 220, 60)
@@ -282,6 +283,14 @@ def run_ui(snapshots, commands, positions, sim=None):
     lift_frames = [image(f'custom/elevator_{i}') for i in range(3)]  # doors closed, half open, open
     shadow = image('custom/shadow')  # under everyone standing or walking
     cured_mark = image('custom/cured')  # over a treated patient, on its way out
+    lift_up = {True: image('custom/lift_up_on'), False: image('custom/lift_up_off')}
+    lift_down = {True: image('custom/lift_down_on'), False: image('custom/lift_down_off')}
+    lift_digit = [image(f'custom/lift_digit_{i}') for i in range(10)]
+    speaker_on = [image('custom/speaker_on_0'), image('custom/speaker_on_1')]
+    call_screens = [(f, lay.room_at[f.y][f.x]) for f in lay.furniture if f.kind == 'call_screen']
+    speakers = [(f, lay.room_at[f.y][f.x]) for f in lay.furniture if f.kind == 'speaker']
+    screen_lines = {}  # what a call screen shows -> those lines, drawn
+    sitting = {}  # (look, facing) -> the top of its idle frame: someone sitting is seen from the waist up
     # Outside (grass, road, street) gets dark at night and warm at dawn and dusk; inside the lights are on
     outdoor = pygame.Surface(floor_map.get_size(), pygame.SRCALPHA)
     for y in range(lay.height):
@@ -318,7 +327,7 @@ def run_ui(snapshots, commands, positions, sim=None):
     cam_y = (centre.y + centre.h / 2) * T - screen.get_height() / zoom / 2
     snap = {'actors': [], 'messes': [], 'events': [], 'stats': {}, 'time': 0.0, 'surge': False, 'sim_hz': 0.0,
             'line': 0, 'triage': 0, 'patients': 0, 'keep_up': 1.0, 'speed': config.TIME_SCALE, 'paused': False,
-            'staff': {}, 'day': 0, 'hour': 0.0, 'closed': False, 'day_over': None, 'today': {}, 'lifts': []}
+            'staff': {}, 'day': 0, 'hour': 0.0, 'closed': False, 'day_over': None, 'today': {}, 'lifts': [], 'calls': []}
     show_tablet, opts, beat = False, {'count': 1, 'triaged': False}, 0.0
     actors, selected_id, room_sel, list_open, scroll, show_log, show_boss = [], None, None, False, 0, True, False
     view, sel_floor = 0, None  # the floor on screen; the one the selected person was on
@@ -486,14 +495,44 @@ def run_ui(snapshots, commands, positions, sim=None):
                 extras.append(centred(mop[int(beat * 5) % 4], a.px - 0.35, a.py, (a.py + FEET) * T + 1))
         for i, floor, f in lifts:  # the elevators, their doors sliding open when the car is there for someone
             if floor == view:
-                car = snap['lifts'][i] if i < len(snap['lifts']) else (None, False)
-                target = 2.0 if car == (floor, True) else 0.0
+                car = snap['lifts'][i] if i < len(snap['lifts']) else (None, False, 0)
+                target = 2.0 if tuple(car[:2]) == (floor, True) else 0.0
                 now = lift_open.get((i, floor), 0.0)
                 now = min(target, now + 8 * dt) if target > now else max(target, now - 8 * dt)
                 lift_open[(i, floor)] = now
                 img = lift_frames[round(now)]
-                extras.append(((f.y + f.h) * T, img, (f.x + f.w / 2) * T - img.get_width() // 2,
-                               (f.y + f.h) * T - img.get_height()))
+                ex, ey, d = (f.x + f.w / 2) * T - img.get_width() // 2, (f.y + f.h) * T - img.get_height(), (f.y + f.h) * T
+                extras.append((d, img, ex, ey))
+                # its indicator, the same on every floor: where the car is, and the arrow lit while it's going
+                extras.append((d, lift_up[car[2] > 0], ex + 7, ey + 5))
+                extras.append((d, lift_down[car[2] < 0], ex + 20, ey + 5))
+                if car[0] is not None:
+                    extras.append((d, lift_digit[car[0] % 10], ex + 14, ey + 4))
+        # Waiting rooms: who the doctors are calling, on the call screen, and the loudspeaker saying it
+        wall_bubbles = []
+        for f, room in call_screens:
+            if room is None or lay.floor_of(f.x) != view:
+                continue
+            mine = [c for c in snap['calls'] if c[5] == room.name][-2:][::-1]  # the newest first
+            fresh = bool(mine) and snap['time'] - mine[0][0] < 2 * config.ANNOUNCE_S
+            key = (tuple((c[3], c[4]) for c in mine), fresh and int(beat * 3) % 2 == 0)
+            if key not in screen_lines:
+                lines = pygame.Surface((54, 16), pygame.SRCALPHA)
+                for i, (first, where) in enumerate(key[0]):
+                    number = ''.join(ch for ch in where if ch.isdigit()) or where[:4]
+                    color = (255, 255, 255) if i == 0 and key[1] else (255, 172, 64) if i == 0 else (130, 120, 100)
+                    lines.blit(bubble_font.render(f'{first[:6].upper()} > {number}', False, color), (0, 8 * i - 1))
+                screen_lines[key] = lines
+            sx, sy = (f.x + f.w / 2) * T - 32, (f.y + f.h) * T - 32
+            extras.append(((f.y + f.h) * T, screen_lines[key], sx + 5, sy + 13))
+        for f, room in speakers:
+            if room is None or lay.floor_of(f.x) != view:
+                continue
+            last = next((c for c in reversed(snap['calls']) if c[5] == room.name), None)
+            if last is not None and snap['time'] - last[0] < config.ANNOUNCE_S:
+                sx, sy = (f.x + f.w / 2) * T - 8, (f.y + f.h) * T - 12
+                extras.append(((f.y + f.h) * T, speaker_on[int(beat * 4) % 2], sx, sy))
+                wall_bubbles.append((f'{last[2]}, {last[4]}', *to_screen((f.x + 0.5), f.y + f.h - 12 / T)))
         extras.sort(key=lambda s: s[0])
         heads = []
         for item in heapq.merge(props[view], extras, bodies, key=lambda s: s[0]):
@@ -520,11 +559,18 @@ def run_ui(snapshots, commands, positions, sim=None):
                 blit_scaled(img, x, y)
                 y -= (CHAR_H - img.get_height()) * zoom  # bubbles and marks above the head as usual
             else:
-                blit_scaled(shadow, *to_screen(a.px - shadow.get_width() / 2 / T, a.py + FEET - 3 / T))
+                seated = (a.tx, a.ty) in lay.seats and not a.path
                 x, y = to_screen(a.px - CHAR_W / 2 / T, a.py + FEET - CHAR_H / T)
                 if a.action == 'typing':  # bobs with the keystrokes
                     y -= zoom * (int(beat * 8) % 2)
-                blit_scaled(frame(a), x, y)
+                if seated:  # from the waist up, a little lower: on the chair, the desk or counter covering the rest
+                    if (a.look, a.facing) not in sitting:
+                        sitting[(a.look, a.facing)] = frame(a).subsurface((0, 0, CHAR_W, SEATED_H))
+                    y += SIT_DROP * zoom
+                    blit_scaled(sitting[(a.look, a.facing)], x, y)
+                else:
+                    blit_scaled(shadow, *to_screen(a.px - shadow.get_width() / 2 / T, a.py + FEET - 3 / T))
+                    blit_scaled(frame(a), x, y)
             heads.append((a, x + CHAR_W * zoom / 2, y))
             if a is selected:
                 pygame.draw.rect(screen, HIGHLIGHT, (x, y, CHAR_W * zoom, CHAR_H * zoom), 2)
@@ -560,6 +606,12 @@ def run_ui(snapshots, commands, positions, sim=None):
                     img = bubbles[key]
                     # the tail's tip just above the head (and its urgency mark), a little to the right
                     blit_scaled(img, hx + (2 - BUBBLE_TAIL_X) * zoom, hy - (img.get_height() + 3) * zoom)
+
+        for text, bx, by in wall_bubbles:  # the loudspeaker saying who is called, and where
+            if ('say', text) not in bubbles:
+                bubbles[('say', text)] = text_bubble(bubble_font, text)
+            img = bubbles[('say', text)]
+            blit_scaled(img, bx + (2 - BUBBLE_TAIL_X) * zoom, by - (img.get_height() + 3) * zoom)
 
         boss = next((a for a in actors if a.role == 'dispatcher'), None)
         watching_boss = boss is not None and (show_boss or selected is boss)

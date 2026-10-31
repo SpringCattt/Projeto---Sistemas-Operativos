@@ -205,6 +205,25 @@ def test_preemption():
             stop(h)
 
 
+def test_called_by_loudspeaker():
+    """A doctor's call goes up on the waiting room's screen and the loudspeaker first: the patient only gets up once
+    it has heard its name (ANNOUNCE_S), then goes."""
+    h = Hospital(seed=15, n_doctors=1, n_surgeries=0, n_patients=0)
+    p = h.add_waiting(info(0))
+    h.start()
+    try:
+        assert until(lambda: h.calls, 30), 'nobody was called'
+        called_at, who = h.calls[-1][:2]
+        assert who == p.id
+        seat = (p.tx, p.ty)
+        while h.clock() < called_at + config.ANNOUNCE_S - 0.5:
+            assert (p.tx, p.ty) == seat, 'it got up before hearing its name'
+            time.sleep(0.01)
+        assert until(lambda: (p.tx, p.ty) != seat, 10), 'it never went'
+    finally:
+        stop(h)
+
+
 def test_surgery():
     """A Red patient who needs surgery: the doctor takes a theatre, washes in its disinfection room and goes in
     from there (never straight from the corridor)."""
@@ -480,7 +499,7 @@ def test_reactions():
             for key in ('gave_up', 'complaints', 'fights', 'got_worse', 'vomits'):
                 assert until(lambda: h.stats[key] >= 1, 40), f'no {key}: {h.summary()}'
             assert until(lambda: any('cleaned' in t for _, t in h.events), 40), 'nobody cleaned the mess'
-            assert until(lambda: any(w in t for _, t in h.events for w in ('steps in', 'thrown out')), 40)
+            assert until(lambda: h.stats['fights_stopped'] >= 1, 60), 'security never stopped the fight'
         finally:
             stop(h)
 

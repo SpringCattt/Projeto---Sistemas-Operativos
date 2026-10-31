@@ -355,8 +355,8 @@ class Actor:
                 return
 
     def settle(self):
-        if (self.tx, self.ty) in self.lay.seats:
-            self.facing = 'down'  # everyone sits facing down
+        if (self.tx, self.ty) in self.lay.seats:  # facing the way the seat does
+            self.facing = self.lay.seat_facing.get((self.tx, self.ty), 'down')
 
     def wander(self, dt):
         """One tick of idling: keep walking, or now and then pick somewhere in `area` to go."""

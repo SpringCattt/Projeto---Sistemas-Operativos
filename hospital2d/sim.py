@@ -49,6 +49,7 @@ class Hospital:
         self.disinfection = {r: threading.Semaphore(max(1, len(spots))) for r, spots in self.lay.sink_spots.items()}
         self.log_out = log_out  # Queue to the log process (or None)
         self.events, self.events_lock = deque(maxlen=10), threading.Lock()
+        self.calls = deque(maxlen=20)  # doctors' calls: (time, id, name, first name, room, waiting room); events_lock
         self.stats, self.stats_lock = Counter(), threading.Lock()
         self.waits = defaultdict(list)  # urgency at triage -> seconds from triage to the doctor
         self.errors = []
@@ -243,6 +244,22 @@ class Hospital:
         if self.running:
             self._spawn(p.run, (), f'patient-{p.id}')
         return p
+
+    def announce(self, p, room):
+        """A doctor calls p from its waiting room: its name and where to go come up on that room's call screen and
+        the loudspeaker says it. Returns when p may go: once it has heard it (ANNOUNCE_S)."""
+        now = self.clock()
+        with self.events_lock:
+            self.calls.append((now, p.id, p.name, p.first_name(), room.name, p.waiting_room.name))
+        self.log(f'Loudspeaker: {p.name}, to {room.name}')
+        return now + config.ANNOUNCE_S
+
+    def lift_state(self, e):
+        """(floor, doors open for someone, going up 1 / down -1 / standing 0): what its indicator and doors show."""
+        with e.cond:
+            target = e.target()
+            going = 0 if target is None or target == e.floor else (1 if target > e.floor else -1)
+            return e.floor, e.open and e.rider is not None, going
 
     def carried_in(self, info, tile):
         """A Red patient out of an ambulance, lying on the paramedics' stretcher at `tile`: its thread waits until
@@ -534,14 +551,14 @@ class Hospital:
         with self.stats_lock:
             stats = dict(self.stats)
         with self.events_lock:
-            events = list(self.events)
+            events, calls = list(self.events), list(self.calls)
         return {'actors': [a.snapshot() for a in actors], 'messes': messes, 'parked': parked, 'events': events,
                 'stats': stats,
                 'time': self.clock(), 'surge': self.clock() < self.surge_until, 'sim_hz': self.sim_hz,
                 'speed': self.rate, 'paused': self.paused, 'staff': self.staff_counts(),
                 'keep_up': self.keep_up,
                 'day': self.day, 'hour': (self.clock() - self.day_start) / config.HOUR_S, 'closed': self.closed,
-                'lifts': [(e.floor, e.open and e.rider is not None) for e in self.lifts],  # (doors open for someone)
+                'lifts': [self.lift_state(e) for e in self.lifts], 'calls': calls,
                 'day_over': self.day_over, 'today': {k: v for k, v in self.today().items() if k in ('income', 'wages')},
                 'line': len(self.line), 'triage': self.triage_queue.qsize(),
                 'patients': sum(1 for a in actors if a.role == 'patient')}

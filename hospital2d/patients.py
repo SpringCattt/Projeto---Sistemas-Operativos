@@ -303,6 +303,13 @@ class Patient(Actor):
                 self.tick()
             if t.failed or call.cancelled:
                 return None
+        if call.ready_at:  # called on the loudspeaker: it gets up once it has heard its name
+            self.stage = f'hearing its name, {call.stage}'
+            while self.h.clock() < call.ready_at:
+                if call.cancelled:
+                    return None
+                self.tick()
+            self.stage = call.stage
         while (self.tx, self.ty) != call.tile:
             if call.cancelled:
                 return None

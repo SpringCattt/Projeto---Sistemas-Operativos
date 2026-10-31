@@ -109,6 +109,7 @@ BONUS_SHARE = 0.3
 SHARE = {'reception': 0.10, 'triage': 0.15, 'stretcher': 0.15, 'doctor': 0.60}
 CREDIT = {'fight': 40, 'clean': 20}
 
+WHEELCHAIRS = 4  # kept in storage: a cured Red patient goes home in one
 STRETCHERS = 4  # parked at the back of storage: with all of them out, a Red patient waits for one to come back
 
 # Fatigue (0-100)

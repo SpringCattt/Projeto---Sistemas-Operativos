@@ -44,19 +44,23 @@ when they go up or down.
 * **Ground floor:** emergencies. Street, reception, triage, waiting rooms, bar, Emergency (with its ambulance
   bay), storage right next to it (the stretchers start there) and the Boss's control room.
 * **First floor:** the doctors' rooms.
-* **Second floor:** the surgeries (with their disinfection rooms) and rest.
+* **Second floor:** the surgeries (with their disinfection rooms), and the staff's rest room right on top of the
+  Main Hall, in the middle of the hospital.
 
 Storage was on the second floor at first. With 4 doctors, a minute of the hospital, storage next to Emergency:
 Red patients waited 72–79 s for a doctor instead of 101–107 s (two runs each); upstairs, every Red patient cost
 the elevator two more trips.
 
-Every floor has the **Main Hall** in the same place, with **stairs** and an **elevator** in it. People walk up
+Every floor has the **Main Hall** in the same place, with **stairs** and **two elevators** in it (each stretcher
+takes the one with the shorter queue). People walk up
 and down the stairs (from a stairs tile straight to the same place on the next floor; nobody idles on them);
 stretchers can't, so they take the elevator: one stretcher at a time, first come first served, the car moving a
 floor every `LIFT_FLOOR_S` (see the `Elevator` monitor). Inside it, nurses and stretcher are out of sight until they
 come out on the other floor.
 
-On the ground floor, the hall has the Boss's round **Control Room** in the middle
+On the ground floor, the hall has the Boss's round **Control Room** in the middle, the AI's room: server racks
+with their lights blinking, a big screen with a neural network learning and its learning curve, the AI's core
+glowing in its ring
 (sealed: no doors; the Boss sits in the exact centre and nobody else goes in). The main corridor runs through the
 hall and out to both sides, and ends in an exit at each end: whoever has seen a doctor leaves that way, so they
 don't walk back against the people coming in through reception and the waiting rooms. Under the hall is the base
@@ -272,6 +276,12 @@ straight instead of zig-zagging.
 | `art.py` | loads the PNGs and draws the plan |
 | `dialogue.py` | picks what people say from `data/dialogue.txt` |
 | `data/` | names, complaints and dialogue lines, one per line |
+
+**Furniture to draw with.** Besides the hospital pack's, the tileset has our own pieces to place in Tiled: the
+big TV, the call screen and the loudspeaker, server racks, the AI screen and core, a water cooler, a magazine
+rack, a fire extinguisher, two paintings, a notice board, an X-ray viewer, two big plants, a coat rack, a first-aid
+cabinet (decoration, like the pack's: left out wherever it would leave a way through one tile wide). Doors are
+wooden double doors seen from above; open, each leaf swings back against its side of the doorway.
 
 **Seats face their way.** Patients' chairs in the waiting rooms, triage and the doctors' rooms are turned
 (`chair_up`, seen from behind): patients face the nurse, the doctor, the waiting room's TV and call screen. Anyone

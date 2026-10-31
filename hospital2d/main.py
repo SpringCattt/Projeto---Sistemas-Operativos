@@ -302,8 +302,10 @@ def run_ui(snapshots, commands, positions, sim=None):
     scaled = {}  # the map and the night as last scaled for the screen: (what for, surface)
     lifts = [(i, floor, piece) for i, stops in enumerate(lay.lifts) for floor, (_, _, piece) in stops.items()]
     lift_open = {}  # (lift, floor) -> how open its doors are drawn (0 to 2), easing towards the real state
-    door_open = image('custom/door_open')
+    door_open = {o: image(f'custom/door_{o}_open') for o in 'hv'}  # an open door: the threshold...
+    door_leaf = {(o, end): image(f'custom/door_{o}_leaf_{end}') for o in 'hv' for end in (0, 1)}  # ...its leaves
     doorway = {}  # door tile -> all the tiles of its doorway (a double door opens as one)
+    door_look = {}  # door tile -> (which way its wall goes, 'h' / 'v'; 0 / 1 at the doorway's first / last tile)
     for t in lay.doors:
         if t not in doorway:
             group, todo = {t}, [t]
@@ -313,8 +315,11 @@ def run_ui(snapshots, commands, positions, sim=None):
                     if n in lay.doors and n not in group:
                         group.add(n)
                         todo.append(n)
+            ordered = sorted(group, key=lambda d: (d[0], d[1]))
+            way = 'v' if len({d[0] for d in group}) == 1 and len(group) > 1 else 'h'
             for d in group:
                 doorway[d] = group
+                door_look[d] = (way, 0 if d == ordered[0] else 1 if d == ordered[-1] else None)
     keyboard = [image('custom/keyboard_0'), image('custom/keyboard_1')]
     mop, bucket = [image(f'custom/mop_{i}') for i in (0, 1, 2, 1)], image('custom/bucket')
 
@@ -467,8 +472,11 @@ def run_ui(snapshots, commands, positions, sim=None):
             for dx in (-1, 0, 1):
                 for dy in (-1, 0, 1):
                     opened |= doorway.get((a.tx + dx, a.ty + dy), set())
-        for tx, ty in opened:
-            blit_scaled(door_open, *to_screen(tx, ty))
+        for tx, ty in opened:  # the threshold, and each leaf swung back against its side of the doorway
+            way, end = door_look[(tx, ty)]
+            blit_scaled(door_open[way], *to_screen(tx, ty))
+            if end is not None:
+                blit_scaled(door_leaf[(way, end)], *to_screen(tx, ty))
 
         if selected:
             for tx, ty in (t for t in selected.path if shown(t[0])):

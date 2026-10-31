@@ -296,7 +296,7 @@ class Doctor(TaskStaff):
         # room half-way because the Boss found the doctor something more urgent (before the call, it still can)
         self.h.dispatcher.set_preemptable(task, False)
         try:
-            if not self.call(p, s, timeout=240 if s.stretcher else 120):
+            if not self.call(p, s, timeout=None):  # (it waits for it: only if it leaves does it give up)
                 if not p.gone:
                     self.h.dispatcher.submit(task)  # didn't come in time: try again later
                 return
@@ -309,8 +309,8 @@ class Doctor(TaskStaff):
                 exam = Summons(self, bed[0], 'exam', allow={'doctor'}, stage='on the exam bed', lie=bed[1])
                 s.finish('exam')
                 s = exam
-                if not self.call(p, s, timeout=30):
-                    return self.h.dispatcher.submit(task)
+                if not self.call(p, s, timeout=None):
+                    return
                 beside = self.next_to(bed[0])
                 if beside:
                     self.go(beside, timeout=10)
@@ -344,21 +344,27 @@ class Doctor(TaskStaff):
         """Surgery can't be interrupted. Take a free operating room (semaphore), wash in its disinfection room
         (semaphore: as many at once as sinks) and only then go in, straight from disinfection."""
         self.h.dispatcher.set_preemptable(task, False)
-        self.doing = f'surgery: {p.name}'
-        room = None
-        while room is None:
-            room = self.h.theatres.try_take(timeout=1 / config.ACTOR_HZ)
-            if room is None:
-                self.tick()
+        self.doing = f'surgery: {p.name}, waiting for a free operating room'
+        urgent = p.waiting_room is not None and p.waiting_room.kind == 'emergency'
+        theatres, room = self.h.theatres, None
+        with theatres.lock:
+            theatres.urgent += urgent
+        try:
+            while room is None:
+                room = theatres.try_take(timeout=1 / config.ACTOR_HZ, urgent=urgent)
+                if room is None:
+                    self.tick()
+        finally:
+            with theatres.lock:
+                theatres.urgent -= urgent
         try:
             self.h.log(f'{self.label()} takes {p.label()} to {room.name}')
-            self.disinfect(room.partner)
-            self.doing = f'surgery: {p.name}'
             patient_spot, doctor_spot = self.lay.surgery_spots[room]
             s = Summons(self, patient_spot, 'surgery', allow={'corridor', 'surgery'}, stage=f'going to {room.name}',
-                        lie=self.lay.table_spots[room],
-                        stretcher=p.waiting_room is not None and p.waiting_room.kind == 'emergency')
-            p.summon(s)
+                        lie=self.lay.table_spots[room], stretcher=urgent)
+            p.summon(s)  # on its way while the doctor washes
+            self.disinfect(room.partner)
+            self.doing = f'surgery: {p.name}'
             self.extra_avoid = ('corridor',)  # from disinfection straight into the theatre
             self.go(doctor_spot, timeout=120)
             self.extra_avoid = ()

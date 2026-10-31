@@ -105,8 +105,8 @@ class Car(Actor):
             i += n
 
     def take(self, tiles, keep=()):
-        """Takes up `tiles` (as well as `keep`) once nobody else is on them (cars wait their turn), asking whoever
-        walks there to step aside."""
+        """Takes up `tiles` (as well as `keep`) once nobody else is on them: cars wait their turn, and wait for
+        whoever walks there to pass (people go first)."""
         def free():
             with self.world.lock:
                 there = [self.world.occupied[t] for t in tiles if self.world.occupied.get(t) not in (None, self)]
@@ -114,9 +114,6 @@ class Car(Actor):
                     for t in tiles:
                         self.world.occupied[t] = self
                     return True
-            for a in there:
-                if getattr(a, 'role', None) != 'car' and hasattr(a, 'make_way'):
-                    a.make_way = frozenset(tiles)  # (it steps off them all)
             return False
         self.wait_until(free)
         self.held = list(keep) + [t for t in tiles if t not in keep]

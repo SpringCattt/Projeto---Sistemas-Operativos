@@ -350,14 +350,18 @@ class Elevator:
 
 
 class Theatres:
-    """Operating rooms: a counting semaphore says how many are free, a lock guards which ones."""
+    """Operating rooms: a counting semaphore says how many are free, a lock guards which ones. Emergencies go
+    first: while one is waiting for a room, nobody else takes one."""
 
     def __init__(self, rooms):
         self.rooms, self.free = list(rooms), list(rooms)
         self.sem = threading.Semaphore(len(rooms))
         self.lock = threading.Lock()
+        self.urgent = 0  # emergencies waiting for a room
 
-    def try_take(self, timeout):
+    def try_take(self, timeout, urgent=False):
+        if not urgent and self.urgent:
+            return None  # (the caller ticks and tries again)
         if not self.sem.acquire(timeout=timeout):
             return None
         with self.lock:

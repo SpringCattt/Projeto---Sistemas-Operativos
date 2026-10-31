@@ -278,8 +278,9 @@ class Doctor(TaskStaff):
         self.area = [t for t in h.lay.free_tiles(room) if t not in h.lay.seats] + ([self.seat] if self.seat else [])
         self.extra_avoid = ()
 
-    def avoid(self):
-        return self.extra_avoid
+    def avoid(self):  # (never the kind of room it's in: it could never get out of it)
+        here = self.lay.room_at[self.ty][self.tx]
+        return tuple(k for k in self.extra_avoid if here is None or here.kind != k)
 
     def handle(self, task):
         if task.kind == 'consult':
@@ -906,7 +907,8 @@ class WardNurse(TaskStaff):
         self.wait(1.5)
 
     def plan(self, train, goal, last, with_patient, around):
-        avoid = PATIENT_NEVER if with_patient else ()
+        # (an empty one never cuts through the disinfection rooms, the rest room or the Boss's: only to storage)
+        avoid = PATIENT_NEVER if with_patient else ('disinfection', 'rest', 'control')
         blocked = set(self.lay.staff_only) if with_patient else set()
         with self.world.lock:
             blocked |= self.world.messes.keys()

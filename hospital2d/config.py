@@ -10,7 +10,7 @@ TILE = 16  # tile size in pixels (before zoom)
 N_NURSES = 6  # ward nurses (walking the medical wing)
 N_SECURITY = 2
 N_CLEANERS = 2
-N_PATIENTS = 40  # already triaged and waiting when the simulation starts
+N_PATIENTS = 0  # already triaged and waiting when the simulation starts (0: it opens empty)
 
 # Performance: below MIN_FPS the counter turns red (the hospital's limit)
 TARGET_FPS = 144

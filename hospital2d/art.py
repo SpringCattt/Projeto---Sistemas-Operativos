@@ -27,12 +27,20 @@ FURNITURE = {
     'tray': H + 'operation_accessories_table_full', 'ultrasound': H + 'operation_ultrasound_machine',
     'books': H + 'lab_books', 'ambulance': C + 'ambulance', 'elevator': C + 'elevator', 'chair_up': C + 'chair_up',
     'big_tv': C + 'big_tv', 'call_screen': C + 'call_screen', 'speaker': C + 'speaker',
+    # the AI's room
+    'server_rack': C + 'server_rack', 'ai_screen': C + 'ai_screen', 'ai_core': C + 'ai_core',
+    # more decoration
+    'water_cooler': C + 'water_cooler', 'magazine_rack': C + 'magazine_rack', 'fire_extinguisher': C + 'fire_extinguisher',
+    'painting': C + 'painting_0', 'painting_2': C + 'painting_1', 'notice_board': C + 'notice_board',
+    'xray_viewer': C + 'xray_viewer', 'big_plant': C + 'big_plant_0', 'big_plant_2': C + 'big_plant_1',
+    'coat_rack': C + 'coat_rack', 'first_aid': C + 'first_aid',
 }
 STACKED = {'shelf'}  # one image repeated on every tile of the footprint
 # Animated pieces: kind -> (its frames custom/<name>_0.., frames per second). main.py picks the frame by time
 ANIMATED = {'tv': ('tv', 8, 1.5), 'vending': ('vending', 3, 1.2), 'coffee': ('coffee', 3, 3.0),
             'pc': ('pc_back', 3, 1.0),  # (seen from behind: its screen faces whoever sits at it)
-            'big_tv': ('big_tv', 12, 2.0)}
+            'big_tv': ('big_tv', 12, 2.0), 'server_rack': ('server_rack', 4, 3.0), 'ai_screen': ('ai_screen', 8, 2.5),
+            'ai_core': ('ai_core', 6, 4.0), 'xray_viewer': ('xray_viewer', 2, 0.7)}
 FACING_AWAY = {'chair_up'}  # its back to us: drawn over whoever sits on it
 VARIANTS = {'custom/floor_grass': ('grass', 4), 'custom/floor_street': ('street', 3)}  # (so they don't look tiled)
 LIFT = {'pc': 9, 'bell': 9, 'cake': 9, 'donuts': 9, 'books': 9}  # pixels up: they stand on a counter/desk top
@@ -56,6 +64,8 @@ def draw_layout(lay):
             # a wall that only goes up and down gets the upright piece, so it's one smooth wall like the others
             if name == 'custom/wall' and ({(x, y - 1), (x, y + 1)} & walls) and not ({(x - 1, y), (x + 1, y)} & walls):
                 name = 'custom/wall_v'
+            if name == 'custom/door':  # a door across a horizontal wall, or down a vertical one
+                name = 'custom/door_v' if {(x, y - 1), (x, y + 1)} & walls else 'custom/door_h'
             if name in VARIANTS:  # grass and street: one of a few looks, scattered (the same every time)
                 base, n = VARIANTS[name]
                 name = f'custom/{base}_{((x * 73856093) ^ (y * 19349663)) % n}'

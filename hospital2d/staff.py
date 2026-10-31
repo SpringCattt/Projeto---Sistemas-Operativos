@@ -659,7 +659,8 @@ class WardNurse(TaskStaff):
         if not lifts:
             return False
         near = self.lay.distances_from((train[0].tx, train[0].ty))
-        lift = min(lifts, key=lambda e: near.get(e.stops[here][0][0], 10 ** 6))
+        # the one with the shortest queue (two elevators share the work), then the closest
+        lift = min(lifts, key=lambda e: (len(e.queue) + (e.rider is not None), near.get(e.stops[here][0][0], 10 ** 6)))
         self.doing = 'waiting for the elevator'
         lift.call(self, here)
         try:

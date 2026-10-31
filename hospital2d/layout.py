@@ -21,7 +21,8 @@ SEATS = {'chair', 'chair_up', 'office_chair', 'bench', 'sofa'}  # furniture peop
 # Just for looks: left out wherever it would leave a way through only one tile wide (see Layout)
 DECOR = {'plant', 'sanitizer', 'trash_bin', 'cabinet', 'biohazard', 'iv_stand', 'bp_monitor', 'eye_chart', 'poster',
          'clock', 'tv', 'vending', 'soda', 'snacks', 'fridge', 'bedside', 'armchair', 'coffee', 'map_stand',
-         'exit_sign', 'ultrasound', 'monitor', 'tray'}
+         'exit_sign', 'ultrasound', 'monitor', 'tray', 'water_cooler', 'magazine_rack', 'fire_extinguisher', 'painting',
+         'painting_2', 'notice_board', 'xray_viewer', 'big_plant', 'big_plant_2', 'coat_rack', 'first_aid'}
 DIRECTIONS = ((1, 0), (-1, 0), (0, 1), (0, -1))
 TURN = 0.001  # extra cost of a turn when planning a route
 

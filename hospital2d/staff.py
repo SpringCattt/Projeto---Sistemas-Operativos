@@ -50,6 +50,13 @@ def about(task):
     return who.id if who is not None else None
 
 
+def delivered(task):
+    """The patient is where it was going: the nurses are only taking the stretcher / wheelchair back (for the map,
+    that task is done)."""
+    t, p = getattr(task, 'transfer', None), getattr(task, 'discharged', None)
+    return (t is not None and t.arrived.is_set()) or (p is not None and p.home.is_set())
+
+
 class Boss(Actor):
     """The dispatcher in person. Sits in the control room for the whole shift; its thread is the one that runs
     the dispatcher (world.Dispatcher.assign): it wakes up whenever a task is submitted or someone finishes one
@@ -93,7 +100,7 @@ class Boss(Actor):
         with d.cond:
             s['boss'] = {  # (who is doing it, who it's about or None, tile, urgency, label)
                 'working': [(a.id, about(a.task), a.task.where(), a.task.urgency, a.task.label())
-                            for a in d.staff if a.task],
+                            for a in d.staff if a.task and not delivered(a.task)],
                 'open': [(about(t), t.where(), t.urgency, t.label()) for t in d.open],
                 'decisions': list(d.decisions),
             }

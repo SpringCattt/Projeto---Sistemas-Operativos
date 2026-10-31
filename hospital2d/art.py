@@ -109,21 +109,9 @@ def draw_layout(lay):
             else:
                 surf.blit(road_joins(lay, x, y, name.rsplit('/', 1)[-1]), (x * T, y * T))
     middle_lines(surf, lay)
-    for r in lay.rooms:  # the ambulances' bay: asphalt, its parking box marked (open on the side it drives in)
+    for r in lay.rooms:
         if r.name == 'Ambulance Bay':
-            for y in range(r.y, r.y + r.h):
-                for x in range(r.x, r.x + r.w):
-                    surf.blit(image('custom/road_x'), (x * T, y * T))
-            s = lay.ambulance_spot
-            if s is not None:
-                w, h = image('custom/ambulance').get_size()  # (drawn centred on the spot)
-                box = pygame.Rect(0, 0, w + 6, h + 6)
-                box.center = (round((s.x + s.w / 2) * T), round((s.y + s.h / 2) * T))
-                for edge in ((box.left, box.top, 1, box.h), (box.right - 1, box.top, 1, box.h),
-                             (box.left, box.bottom - 1, box.w, 1)):
-                    surf.fill(KERB, edge)
-                for i in range(0, box.w - 2, 6):  # yellow dashes along its far end
-                    surf.fill(MIDDLE, (box.left + 2 + i, box.bottom - 5, 3, 2))
+            ambulance_bay(surf, lay, r)
     for y in range(lay.height):  # the floors upstairs: dark around the building, no grass
         for x in range(lay.stride, lay.width):
             if lay.ground[y][x].endswith('floor_grass'):
@@ -156,6 +144,39 @@ def road_joins(lay, x, y, base):
         elif base.endswith('_edge') and road(x + dx, y + dy) and tuple(img.get_at(line[:2]))[:3] == KERB:
             img.fill(ASPHALT, line)
     return img
+
+
+def ambulance_bay(surf, lay, r):
+    """Asphalt with a kerb where it meets grass or pavement, and the ambulance's box: three white sides (open where
+    it drives in), as wide as the ambulance plus a margin, on the half-tile grid, with yellow hatching inside its far
+    end (where the ambulance stops short of)."""
+    bay = {(x, y) for y in range(r.y, r.y + r.h) for x in range(r.x, r.x + r.w)}
+    for x, y in bay:
+        surf.blit(image('custom/road_x'), (x * T, y * T))
+        for (dx, dy), (lx, ly, lw, lh) in KERB_LINES:
+            n = (x + dx, y + dy)
+            if n not in bay and lay.tiles[n[1]][n[0]] not in (WALL, DOOR) \
+                    and not lay.ground[n[1]][n[0]].rsplit('/', 1)[-1].startswith('road_'):
+                surf.fill(KERB, (x * T + lx, y * T + ly, lw, lh))
+    for x in range(r.x, r.x + r.w):  # where the street comes in, its kerbs turn into the bay's (no gap at the corner)
+        above = tile_image(lay, x, r.y - 1)
+        for kx, to in ((1, -1), (T - 2, 1)):
+            if lay.ground[r.y - 1][x].endswith('_edge') and tuple(above.get_at((kx, T // 2)))[:3] == KERB:
+                surf.fill(KERB, (x * T + kx, r.y * T, 1, 2))
+                surf.fill(KERB, (x * T + min(kx, kx + 2 * to), r.y * T + 1, 3, 1))
+    s = lay.ambulance_spot
+    if s is None:
+        return
+    half = (image('custom/ambulance').get_width() + 8) // 16 * 8  # half its width plus 4 px, to the half tile
+    cx = (s.x + s.w // 2) * T
+    left, right, top, bottom = cx - half, cx + half - 1, r.y * T, (r.y + r.h) * T - 5
+    surf.fill(KERB, (left, top, 1, bottom - top + 1))
+    surf.fill(KERB, (right, top, 1, bottom - top + 1))
+    surf.fill(KERB, (left, bottom, right - left + 1, 1))
+    for y in range(bottom - 7, bottom - 1):  # diagonal stripes, 2 px of every 6, kept inside the box
+        for x in range(left + 2, right - 1):
+            if (x + y) % 6 < 2:
+                surf.set_at((x, y), MIDDLE)
 
 
 def middle_lines(surf, lay):

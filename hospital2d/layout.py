@@ -17,6 +17,9 @@ GROUND = {'wall': WALL, 'door': DOOR, 'floor_grass': EMPTY,  # what a ground til
           'road_l': EMPTY, 'road_r': EMPTY}  # (the ambulance's road: nobody walks on it)
 STAIRS = 'stairs'  # a stairs tile goes to the stairs tile at the same place on the floor above and below
 FLOOR_GAP = 4  # the floors lie side by side in one grid (grass between them: nobody walks across)
+# Hung on the wall: on a room's top row they're drawn up on the wall above it, and don't take up the floor below
+WALL_MOUNTED = {'speaker', 'big_tv', 'call_screen', 'painting', 'painting_2', 'notice_board', 'first_aid',
+                'xray_viewer', 'fire_extinguisher', 'clock', 'poster', 'eye_chart'}
 SEATS = {'chair', 'chair_up', 'office_chair', 'bench', 'sofa'}  # furniture people sit on (every tile of a bench)
 # Just for looks: left out wherever it would leave a way through only one tile wide (see Layout)
 DECOR = {'plant', 'sanitizer', 'trash_bin', 'cabinet', 'biohazard', 'iv_stand', 'bp_monitor', 'eye_chart', 'poster',
@@ -143,7 +146,7 @@ def read_floor(path):
         if p['kind'] == 'stretcher':
             stretchers.append((x, y))
         else:
-            furniture.append(Furniture(p['kind'], x, y, p['kind'] not in SEATS, fw, fh))
+            furniture.append(Furniture(p['kind'], x, y, p['kind'] not in SEATS | WALL_MOUNTED, fw, fh))
     return ground, rooms, furniture, staff_only, stretchers
 
 

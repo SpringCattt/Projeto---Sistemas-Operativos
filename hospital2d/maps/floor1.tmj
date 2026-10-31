@@ -11,7 +11,7 @@
  "tilewidth": 16,
  "tileheight": 16,
  "nextlayerid": 4,
- "nextobjectid": 134,
+ "nextobjectid": 131,
  "tilesets": [
   {
    "firstgid": 1,
@@ -6775,6 +6775,18 @@
     },
     {
      "id": 122,
+     "gid": 40,
+     "name": "",
+     "type": "",
+     "rotation": 0,
+     "visible": true,
+     "x": 864,
+     "y": 256,
+     "width": 16,
+     "height": 14
+    },
+    {
+     "id": 123,
      "gid": 9,
      "name": "",
      "type": "",
@@ -6786,7 +6798,7 @@
      "height": 28
     },
     {
-     "id": 123,
+     "id": 124,
      "gid": 10,
      "name": "",
      "type": "",
@@ -6798,26 +6810,14 @@
      "height": 28
     },
     {
-     "id": 124,
-     "gid": 61,
-     "name": "",
-     "type": "",
-     "rotation": 0,
-     "visible": true,
-     "x": 544,
-     "y": 144,
-     "width": 24,
-     "height": 16
-    },
-    {
      "id": 125,
      "gid": 61,
      "name": "",
      "type": "",
      "rotation": 0,
      "visible": true,
-     "x": 1024,
-     "y": 400,
+     "x": 528,
+     "y": 144,
      "width": 24,
      "height": 16
     },
@@ -6828,7 +6828,7 @@
      "type": "",
      "rotation": 0,
      "visible": true,
-     "x": 432,
+     "x": 1008,
      "y": 400,
      "width": 24,
      "height": 16
@@ -6840,8 +6840,8 @@
      "type": "",
      "rotation": 0,
      "visible": true,
-     "x": 1200,
-     "y": 576,
+     "x": 416,
+     "y": 400,
      "width": 24,
      "height": 16
     },
@@ -6852,8 +6852,8 @@
      "type": "",
      "rotation": 0,
      "visible": true,
-     "x": 240,
-     "y": 576,
+     "x": 640,
+     "y": 144,
      "width": 24,
      "height": 16
     },
@@ -6864,8 +6864,8 @@
      "type": "",
      "rotation": 0,
      "visible": true,
-     "x": 656,
-     "y": 144,
+     "x": 1120,
+     "y": 400,
      "width": 24,
      "height": 16
     },
@@ -6876,44 +6876,8 @@
      "type": "",
      "rotation": 0,
      "visible": true,
-     "x": 1136,
+     "x": 304,
      "y": 400,
-     "width": 24,
-     "height": 16
-    },
-    {
-     "id": 131,
-     "gid": 61,
-     "name": "",
-     "type": "",
-     "rotation": 0,
-     "visible": true,
-     "x": 320,
-     "y": 400,
-     "width": 24,
-     "height": 16
-    },
-    {
-     "id": 132,
-     "gid": 61,
-     "name": "",
-     "type": "",
-     "rotation": 0,
-     "visible": true,
-     "x": 1312,
-     "y": 576,
-     "width": 24,
-     "height": 16
-    },
-    {
-     "id": 133,
-     "gid": 61,
-     "name": "",
-     "type": "",
-     "rotation": 0,
-     "visible": true,
-     "x": 128,
-     "y": 576,
      "width": 24,
      "height": 16
     }

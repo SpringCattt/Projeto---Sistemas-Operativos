@@ -4,7 +4,7 @@ import os
 import pygame
 
 import config
-from layout import DOOR, WALL
+from layout import DOOR, WALL, WALL_MOUNTED
 
 T = config.TILE
 ASSETS = os.path.join(os.path.dirname(__file__), 'assets')
@@ -44,6 +44,7 @@ ANIMATED = {'tv': ('tv', 8, 1.5), 'vending': ('vending', 3, 1.2), 'coffee': ('co
 FACING_AWAY = {'chair_up'}  # its back to us: drawn over whoever sits on it
 VARIANTS = {'custom/floor_grass': ('grass', 4), 'custom/floor_street': ('street', 3)}  # (so they don't look tiled)
 LIFT = {'pc': 9, 'bell': 9, 'cake': 9, 'donuts': 9, 'books': 9}  # pixels up: they stand on a counter/desk top
+LIFT.update({k: 12 for k in WALL_MOUNTED})  # (and these hang on the wall above their tile)
 
 _cache = {}
 

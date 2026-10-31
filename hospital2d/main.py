@@ -18,7 +18,7 @@ import config
 from actors import ACTIONS, FACINGS, ROLE_LABEL
 from arrivals import run_arrivals
 from art import ASSETS, BUBBLE_TAIL_X, CHAR_H, CHAR_W, character, draw_layout, furniture_sprites, icon_bubble, image, \
-    lying, text_bubble
+    LIFT, lying, text_bubble
 from eventlog import run_log
 from layout import EMPTY, load_layout
 from sim import new_positions, read_positions, run_simulation
@@ -531,16 +531,16 @@ def run_ui(snapshots, commands, positions, sim=None):
                     color = (255, 255, 255) if i == 0 and key[1] else (255, 172, 64) if i == 0 else (130, 120, 100)
                     lines.blit(bubble_font.render(f'{first[:6].upper()} > {number}', False, color), (0, 8 * i - 1))
                 screen_lines[key] = lines
-            sx, sy = (f.x + f.w / 2) * T - 32, (f.y + f.h) * T - 32
+            sx, sy = (f.x + f.w / 2) * T - 32, (f.y + f.h) * T - 32 - LIFT['call_screen']
             extras.append(((f.y + f.h) * T, screen_lines[key], sx + 5, sy + 13))
         for f, room in speakers:
             if room is None or lay.floor_of(f.x) != view:
                 continue
             last = next((c for c in reversed(snap['calls']) if c[5] == room.name), None)
             if last is not None and snap['time'] - last[0] < config.ANNOUNCE_S:
-                sx, sy = (f.x + f.w / 2) * T - 8, (f.y + f.h) * T - 12
+                sx, sy = (f.x + f.w / 2) * T - 8, (f.y + f.h) * T - 12 - LIFT['speaker']
                 extras.append(((f.y + f.h) * T, speaker_on[int(beat * 4) % 2], sx, sy))
-                wall_bubbles.append((f'{last[2]}, {last[4]}', *to_screen((f.x + 0.5), f.y + f.h - 12 / T)))
+                wall_bubbles.append((f'{last[2]}, {last[4]}', *to_screen((f.x + 0.5), f.y + f.h - (12 + LIFT['speaker']) / T)))
         extras.sort(key=lambda s: s[0])
         heads = []
         for item in heapq.merge(props[view], extras, bodies, key=lambda s: s[0]):

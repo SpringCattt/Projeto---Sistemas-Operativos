@@ -11,7 +11,7 @@
  "tilewidth": 16,
  "tileheight": 16,
  "nextlayerid": 4,
- "nextobjectid": 83,
+ "nextobjectid": 84,
  "tilesets": [
   {
    "firstgid": 1,
@@ -6283,6 +6283,18 @@
     },
     {
      "id": 78,
+     "gid": 40,
+     "name": "",
+     "type": "",
+     "rotation": 0,
+     "visible": true,
+     "x": 864,
+     "y": 256,
+     "width": 16,
+     "height": 14
+    },
+    {
+     "id": 79,
      "gid": 9,
      "name": "",
      "type": "",
@@ -6294,7 +6306,7 @@
      "height": 28
     },
     {
-     "id": 79,
+     "id": 80,
      "gid": 10,
      "name": "",
      "type": "",
@@ -6306,7 +6318,7 @@
      "height": 28
     },
     {
-     "id": 80,
+     "id": 81,
      "gid": 21,
      "name": "",
      "type": "",
@@ -6318,7 +6330,7 @@
      "height": 26
     },
     {
-     "id": 81,
+     "id": 82,
      "gid": 10,
      "name": "",
      "type": "",
@@ -6330,14 +6342,14 @@
      "height": 28
     },
     {
-     "id": 82,
+     "id": 83,
      "gid": 40,
      "name": "",
      "type": "",
      "rotation": 0,
      "visible": true,
-     "x": 576,
-     "y": 224,
+     "x": 544,
+     "y": 128,
      "width": 16,
      "height": 14
     }

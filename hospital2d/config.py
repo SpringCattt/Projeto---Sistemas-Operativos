@@ -20,6 +20,7 @@ ACTOR_SPEED = 1.5  # tiles per second
 LIFT_FLOOR_S = 3.0  # the elevator, per floor (stretchers can't take the stairs)
 AMBULANCE_SPEED = 4.0  # tiles per second, coming down the road to the ambulance bay (and leaving)
 CAR_SPEED = 3.0  # tiles per second, the cars of the city (a third of it parking and backing out)
+YIELD_MAX_S = 4  # at a crossing a car gives way to the one on its right (Portugal), at most this long (four at once)
 CAR_COLORS = 7  # (art.CAR_PAINTS)
 RUN_SPEED = [1.4, 1.8, 2.4]  # x ACTOR_SPEED: staff run to a task in another room, faster the more urgent
 STRETCHER_SPEED = 2.4  # the two nurses pushing a stretcher (and the patient on it)

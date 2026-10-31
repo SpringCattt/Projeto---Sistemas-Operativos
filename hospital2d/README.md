@@ -158,7 +158,7 @@ structures ([`world.py`](world.py)):
 | triage queue | `queue.Queue` | producer–consumer: receptionists put registered patients, triage nurses take them |
 | `Summons` | two `Event`s | rendezvous between a member of staff and a patient: *arrived* (patient → staff), *done* (staff → patient) |
 | `Dispatcher` | monitor (`Condition`) | open tasks and who is doing what; woken up by every new task and every finished one |
-| `Theatres` | counting `Semaphore` + `Lock` | how many operating rooms are free, and which |
+| `Theatres` | counting `Semaphore` + `Lock` | how many operating rooms are free, and which; while an emergency waits for one, nobody else takes one |
 | `Transfer` | `Condition` + `Event`s | two nurses meet at storage with a stretcher, then pick up and deliver a Red patient |
 | ambulance bay | `Semaphore(1)` | one ambulance there at a time: the next one waits up the road |
 | `Elevator` | monitor (`Condition`) + the car's own thread | stretchers between floors: they call it once they're by its door and wait their turn (first there, first served: never held for one still on its way); it goes to whoever's turn it is, waits until the stretcher is in, takes it to its floor and waits until it's out. A stretcher waits its turn a few steps away and holds the elevator until it's out, so two never block each other at its door |
@@ -169,7 +169,8 @@ People blocking each other in a narrow spot (each waiting for the other's tile) 
 the two gives way (the newer one, at once; the other waits, and gives way itself only if that one had nowhere to
 go), so they never both turn aside into each other again. Giving way means getting off the other one's way, not
 just its next tile: to the closest free tile off it, a few steps along it if need be (a door, a corridor). Whoever
-just stands in someone's way is asked to do the same, and so is anyone in the way of a stretcher or a car.
+just stands in someone's way is asked to do the same, and so is anyone in the way of a stretcher. Blocked for 3 s by
+someone who doesn't move, it looks for a new way round them, however much longer.
 
 ### A patient's visit ([`patients.py`](patients.py))
 
@@ -251,8 +252,10 @@ straight instead of zig-zagging.
   it's doing — a Red patient takes a doctor away from a Green one, never from a Yellow one, so doctors don't keep
   jumping between similar tasks. And a doctor is only taken away before calling its patient: once called, it sees
   that patient through, so nobody walking to a consultation is ever sent back to the waiting room.
-* **Surgery** is never interrupted. The doctor takes a free operating room (semaphore), washes in its disinfection
-  room (semaphore) and only then goes in, from the disinfection room — never straight from the corridor.
+* **Surgery** is never interrupted. The doctor takes a free operating room (semaphore; emergencies first), calls the
+  patient there at once (it goes while the doctor washes), washes in its disinfection room (semaphore) and only then
+  goes in, from the disinfection room — never straight from the corridor. Once a doctor has called a patient, it
+  waits for it however long it takes: a patient with a doctor is never sent back to the waiting room.
 * **Ambulances:** every Red patient arrives by ambulance (and needs surgery), already triaged: they never walk. An
   `Ambulance` is an actor with its own thread: it waits its turn for the bay (a semaphore, one at a time), comes down
   its road from the top edge of the map with the siren on, and parks where the map's `ambulance` piece is. Its two
@@ -270,8 +273,8 @@ straight instead of zig-zagging.
   it's on and the one it just left (`world.occupied`, like people's tiles: a car is longer than a block), so cars
   queue a block apart and never touch. A crossing it takes whole, all the way across and the block after it, at once
   or not at all — never holding part of it while waiting for the rest (no hold-and-wait: two cars crossing each
-  other's way can't deadlock). It never drives onto someone on a zebra crossing: it waits and asks them to step
-  off its way; people plan their routes round cars. It claims its bay a block before reaching it, so nobody is
+  other's way can't deadlock). It never drives onto someone on a zebra crossing, nor asks them to move: people go
+  first, and it waits for them to pass; people plan their routes round cars. It claims its bay a block before reaching it, so nobody is
   standing in it when it turns in. The day doesn't end while a car is still bringing someone.
 * **Going home in a wheelchair:** a Red patient can't walk, so once cured it stays on the operating table (the
   operating room stays its own: the next surgery waits) until a nurse comes with a wheelchair from storage — in the

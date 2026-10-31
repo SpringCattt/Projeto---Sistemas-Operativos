@@ -44,6 +44,7 @@ PATIENT_LOOKS = [i for i in range(30) if all(i not in v for v in STAFF_LOOKS.val
 
 
 STEP_ASIDE_AFTER = 3.0  # simulated seconds blocked before giving way
+REROUTE_AFTER = 3.0  # blocked this long by someone who doesn't move: a new route round them
 HEAD_ON_S = 0.3  # ...or this, when it's the one of two head on that gives way
 ASIDE_RADIUS = 6  # how far someone asked to make way may walk to get off the way
 AROUND_RADIUS = 8  # going round people: only those this close count (the far ones will have moved by then)
@@ -263,6 +264,11 @@ class Actor:
                 # way; the other waits for it (and gives way itself only if that one had nowhere to go)
                 if self.stuck_for > (HEAD_ON_S if self.id > other.id else STEP_ASIDE_AFTER):
                     self.give_way(frozenset(other.path[:LOOK_AHEAD * 2]) | {nxt})
+            elif self.stuck_for > REROUTE_AFTER:  # whoever is in the way hasn't moved for that long: a new way
+                self.stuck_for = 0.0  # round them, however much longer (with none, it waits on)
+                r = self.route(self.path[-1], around_people=True)
+                if r:
+                    self.set_path(r)
             elif self.blocked_for > (0.1 if self.speed > 1 and self.in_my_way(other) else self.give_way_after):
                 self.blocked_for, self.give_way_after = 0.0, self.rng.uniform(0.4, 1.2)
                 self.detour(extra=12)

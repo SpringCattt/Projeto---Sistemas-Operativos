@@ -33,7 +33,7 @@ SNAPSHOT_HZ = 60  # times per second the simulation writes where everyone is (sh
 WORDS_HZ = 10  # ...and sends the words (names, speech, cards, stats) through the snapshots queue
 
 # Arrivals (the arrivals process)
-ARRIVALS_PER_MINUTE = 9  # (the hospital opens empty: enough of them to pay the wages)
+ARRIVALS_PER_MINUTE = 6  # (per simulated minute: with HOUR_S = 60, 6 an hour, ~140 a day)
 SURGE_EVERY_S = 240  # on average a surge starts this often...
 SURGE_SECONDS = 20  # ...lasts this long...
 SURGE_MULTIPLIER = 6  # ...and multiplies arrivals by this
@@ -79,11 +79,11 @@ SEND_HOME_AFTER_S = 90
 MAX_ON_CALL = 1.0  # how much of ON_CALL the Boss may call in at most (learned: 0 = nobody, 2 = twice as many)
 RUSH_FROM_HOUR = 22  # from this hour it calls staff in sooner (at half CALL_IN_AT), to be done by midnight (learned)
 
-# A day: DAY_HOURS hours of HOUR_S simulated seconds (24 x 30 s: 12 minutes at x1), from day 0. At midnight the
+# A day: DAY_HOURS hours of HOUR_S simulated seconds (24 x 60 s: 24 minutes at x1), from day 0. At midnight the
 # doors close: whoever is inside is seen to (or gives up), and once the last patient is gone the day is over. In the
 # game it then waits, paused, on the day's report until you start the next day.
 ANNOUNCE_S = 3.0  # a doctor's call: on the waiting room's screen and the loudspeaker this long before it goes
-HOUR_S = 30
+HOUR_S = 60
 DAY_HOURS = 24
 CLOSE_HOUR = 23  # no new patients from this hour: everyone inside should be seen to by DAY_HOURS (midnight)
 OVERTIME_PAY = 1.5  # past midnight, with patients still inside, every wage costs this many times more

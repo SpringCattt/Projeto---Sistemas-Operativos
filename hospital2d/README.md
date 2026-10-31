@@ -22,6 +22,8 @@ it into `assets/third_party/`:
 | `hospital/` (with `Pngs/` inside) | [Hospital Top-Down Pixel Pack](https://soppycraft.itch.io/top-down-hospital) by Soppycraft |
 | `characters/` (`000.png` … `039.png`) | [2D Top-Down Pixel Art Characters](https://gamebetweenthelines.itch.io/top-down-pixel-art-characters) by Jephed |
 | `moderntown/` (with `sprites/` inside) | [Modern Town Tileset — Free Sample](https://chuckyassets.itch.io/modern-town-tileset-free-sample) by Chucky Assets |
+| `citypack/` (`CP_V1.0.4_nyknck/`, `Animations/`); then run `python slice_city.py` once | [City Pack — Top Down — Pixel Art](https://nyknck.itch.io/citypackpixelart) by NYKNCK |
+| `furniture/` (the `Furniture (N).png` files) | a furniture pixel-art pack (demo) |
 
 **Controls:** WASD / arrows or right-drag to move · mouse wheel to zoom · click a person for their card, or any tile
 of a room to see who is inside (the list is clickable) · `L` event log on/off · `B` what the Boss is doing
@@ -42,7 +44,10 @@ game shows one floor at a time: `PgUp` / `PgDn` or the floor buttons, and the vi
 when they go up or down.
 
 * **Ground floor:** emergencies. Street, reception, triage, waiting rooms, bar, Emergency (with its ambulance
-  bay), storage right next to it (the stretchers start there) and the Boss's control room.
+  bay), storage right next to it (the stretchers and wheelchairs start there) and the Boss's control room — the
+  AI's room, with its servers. Round the grounds, the **city**: a ring road, streets out to the four edges of the
+  map (the rest of the city: cars come from there and go back there), pavements, buildings, lamps, traffic lights,
+  and the **parking lot** below the street in front of the entrance.
 * **First floor:** the doctors' rooms.
 * **Second floor:** the surgeries (with their disinfection rooms), and the staff's rest room right on top of the
   Main Hall, in the middle of the hospital.
@@ -82,7 +87,15 @@ the next time it starts:
 * **furniture** — drag pieces from the tileset. A piece takes up the tiles its tile says (properties `w`, `h`),
   unless the piece has its own `w`, `h`. `stretcher` pieces are where stretchers park. An `elevator` stops on
   every floor that has one at the same place; it opens downwards, onto three free tiles (where a stretcher gets in
-  and out).
+  and out). `parking` and `dropoff` pieces (2 x 4 tiles, only marks: not drawn) are the parking lot's bays, each
+  right above or below a lane; drop-off bays are for taxis and for cars taking someone home.
+* **scenery** (optional) — pieces that are only drawn, anywhere, never in anyone's way: the city's buildings,
+  lamps, trees, benches (the City Pack's pieces). Buildings and lamps light up at night.
+* **Roads** are ground tiles: every lane is 2 tiles wide and one way, and cars drive on 2 x 2 blocks (x and y
+  even). `road_<n|s|e|w>_edge` / `_mid` (the white line by the kerb / the yellow one in the middle) go that way,
+  `road_x` is a crossing (any way); the parking lot's lanes are `lot_e`, `lot_n`, `lot_s`, `lot_x` (people may walk
+  on those). Where a lane leaves the map, cars come in or go out. Keep right: a lane going east is the bottom half
+  of its road.
 
 The staff follows the map: one doctor per doctor's room (desk with an office chair and a patient's chair, and an
 exam bed), one receptionist per office chair at reception, one triage nurse per office chair in triage, one
@@ -244,6 +257,25 @@ straight instead of zig-zagging.
   free bed in Emergency (kept for them while they go: `claim_bed`; if all are taken, they wait), slide it onto the
   bed, and only then is it in the doctors' queue. Then they get back in and it drives off. The day doesn't end while
   an ambulance is still bringing someone.
+* **Cars** ([`vehicles.py`](vehicles.py)): everyone else comes by car. A `Car` is an actor with its own thread: it
+  comes in from where a road leaves the map, drives along the lanes block by block (`Layout.drive_path`, a
+  breadth-first search that only goes the way each lane goes), parks nose first in a free bay of the lot, and its
+  patient gets out beside it; it waits there until the patient comes back, backs out and drives off to the city.
+  The bays are a shared resource (`Hospital.claim_bay` / `free_bay`, a list under a lock): with none free, a taxi
+  brings the patient to a drop-off bay and leaves (that patient goes home on foot). A car takes up the block of road
+  it's on and the one it just left (`world.occupied`, like people's tiles: a car is longer than a block), so cars
+  queue a block apart and never touch. A crossing it takes whole, all the way across and the block after it, at once
+  or not at all — never holding part of it while waiting for the rest (no hold-and-wait: two cars crossing each
+  other's way can't deadlock). It never drives onto someone walking on the lot's lane: it waits and asks them to
+  step off its way; people plan their routes round cars. The day doesn't end while a car is still bringing someone.
+* **The bar** sells coffee and snacks: two `Bartender`s behind its counter (`config.BARTENDERS`); a patient waiting
+  for a doctor goes over now and then (`BAR_CHANCE_PER_S`), is served across the counter and pays (`BAR_PRICE`, the
+  day's income, credited to whoever served it). A doctor's call waits for it to come back.
+* **Going home in a wheelchair:** a Red patient can't walk, so once cured it stays on the operating table (the
+  operating room stays its own: the next surgery waits) until a nurse comes with a wheelchair from storage — in the
+  elevator if need be, the nurse and the chair a train of two, with the same code as the stretchers — and wheels it
+  down to the street, where they wait for the car that came to take it home (`Hospital.discharge`); into the car,
+  and the chair back to storage.
 * **Stretchers** (`config.STRETCHERS`) are parked upright in storage, where the map's `stretcher` pieces are.
   Whoever parks one ends up on a side it can walk away from (never a corner the stretcher would shut), idle staff
   never stand next to the parked ones, and `test_layout.py` checks every parking spot can be used that way. The dispatcher hands out the two nurses of
@@ -271,7 +303,9 @@ straight instead of zig-zagging.
 | `patients.py` | a patient's visit |
 | `arrivals.py` | the arrivals process |
 | `eventlog.py` | the log process |
-| `layout.py` | builds the plan from `config.py`: rooms, doors, furniture, named spots |
+| `layout.py` | reads the maps: rooms, doors, furniture, named spots, roads and parking bays |
+| `vehicles.py` | the cars of the city |
+| `slice_city.py` | cuts the City Pack into one PNG per piece (run once) |
 | `maps/` | the building, one Tiled map per floor (`floor0.tmj`...), and the tileset with every floor, wall, stairs and furniture PNG (`hospital.tsj`) |
 | `art.py` | loads the PNGs and draws the plan |
 | `dialogue.py` | picks what people say from `data/dialogue.txt` |
@@ -285,8 +319,9 @@ wooden double doors seen from above; open, each leaf swings back against its sid
 
 **Seats face their way.** Patients' chairs in the waiting rooms, triage and the doctors' rooms are turned
 (`chair_up`, seen from behind): patients face the nurse, the doctor, the waiting room's TV and call screen. Anyone
-sitting is drawn from the waist up, the chair or desk in front covering the rest; PCs are seen from behind, their
-screens facing whoever works at them.
+sitting is drawn whole, a little lower, over the chair (a desk or counter in front still covers the legs); PCs are
+seen from behind, their screens facing whoever works at them. TVs, the call screen, paintings and boards hang on the
+wall, small enough to fit on it; the call screen shows one call at a time, blinking, then the next.
 
 **Animations.** Besides the people walking (the character sheets' frames, now with a shadow under their feet):
 ambulances flash their lights and open their back doors while the paramedics unload, the elevator's doors slide
@@ -351,9 +386,11 @@ still grew with the number of doctors; `bench.py` now keeps the map's staff and 
 * [Hospital Top-Down Pixel Pack](https://soppycraft.itch.io/top-down-hospital) — Soppycraft
 * [2D Top-Down Pixel Art Characters](https://gamebetweenthelines.itch.io/top-down-pixel-art-characters) — Jephed, [Game Between The Lines](https://gamebetweenthelines.com/)
 * [Modern Town Tileset — Free Sample](https://chuckyassets.itch.io/modern-town-tileset-free-sample) — [Chucky Assets](https://chuckyassets.itch.io/)
+* [City Pack — Top Down — Pixel Art](https://nyknck.itch.io/citypackpixelart) — NYKNCK (buildings, cars, street furniture; the roads are our own, in its colours)
+* A furniture pixel-art pack (demo): the sofas, consoles and the rest of `art.PACK`
 * [m5x7](https://managore.itch.io/m5x7) font, used in the speech bubbles — Daniel Linssen, CC0 (in `assets/fonts/`)
 
 ## Ideas for later
 
-Parking, a working storage room (nurses and cleaners fetching
+A working storage room (nurses and cleaners fetching
 supplies), bathrooms and other needs (bar, vending machines, TV), patients wandering where they shouldn't.

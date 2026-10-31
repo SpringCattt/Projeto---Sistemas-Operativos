@@ -15,7 +15,7 @@ from arrivals import new_patient, run_arrivals  # noqa: E402 (after the speed-up
 from sim import JOBS, Hospital, new_positions, read_positions, write_positions  # noqa: E402
 from world import Dispatcher, Line, Task, Theatres  # noqa: E402
 
-PATIENT_ONLY_NOT = {'bar', 'control', 'storage', 'rest', 'disinfection'}  # rooms a patient never enters
+PATIENT_ONLY_NOT = {'control', 'storage', 'rest', 'disinfection'}  # rooms a patient never enters (the bar: it buys a coffee)
 
 
 @contextlib.contextmanager
@@ -170,8 +170,8 @@ def test_flow_and_rules():
             with h.world.lock:  # tiles only change holding this lock, so this is a consistent picture
                 with h.actors_lock:
                     actors = list(h.actors)
-                tiles = [(a.tx, a.ty) for a in actors  # (whoever is inside the elevator is off the floor)
-                         if (a.role != 'patient' or not a.gone) and not a.hidden]
+                tiles = [(a.tx, a.ty) for a in actors  # (whoever is inside the elevator is off the floor; a car takes
+                         if (a.role != 'patient' or not a.gone) and not a.hidden and a.role != 'car']  # up blocks)
                 assert len(set(tiles)) == len(tiles), 'two actors on one tile'
                 for a in actors:
                     if a.role == 'patient':
@@ -500,6 +500,60 @@ def test_reactions():
                 assert until(lambda: h.stats[key] >= 1, 40), f'no {key}: {h.summary()}'
             assert until(lambda: any('cleaned' in t for _, t in h.events), 40), 'nobody cleaned the mess'
             assert until(lambda: h.stats['fights_stopped'] >= 1, 60), 'security never stopped the fight'
+        finally:
+            stop(h)
+
+
+def test_cars():
+    """Patients come by car from the city: it parks in a bay, they get out beside it, and once seen to they walk back
+    to it and it drives off (the bay free again)."""
+    h = Hospital(seed=4, n_doctors=4, n_surgeries=1, n_patients=0)
+    h.start()
+    try:
+        cars = [h.admit(info()) for _ in range(2)]
+        assert all(c.role == 'car' for c in cars)
+        assert until(lambda: all(c.passenger is not None for c in cars), 20), 'nobody got out of the cars'
+        assert all(c.passenger.car is c for c in cars)
+        assert until(lambda: h.stats['treated'] >= 2 and not any(c in h.actors for c in cars), 90), h.summary()
+        assert len(h.free_bays['parking']) == len(h.lay.bays['parking'])
+    finally:
+        stop(h)
+
+
+def test_wheelchair():
+    """A cured Red patient never walks out: it waits on the operating table (the room stays its own) until a nurse
+    wheels it to the car that came for it."""
+    h = Hospital(seed=10, n_doctors=1, n_surgeries=1, n_patients=0)
+    h.start()
+    walked = []
+    try:
+        h.admit(info(2, surgery=True))
+
+        def home():
+            p = next((a for a in h.actors if a.role == 'patient'), None)
+            if p is not None and getattr(p, 'cured', False):
+                walked.append(bool(p.path) and not p.wheelchair and not p.lying)
+                if getattr(p, 'theatre', None) is not None:  # still in it: nobody else gets the room
+                    assert p.theatre not in h.theatres.free
+            return h.stats['treated'] >= 1 and p is None and not any(a.role == 'car' for a in h.actors)
+
+        assert until(home, 120), 'the patient never went home in a wheelchair'
+    finally:
+        stop(h)
+    assert not any(walked), 'a Red patient walked'
+    assert len(h.theatres.free) == 1, 'the operating room was never given back'
+    assert all(c.home == (c.tx, c.ty) for c in h.world.occupied.values() if getattr(c, 'kind', None) == 'wheelchair')
+
+
+def test_bar():
+    """Patients waiting for a doctor go for a coffee: the bartender behind the counter serves them, and it's paid."""
+    with settings(BAR_CHANCE_PER_S=0.2):
+        h = Hospital(seed=6, n_doctors=0, n_surgeries=0, n_patients=4)
+        h.start()
+        try:
+            assert sum(a.role == 'bartender' for a in h.actors) == 2
+            assert until(lambda: h.stats['bar_sales'] >= 1, 40), 'nobody bought anything at the bar'
+            assert h.stats['income'] >= config.BAR_PRICE
         finally:
             stop(h)
 

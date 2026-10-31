@@ -16,7 +16,7 @@ semaphores.
    ```
    pip install pygame-ce
    ```
-2. Download the three free asset packs (their licences don't allow uploading them here) and unzip them into
+2. Download the five free asset packs (their licences don't allow uploading them here) and unzip them into
    `hospital2d/assets/third_party/`:
 
    | Unzip into | Pack | Author |
@@ -24,6 +24,8 @@ semaphores.
    | `hospital/` (with `Pngs/` inside) | [Hospital Top-Down Pixel Pack](https://soppycraft.itch.io/top-down-hospital) | Soppycraft |
    | `characters/` (`000.png` … `039.png`) | [2D Top-Down Pixel Art Characters](https://gamebetweenthelines.itch.io/top-down-pixel-art-characters) | Jephed — Game Between The Lines |
    | `moderntown/` (with `sprites/` inside) | [Modern Town Tileset — Free Sample](https://chuckyassets.itch.io/modern-town-tileset-free-sample) | Chucky Assets |
+   | `citypack/` (`CP_V1.0.4_nyknck/`, `Animations/`); then run `python slice_city.py` in `hospital2d/` once | [City Pack — Top Down — Pixel Art](https://nyknck.itch.io/citypackpixelart) | NYKNCK |
+   | `furniture/` (the `Furniture (N).png` files) | a furniture pixel-art pack (demo) | — |
 
    Everything else (floors, walls, reception desk, speech bubbles…) is our own art, already in
    `hospital2d/assets/custom/`.

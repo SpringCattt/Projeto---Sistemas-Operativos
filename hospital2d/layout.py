@@ -13,10 +13,18 @@ import config
 EMPTY, WALL, FLOOR, DOOR = 0, 1, 2, 3
 
 MAPS = os.path.join(os.path.dirname(__file__), 'maps')  # the floors, drawn in the Tiled map editor (see README)
+# The city's roads (outside floor 0): a lane each way, each lane 2 tiles wide and one way.
+# Cars drive on 2 x 2 blocks of tiles (x and y even); the top-left tile of a block says which way: n, s, e, w, or x
+# (a crossing: any way). The parking lot's lanes ('lot_') are roads too, but people may walk on them
+DRIVE = {f'road_{way}_{part}': way for way in 'nsew' for part in ('edge', 'mid')}
+DRIVE.update({'road_x': 'x', 'lot_e': 'e', 'lot_n': 'n', 'lot_s': 's', 'lot_x': 'x'})
+STEP = {'n': (0, -2), 's': (0, 2), 'e': (2, 0), 'w': (-2, 0)}  # (from one block to the next)
 GROUND = {'wall': WALL, 'door': DOOR, 'floor_grass': EMPTY,  # what a ground tile is; any other one is floor
           'road_l': EMPTY, 'road_r': EMPTY}  # (the ambulance's road: nobody walks on it)
+GROUND.update({name: EMPTY for name in DRIVE if name.startswith('road_')})
 STAIRS = 'stairs'  # a stairs tile goes to the stairs tile at the same place on the floor above and below
 FLOOR_GAP = 4  # the floors lie side by side in one grid (grass between them: nobody walks across)
+MARKERS = {'parking', 'dropoff'}  # where cars park (2 x 4 tiles; 'dropoff': taxis, and cars taking someone home)
 # Hung on the wall: on a room's top row they're drawn up on the wall above it, and don't take up the floor below
 WALL_MOUNTED = {'speaker', 'big_tv', 'call_screen', 'painting', 'painting_2', 'notice_board', 'first_aid',
                 'xray_viewer', 'fire_extinguisher', 'clock', 'poster', 'eye_chart'}
@@ -25,7 +33,11 @@ SEATS = {'chair', 'chair_up', 'office_chair', 'bench', 'sofa'}  # furniture peop
 DECOR = {'plant', 'sanitizer', 'trash_bin', 'cabinet', 'biohazard', 'iv_stand', 'bp_monitor', 'eye_chart', 'poster',
          'clock', 'tv', 'vending', 'soda', 'snacks', 'fridge', 'bedside', 'armchair', 'coffee', 'map_stand',
          'exit_sign', 'ultrasound', 'monitor', 'tray', 'water_cooler', 'magazine_rack', 'fire_extinguisher', 'painting',
-         'painting_2', 'notice_board', 'xray_viewer', 'big_plant', 'big_plant_2', 'coat_rack', 'first_aid'}
+         'painting_2', 'notice_board', 'xray_viewer', 'big_plant', 'big_plant_2', 'coat_rack', 'first_aid',
+         'sofa_beige', 'sofa_corner', 'sofa_grey', 'chaise', 'bookcase', 'grandfather_clock', 'wardrobe', 'dresser',
+         'sideboard', 'pc_desk', 'desk_white', 'workbench', 'folding_screen',
+         'console_curved', 'lab_desk', 'holo_table', 'monitor_wall', 'sci_device', 'scan_bed', 'robot_desk',
+         'sleep_pod', 'command_desk', 'command_desk_2', 'energy_core', 'gaming_chair'}
 DIRECTIONS = ((1, 0), (-1, 0), (0, 1), (0, -1))
 TURN = 0.001  # extra cost of a turn when planning a route
 
@@ -78,8 +90,8 @@ def load_layout(folder=MAPS):
     stride = max(len(f[0][0]) for f in floors) + FLOOR_GAP
     height = max(len(f[0]) for f in floors)
     ground = [['custom/floor_grass'] * stride * len(floors) for _ in range(height)]
-    rooms, furniture, staff_only, stretchers = [], [], set(), []
-    for n, (g, rs, fs, so, st) in enumerate(floors):
+    rooms, furniture, staff_only, stretchers, scenery = [], [], set(), [], []
+    for n, (g, rs, fs, so, st, sc) in enumerate(floors):
         dx = n * stride
         for y, row in enumerate(g):
             ground[y][dx:dx + len(row)] = row
@@ -91,7 +103,8 @@ def load_layout(folder=MAPS):
         furniture += fs
         staff_only |= {(x + dx, y) for x, y in so}
         stretchers += [(x + dx, y) for x, y in st]
-    return Layout(ground, rooms, furniture, staff_only, stretchers, stride)
+        scenery += [(name, x + dx * config.TILE, y) for name, x, y in sc]
+    return Layout(ground, rooms, furniture, staff_only, stretchers, stride, scenery)
 
 
 def read_floor(path):
@@ -100,7 +113,9 @@ def read_floor(path):
     kind as the class, an ellipse for a round one; property partner = the room it works with, walls = false for
     the street; and 'staff_only' rectangles: patients never walk there) and 'furniture' (pieces from the hospital
     tileset; their size on the floor is the tile's w and h, or the piece's own; 'stretcher' pieces are where the
-    stretchers park; an 'elevator' opens downwards, at the same place on every floor it stops at)."""
+    stretchers park; an 'elevator' opens downwards, at the same place on every floor it stops at; 'parking' and
+    'dropoff' pieces are bays of the parking lot, in front of a lane). And, if there is one, 'scenery': pieces that
+    are only drawn, anywhere, never in anyone's way (the city: buildings, lamps, trees...)."""
     T = config.TILE
     with open(path, encoding='utf-8') as f:
         m = json.load(f)
@@ -146,15 +161,19 @@ def read_floor(path):
         if p['kind'] == 'stretcher':
             stretchers.append((x, y))
         else:
-            furniture.append(Furniture(p['kind'], x, y, p['kind'] not in SEATS | WALL_MOUNTED, fw, fh))
-    return ground, rooms, furniture, staff_only, stretchers
+            furniture.append(Furniture(p['kind'], x, y, p['kind'] not in SEATS | WALL_MOUNTED | MARKERS, fw, fh))
+    image_of = lambda o: tiles[o['gid'] & 0x0FFFFFFF]
+    scenery = [(image_of(o)['image'].split('assets/', 1)[1][:-4], round(o['x']), round(o['y']) - image_of(o)['imageheight'])
+               for o in layers['scenery']['objects']] if 'scenery' in layers else []  # (image, x, y of its top-left)
+    return ground, rooms, furniture, staff_only, stretchers, scenery
 
 
 class Layout:
-    def __init__(self, ground, rooms, furniture, staff_only, stretchers, stride=None):
+    def __init__(self, ground, rooms, furniture, staff_only, stretchers, stride=None, scenery=()):
         """ground: the image of each tile ([y][x], from the assets folder), which also says what it is (GROUND).
         stride: how far apart the floors are in x (load_layout). The rest as read_floor reads it from the maps."""
         self.ground, self.rooms, self.width, self.height = ground, rooms, len(ground[0]), len(ground)
+        self.scenery = scenery
         self.stride = stride or self.width
         self.floors = -(-self.width // self.stride)
         # Stairs: each stairs tile leads to the one at the same place on the floor above / below, if there is one
@@ -194,7 +213,11 @@ class Layout:
         self.seats = {t for f in self.furniture if f.kind in SEATS for t in f.tiles()}
         # which way whoever sits there faces: down, except on a chair turned the other way (towards a nurse, a
         # doctor, the waiting room's TV)
-        self.seat_facing = {t: 'up' for f in self.furniture if f.kind == 'chair_up' for t in f.tiles()}
+        self.seat_facing = {t: 'up' for f in self.furniture if f.kind in ('chair_up', 'bench') for t in f.tiles()}
+        tables = {t for f in self.furniture if f.kind in ('desk', 'counter', 'boss_desk') for t in f.tiles()}
+        for x, y in self.seats:  # at a desk or counter: towards it (rooms drawn upside down have it above)
+            if (x, y - 1) in tables or (x, y + 1) in tables:
+                self.seat_facing[(x, y)] = 'up' if (x, y - 1) in tables else 'down'
 
         self.staff_only = staff_only  # behind the counters (reception, bar): patients never walk there
         self._find_spots(near_door, stretchers)
@@ -271,6 +294,8 @@ class Layout:
         self.stretcher_lane = {(x + dx, y + dy) for x, y in stretchers for dx in (-1, 0, 1) for dy in (-1, 0, 1)}
         self.stretcher_spots = [t for r in self.rooms_of('storage') for t in self.free_tiles(r)
                                 if t not in self.stretcher_lane]
+        # The wheelchairs (cured Red patients leave in one) are kept in the last two of those
+        self.wheelchair_spots, self.stretcher_spots = self.stretcher_spots[-2:], self.stretcher_spots[:-2]
         # Elevators: the same box at the same place on each floor it serves. It opens downwards, onto a column of
         # three tiles where a stretcher train (nurse, stretcher, nurse) waits to get in and comes out
         shafts = {}
@@ -288,10 +313,50 @@ class Layout:
         self.waiting_seats = {r: [t for t in self.free_tiles(r) if t in self.seats] for r in self.rooms_of('waiting')}
         self.control_seat = next((f.x, f.y) for r in self.rooms_of('control') for f in furniture_in(r, 'office_chair'))
         self.rest_spots = [t for r in self.rooms_of('rest') for t in self.free_tiles(r) if t in self.seats]
+        # The bar: where a bartender stands behind the counter, and the tile across it where a customer stands
+        self.bar_spots = [((f.x, f.y + d), (f.x, f.y - d)) for r in self.rooms_of('bar') for f in furniture_in(r, 'counter')
+                          for d in (-1, 1) if (f.x, f.y + d) in self.staff_only and self.walkable(f.x, f.y + d)
+                          and self.walkable(f.x, f.y - d) and (f.x, f.y - d) not in self.staff_only]
+
+        # The city's roads, by blocks (DRIVE); cars come in where a lane enters floor 0 from beyond its edge (the
+        # rest of the city), and leave where one goes out
+        self.drive = {(x, y): DRIVE[self.ground[y][x].rsplit('/', 1)[-1]] for y in range(0, self.height - 1, 2)
+                      for x in range(0, self.width - 1, 2) if self.ground[y][x].rsplit('/', 1)[-1] in DRIVE}
+        beyond = lambda x, y: not (0 <= x < self.stride - FLOOR_GAP and 0 <= y < self.height)
+        self.city_in = [b for b, way in self.drive.items() if way in STEP and beyond(b[0] - STEP[way][0], b[1] - STEP[way][1])]
+        self.city_out = [b for b, way in self.drive.items() if way in STEP and beyond(b[0] + STEP[way][0], b[1] + STEP[way][1])]
+        # The parking lot's bays: where a car stops (the middle of the bay), the block of lane it drives in from, the
+        # way its nose points once in, and the tile beside it where its people get out and back in
+        self.bays = {kind: [] for kind in MARKERS}
+        for f in self.furniture:
+            lane = next(((f.x, y) for y in (f.y + f.h, f.y - 2) if (f.x, y) in self.drive), None) if f.kind in MARKERS else None
+            if lane:
+                below = lane[1] > f.y  # (the lane below the bay: it drives in upwards)
+                self.bays[f.kind].append({'kind': f.kind, 'tiles': f.tiles(), 'lane': lane, 'stop': (f.x + f.w / 2, f.y + f.h / 2),
+                                          'nose': 'up' if below else 'down', 'door': (f.x, lane[1] + (0 if below else 1))})
 
     def walkable(self, x, y):
         return 0 <= x < self.width and 0 <= y < self.height \
             and self.tiles[y][x] in (FLOOR, DOOR) and (x, y) not in self.solid
+
+    def drive_path(self, start, goals):
+        """The blocks a car drives through from block `start` to the nearest of `goals` (start excluded), each step
+        the way both blocks let it go; [] if it can't get there."""
+        goals, came, todo = set(goals), {start: None}, deque([start])
+        while todo:
+            b = todo.popleft()
+            if b in goals:
+                route = []
+                while b != start:
+                    route.append(b)
+                    b = came[b]
+                return route[::-1]
+            for way, (dx, dy) in STEP.items():
+                n = (b[0] + dx, b[1] + dy)
+                if n not in came and self.drive[b] in (way, 'x') and self.drive.get(n) in (way, 'x'):
+                    came[n] = b
+                    todo.append(n)
+        return []
 
     def floor_of(self, x):
         """Which floor a tile (or a position) is on, from its x."""

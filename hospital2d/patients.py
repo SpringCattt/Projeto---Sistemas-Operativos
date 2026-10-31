@@ -32,6 +32,9 @@ class Patient(Actor):
         self.delivered = None  # brought by ambulance: an Event, set once the paramedics have put it on a bed
         self.triaged = triaged
         self.provoke = None  # 'fight' / 'vomit': ordered from the admin tablet (done by its own thread)
+        self.car = None  # the car that brought it and waits for it (vehicles.Car), if any
+        self.wheelchair = False  # being wheeled out (staff.WardNurse.wheelchair)
+        self.at_bar = False  # at the bar's counter, being served
 
     def label(self):
         return f'{self.name} ({config.URGENCY_NAMES[self.rank]})' if self.rank is not None else self.name
@@ -84,7 +87,8 @@ class Patient(Actor):
                 break
             place = self.h.line.place(self)
             if place is not None:  # walk to its place (it moves up as the line advances)
-                spots, outside = self.lay.line_spots, self.lay.street_line
+                # (a long line goes on along the whole street in front, never all onto its last tile)
+                spots, outside = self.lay.line_spots, self.lay.street_line + self.lay.street_edge
                 spot = spots[place] if place < len(spots) else outside[min(place - len(spots), len(outside) - 1)]
                 if (self.tx, self.ty) != spot and not self.path:
                     self.set_path(self.route(spot))
@@ -181,6 +185,28 @@ class Patient(Actor):
             self.h.log(f'{self.name} is getting worse: now {config.URGENCY_NAMES[self.rank]}')
         if not self.path and self.rng.random() < config.VOMIT_CHANCE_PER_S[self.rank] * dt:
             self.vomit()
+        elif not self.path and self.waiting_room is not None and self.waiting_room.kind == 'waiting' \
+                and self.rng.random() < config.BAR_CHANCE_PER_S * dt:
+            self.bar_trip()
+
+    def bar_trip(self):
+        """A coffee or a snack at the bar while it waits (a doctor's call waits for it to come back)."""
+        with self.world.lock:
+            open_ = [(front, self.world.occupied[spot]) for spot, front in self.lay.bar_spots
+                     if front not in self.world.occupied and getattr(self.world.occupied.get(spot), 'role', None) == 'bartender']
+        if not open_:
+            return
+        front, bartender = min(open_, key=lambda o: abs(o[0][0] - self.tx) + abs(o[0][1] - self.ty))
+        self.stage, self.allowed = 'going to the bar', BASE_ROOMS | {'bar', 'corridor'}
+        if self.go(front, timeout=60):
+            self.facing = 'up' if bartender.ty < self.ty else 'down'
+            self.at_bar = True
+            self.wait(self.rng.uniform(*config.BAR_S))
+            self.at_bar = False
+            self.h.bar_sale(bartender)
+            self.say('<3', 2)
+        self.go_wait()
+        self.stage = 'waiting for a doctor'
 
     def vomit(self):
         x, y = self.tx, self.ty
@@ -243,12 +269,23 @@ class Patient(Actor):
         return None
 
     def leave(self):
+        if getattr(self, 'cured', False) and self.base_urgency == 2 and self.lay.city_in:  # Red: it can't walk out
+            self.stage = 'waiting for a wheelchair to go home'
+            self.h.discharge(self)
+            self.wait_until(self.home.is_set)
+            self.gone = True
+            return
         self.gone = True
         self.get_up()
         if self.task is not None:
             self.h.dispatcher.cancel(self.task)
         self.h.line.leave(self)
         self.stage, self.allowed = 'leaving', BASE_ROOMS | {'corridor', 'doctor', 'surgery'}
+        if self.car is not None:  # back to its car, which drives off with it
+            self.doing = 'back to the car'
+            self.go(self.car.bay['door'], timeout=180)
+            self.car.back.set()
+            return
         self.walk_out()  # corridor exits for whoever saw a doctor
         # the thread ends here; the hospital removes it
 
@@ -283,10 +320,13 @@ class Patient(Actor):
         None if the call was cancelled."""
         here = self.lay.room_at[self.ty][self.tx]
         self.stage, self.allowed = call.stage, BASE_ROOMS | call.allow | ({here.kind} if here else set())
+        result = None
         try:
-            return self._answer(call)
+            result = self._answer(call)
+            return result
         finally:
-            self.get_up()
+            if not (result == 'done' and self.base_urgency == 2 and self.lay.city_in):  # (Red: it stays lying
+                self.get_up()  # until its wheelchair comes)
             self.on_stretcher, self.speed = False, 1.0
 
     def _answer(self, call):
@@ -336,5 +376,6 @@ class Patient(Actor):
     def snapshot(self):
         s = super().snapshot()
         s['mark'] = 'cured' if getattr(self, 'cured', False) else self.rank  # (cured: on its way out)
+        s['wheelchair'] = self.wheelchair
         s['card'] = s['card'][1:]  # 'Doing' says nothing for a patient: 'Stage' does
         return s

@@ -16,7 +16,8 @@ from actors import ROW
 from arrivals import new_patient
 from layout import load_layout
 from patients import Patient
-from staff import Ambulance, Boss, Cart, Cleaner, Doctor, Receptionist, Security, TriageNurse, WardNurse
+from staff import Ambulance, Bartender, Boss, Cart, Cleaner, Doctor, Receptionist, Security, TriageNurse, WardNurse
+from vehicles import Car
 
 SPEEDS = (0.25, 0.5, 1, 2, 4, 8)  # what the admin tablet offers
 BRAIN = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'boss_brain.json')  # written by learn.py
@@ -45,6 +46,8 @@ class Hospital:
         self.theatres = Theatres(self.lay.rooms_of('surgery')[:n_surgeries])
         self.lifts = [Elevator(stops) for stops in self.lay.lifts]
         self.ambulance_bay = threading.Semaphore(1)  # one ambulance there at a time
+        self.bays_lock = threading.Lock()  # the parking lot's free bays, by kind: one car in each at a time
+        self.free_bays = {kind: list(bays) for kind, bays in self.lay.bays.items()}
         self.bed_claims = set()  # Emergency beds the paramedics are taking someone to (world.lock)
         self.disinfection = {r: threading.Semaphore(max(1, len(spots))) for r, spots in self.lay.sink_spots.items()}
         self.log_out = log_out  # Queue to the log process (or None)
@@ -66,8 +69,12 @@ class Hospital:
         lay, rng = self.lay, self.rng
         for spot in lay.stretcher_bay[:config.STRETCHERS]:  # parked before anyone is placed: they take a tile
             self.world.occupied[spot] = Cart(spot)
+        for spot in lay.wheelchair_spots:
+            self.world.occupied[spot] = Cart(spot, 'wheelchair')
         staff = [Receptionist(self, seat, front, rng) for seat, front in lay.reception_desks]
         staff += [TriageNurse(self, room, seat, chair, rng) for room, seat, chair in lay.triage_desks]
+        spread = lay.bar_spots[::max(1, len(lay.bar_spots) // config.BARTENDERS)][:config.BARTENDERS]
+        staff += [Bartender(self, spot, front, rng) for spot, front in spread]
         rooms = lay.rooms_of('doctor')[:n_doctors]
         if on_call:  # the farthest rooms wait for the doctors on call
             rooms = rooms[:max(1, len(rooms) - config.ON_CALL.get('Doctor', 0))]
@@ -141,8 +148,9 @@ class Hospital:
             if not self.closed and hour >= config.CLOSE_HOUR:
                 self.closed = True
                 self.log(f'{config.CLOSE_HOUR}:00: no more patients today. The ones inside are seen to by midnight')
-            if self.closed and self.day_over is None and not self.patients() \
-                    and not any(a.role == 'ambulance' for a in self.actors):  # (still bringing someone)
+            bringing = any(a.role == 'ambulance' or getattr(a, 'bringing', False) for a in self.actors)  # (an
+            # ambulance or a car still on its way with someone)
+            if self.closed and self.day_over is None and not self.patients() and not bringing:
                 self.end_day()
 
     def today(self):
@@ -238,12 +246,52 @@ class Hospital:
             return a
         if info['urgency'] == 2:  # (a map with no ambulance: straight onto a bed in Emergency)
             return self.add_waiting(info)
-        p = Patient(self, self.lay.street_edge, self.rng, info)
+        if self.lay.city_in and self.lay.bays['dropoff']:  # by car: its own if a bay is free, or else a taxi
+            car = Car(self, self.rng, info, self.claim_bay('parking'))
+            with self.actors_lock:
+                self.actors.append(car)
+            if self.running:
+                self._spawn(car.run, (), f'car-{car.id}')
+            return car
+        return self.out_of_car(info, None, None)  # (a map with no city: it walks in from the street)
+
+    def out_of_car(self, info, tiles, car):
+        """The patient a car brought, getting out on one of `tiles` (it goes back to that car when it leaves)."""
+        p = Patient(self, tiles or self.lay.street_edge, self.rng, info)
+        p.car = car
         with self.actors_lock:
             self.actors.append(p)
         if self.running:
             self._spawn(p.run, (), f'patient-{p.id}')
         return p
+
+    def discharge(self, p):
+        """A cured Red patient can't walk out: a car comes to take it home, and a nurse wheels it there (a task)."""
+        p.home = threading.Event()
+        car = Car(self, self.rng, pickup=p)
+        with self.actors_lock:
+            self.actors.append(car)
+        if self.running:
+            self._spawn(car.run, (), f'car-{car.id}')
+        task = Task('wheelchair', 'nurse', 0, tile=(p.tx, p.ty), created=self.clock())
+        task.discharged, task.car = p, car
+        self.dispatcher.submit(task)
+        self.log(f'{p.label()} is going home: a wheelchair, and a car on its way')
+
+    def give_back_theatre(self, p):
+        """The operating room a cured Red patient stayed in (Doctor.operate), once it's out of it."""
+        room, p.theatre = getattr(p, 'theatre', None), None
+        if room is not None:
+            self.theatres.give_back(room)
+
+    def claim_bay(self, kind):
+        """A free bay of the parking lot ('parking' or 'dropoff'), now the claimer's; None if they're all taken."""
+        with self.bays_lock:
+            return self.free_bays[kind].pop(0) if self.free_bays[kind] else None
+
+    def free_bay(self, bay):
+        with self.bays_lock:
+            self.free_bays[bay['kind']].append(bay)
 
     def announce(self, p, room):
         """A doctor calls p from its waiting room: its name and where to go come up on that room's call screen and
@@ -488,6 +536,13 @@ class Hospital:
                 for a in who:
                     self.credit[a.label()] += pay * share / len(who)
 
+    def bar_sale(self, bartender):
+        """A coffee or a snack sold at the bar: income, credited to whoever sold it."""
+        with self.stats_lock:
+            self.stats['income'] += config.BAR_PRICE
+            self.stats['bar_sales'] += 1
+            self.credit[bartender.label()] += config.BAR_PRICE
+
     def credit_for(self, actor, kind):
         """Security and cleaners: what a fight stopped or a mess cleaned counts for the bonus (config.CREDIT)."""
         with self.stats_lock:
@@ -546,7 +601,7 @@ class Hospital:
             messes = list(self.world.messes)
             pushed = {id(a.pushing) for a in actors if getattr(a, 'pushing', None) is not None}
             # every stretcher on the floor that nobody is pushing (the nurses walking to one: it stays where it is)
-            parked = [(c.px, c.py, c.facing) for c in self.world.occupied.values()
+            parked = [(c.px, c.py, c.facing, c.kind) for c in self.world.occupied.values()
                       if isinstance(c, Cart) and id(c) not in pushed]
         with self.stats_lock:
             stats = dict(self.stats)

@@ -639,7 +639,9 @@ class WardNurse(TaskStaff):
             self.swap(train, chair, p)  # ...into the chair
             p.on_stretcher, p.wheelchair, self.pushing = False, True, None
             p.driver, p.stage = (self, train), 'going home in a wheelchair'
-            self.drive(train, self.lay.street_line[0], with_patient=True)
+            with self.world.lock:  # out front to wait for the car: a free spot of its own (others wait there too)
+                spots = [t for t in self.lay.street_line + self.lay.street_edge if t not in self.world.occupied]
+            self.drive(train, spots[0] if spots else self.lay.street_line[0], with_patient=True)
             self.h.give_back_theatre(p)
             self.doing = f'waiting with {p.name} for the car'
             self.wait_until(car.parked.is_set)
@@ -652,8 +654,7 @@ class WardNurse(TaskStaff):
             self.h.log(f'{self.label()} helps {p.label()} into the car taking it home')
             p.home.set()
             self.pushing, self.doing = chair, 'taking the wheelchair back'
-            self.drive(train, self.lay.street_line[0], timeout=60)  # off the lane first: then the car can go
-            car.back.set()
+            car.back.set()  # (it's on the pavement, off the car's way: the car can go now)
             self.tire(config.FATIGUE_PER_TASK['wheelchair'])
             self.drive(train, chair.home, timeout=180)
         finally:

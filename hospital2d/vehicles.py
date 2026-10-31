@@ -51,7 +51,8 @@ class Car(Actor):
             self.doing, self.hidden = 'waiting in town for a drop-off bay', True
             while self.bay is None:
                 self.tick()
-                self.bay = self.h.claim_bay('dropoff')
+                # (one taking someone home may park in any bay: it has to wait there)
+                self.bay = self.h.claim_bay('dropoff') or (self.pickup and self.h.claim_bay('parking'))
             self.hidden = False
         self.doing = 'coming from the city'
         route = [self.block] + lay.drive_path(self.block, [self.bay['lane']])

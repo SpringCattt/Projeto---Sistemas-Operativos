@@ -108,6 +108,7 @@ def draw_layout(lay):
                     surf.blit(door_band['h'], (x * T, y * T + 4))
             else:
                 surf.blit(road_joins(lay, x, y, name.rsplit('/', 1)[-1]), (x * T, y * T))
+    middle_lines(surf, lay)
     return surf
 
 
@@ -117,39 +118,73 @@ KERB_LINES = (((-1, 0), (1, 0, 1, T)), ((1, 0), (T - 2, 0, 1, T)), ((0, -1), (0,
 
 def road_joins(lay, x, y, base):
     """A road tile as it meets the others: a crossing gets the kerb line on each side where the road doesn't go on;
-    a lane's kerb line stops where another road joins it; the ambulances' road is asphalt like the city's."""
+    a lane's kerb line stops where another road joins it."""
     img = tile_image(lay, x, y)
     if not base.startswith(('road_', 'lot_x')):
         return img
     road = lambda nx, ny: not (0 <= nx < lay.width and 0 <= ny < lay.height) or \
         lay.ground[ny][nx].rsplit('/', 1)[-1].startswith(('road_', 'lot_'))
     img = img.copy()
-    if base in ('road_l', 'road_r'):
-        for px in range(T):
-            for py in range(T):
-                c = tuple(img.get_at((px, py)))[:3]
-                img.set_at((px, py), ASPHALT if c == (86, 90, 98) else KERB if c == (150, 154, 160) else c)
-        return img
-    if base == 'road_x':  # a T: the road that goes on keeps its middle line across it (the one that ends doesn't)
-        def end(dx, dy):
-            nx, ny = x + dx, y + dy
-            while 0 <= nx < lay.width and 0 <= ny < lay.height and lay.ground[ny][nx].endswith('road_x'):
-                nx, ny = nx + dx, ny + dy
-            return (nx, ny) if road(nx, ny) and 0 <= nx < lay.width and 0 <= ny < lay.height else None
-        ends = {d: end(*d) for d in ((0, -1), (0, 1), (-1, 0), (1, 0))}
-        through = [d for d, e in (((0, -1), ends[(0, -1)] and ends[(0, 1)]), ((-1, 0), ends[(-1, 0)] and ends[(1, 0)])) if e]
-        if len(through) == 1:
-            lane = tile_image(lay, *ends[through[0]])
-            for px in range(T):
-                for py in range(T):
-                    if tuple(lane.get_at((px, py)))[:3] == MIDDLE:
-                        img.set_at((px, py), MIDDLE)
     for (dx, dy), line in KERB_LINES:
         if base in ('road_x', 'lot_x') and not road(x + dx, y + dy):
             img.fill(KERB, line)
         elif base.endswith('_edge') and road(x + dx, y + dy) and tuple(img.get_at(line[:2]))[:3] == KERB:
             img.fill(ASPHALT, line)
     return img
+
+
+def middle_lines(surf, lay):
+    """The yellow middle lines across each crossing (a block of road_x), so they always meet: a road that goes on
+    through it keeps its lines all the way; one that only comes in from one side runs its lines up to the other
+    road's (at a T, up to the road that goes on; at a corner, outer line to outer line and inner to inner, an L)."""
+    is_x = lambda x, y: 0 <= x < lay.width and 0 <= y < lay.height and lay.ground[y][x].endswith('road_x')
+    road = lambda x, y: 0 <= x < lay.width and 0 <= y < lay.height and not is_x(x, y) and         lay.ground[y][x].rsplit('/', 1)[-1].startswith(('road_', 'lot_'))
+    seen = set()
+    for y in range(lay.height):
+        for x in range(lay.width):
+            if not is_x(x, y) or (x, y) in seen:
+                continue
+            todo, block = [(x, y)], []
+            seen.add((x, y))
+            while todo:
+                t = todo.pop()
+                block.append(t)
+                for n in ((t[0] + 1, t[1]), (t[0] - 1, t[1]), (t[0], t[1] + 1), (t[0], t[1] - 1)):
+                    if is_x(*n) and n not in seen:
+                        seen.add(n)
+                        todo.append(n)
+            x0, x1 = min(t[0] for t in block), max(t[0] for t in block)
+            y0, y1 = min(t[1] for t in block), max(t[1] for t in block)
+            up, down = (any(road(i, j) for i in range(x0, x1 + 1)) for j in (y0 - 1, y1 + 1))
+            left, right = (any(road(i, j) for j in range(y0, y1 + 1)) for i in (x0 - 1, x1 + 1))
+
+            def lines(tiles, vertical):  # where the yellow pixels are across the lane tiles just outside the block
+                found = set()
+                for tx, ty in tiles:
+                    img = tile_image(lay, tx, ty)
+                    for p in range(T):
+                        if tuple(img.get_at((p, T // 2) if vertical else (T // 2, p)))[:3] == MIDDLE:
+                            found.add(tx * T + p if vertical else ty * T + p)
+                return sorted(found)
+            vx = lines([(i, y0 - 1 if up else y1 + 1) for i in range(x0, x1 + 1)], True) if up or down else []
+            hy = lines([(x0 - 1 if left else x1 + 1, j) for j in range(y0, y1 + 1)], False) if left or right else []
+
+            def spans(own, ends, other, other_ends, lo, hi):  # [(where across, from, to)] along this road
+                neg, pos = ends
+                if not own or not (neg or pos) or (not (neg and pos) and not other):
+                    return []
+                if neg and pos:  # it goes on through
+                    return [(p, lo, hi) for p in own]
+                if all(other_ends):  # the end of a T: up to the road that goes on
+                    m = min(other) if neg else max(other)
+                    return [(p, lo, m + 1) if neg else (p, m, hi) for p in own]
+                # a corner: the line nearest the closed corner meets the other one nearest it
+                return [(p, lo, m + 1) if neg else (p, m, hi)
+                        for p, m in zip(sorted(own, reverse=not other_ends[1]), sorted(other, reverse=not pos))]
+            for p, a, b in spans(vx, (up, down), hy, (left, right), y0 * T, (y1 + 1) * T):
+                surf.fill(MIDDLE, (p, a, 1, b - a))
+            for p, a, b in spans(hy, (left, right), vx, (up, down), x0 * T, (x1 + 1) * T):
+                surf.fill(MIDDLE, (a, p, b - a, 1))
 
 
 def furniture_sprites(lay, night=False):

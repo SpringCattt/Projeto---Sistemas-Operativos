@@ -1702,33 +1702,33 @@
   },
   {
    "id": 134,
-   "image": "../assets/third_party/citypack/pieces/building_2.png",
-   "imagewidth": 48,
-   "imageheight": 96
-  },
-  {
-   "id": 135,
    "image": "../assets/third_party/citypack/pieces/building_7.png",
    "imagewidth": 64,
    "imageheight": 54
   },
   {
-   "id": 136,
+   "id": 135,
    "image": "../assets/third_party/citypack/pieces/building_11.png",
    "imagewidth": 48,
    "imageheight": 96
   },
   {
-   "id": 137,
+   "id": 136,
    "image": "../assets/third_party/citypack/pieces/building_4.png",
    "imagewidth": 64,
    "imageheight": 42
   },
   {
-   "id": 138,
+   "id": 137,
    "image": "../assets/third_party/citypack/pieces/building_10.png",
    "imagewidth": 32,
    "imageheight": 48
+  },
+  {
+   "id": 138,
+   "image": "../assets/third_party/citypack/pieces/building_2.png",
+   "imagewidth": 48,
+   "imageheight": 96
   },
   {
    "id": 139,
@@ -1750,33 +1750,33 @@
   },
   {
    "id": 142,
-   "image": "../assets/third_party/citypack/pieces/traffic_light_0_0.png",
-   "imagewidth": 8,
-   "imageheight": 30
-  },
-  {
-   "id": 143,
-   "image": "../assets/third_party/citypack/pieces/traffic_light_3_0.png",
-   "imagewidth": 7,
-   "imageheight": 30
-  },
-  {
-   "id": 144,
    "image": "../assets/third_party/citypack/pieces/traffic_light_4_0.png",
    "imagewidth": 7,
    "imageheight": 30
   },
   {
-   "id": 145,
-   "image": "../assets/third_party/citypack/pieces/tree_0.png",
-   "imagewidth": 16,
+   "id": 143,
+   "image": "../assets/third_party/citypack/pieces/traffic_light_0_0.png",
+   "imagewidth": 8,
    "imageheight": 30
   },
   {
-   "id": 146,
+   "id": 144,
+   "image": "../assets/third_party/citypack/pieces/traffic_light_3_0.png",
+   "imagewidth": 7,
+   "imageheight": 30
+  },
+  {
+   "id": 145,
    "image": "../assets/third_party/citypack/pieces/tree_1.png",
    "imagewidth": 18,
    "imageheight": 27
+  },
+  {
+   "id": 146,
+   "image": "../assets/third_party/citypack/pieces/tree_0.png",
+   "imagewidth": 16,
+   "imageheight": 30
   },
   {
    "id": 147,

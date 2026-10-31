@@ -320,7 +320,9 @@ class Layout:
         self.drive = {(x, y): DRIVE[self.ground[y][x].rsplit('/', 1)[-1]] for y in range(0, self.height - 1, 2)
                       for x in range(0, self.width - 1, 2) if self.ground[y][x].rsplit('/', 1)[-1] in DRIVE}
         beyond = lambda x, y: not (0 <= x < self.stride - FLOOR_GAP and 0 <= y < self.height)
-        self.city_in = [b for b, way in self.drive.items() if way in STEP and beyond(b[0] - STEP[way][0], b[1] - STEP[way][1])]
+        amb = self.ambulance_spot  # (no car comes in down the ambulances' lane: it's theirs)
+        self.city_in = [b for b, way in self.drive.items() if way in STEP and beyond(b[0] - STEP[way][0], b[1] - STEP[way][1])
+                        and not (amb and b[0] <= amb.x < b[0] + 2)]
         self.city_out = [b for b, way in self.drive.items() if way in STEP and beyond(b[0] + STEP[way][0], b[1] + STEP[way][1])]
         # The parking lot's bays: where a car stops (the middle of the bay), the block of lane it drives in from, the
         # way its nose points once in, and the tile beside it where its people get out and back in

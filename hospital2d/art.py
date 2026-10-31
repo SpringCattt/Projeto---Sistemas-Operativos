@@ -109,6 +109,23 @@ def draw_layout(lay):
             else:
                 surf.blit(road_joins(lay, x, y, name.rsplit('/', 1)[-1]), (x * T, y * T))
     middle_lines(surf, lay)
+    for r in lay.rooms:  # the ambulances' bay: asphalt, its parking box marked (open on the side it drives in)
+        if r.name == 'Ambulance Bay':
+            for y in range(r.y, r.y + r.h):
+                for x in range(r.x, r.x + r.w):
+                    surf.blit(image('custom/road_x'), (x * T, y * T))
+            s = lay.ambulance_spot
+            if s is not None:
+                box = pygame.Rect(s.x * T - 3, s.y * T - 3, s.w * T + 6, s.h * T + 6)
+                for edge in ((box.left, box.top, 1, box.h), (box.right - 1, box.top, 1, box.h),
+                             (box.left, box.bottom - 1, box.w, 1)):
+                    surf.fill(KERB, edge)
+                for i in range(0, box.w - 2, 6):  # yellow dashes along its far end
+                    surf.fill(MIDDLE, (box.left + 2 + i, box.bottom - 5, 3, 2))
+    for y in range(lay.height):  # the floors upstairs: dark around the building, no grass
+        for x in range(lay.stride, lay.width):
+            if lay.ground[y][x].endswith('floor_grass'):
+                surf.fill(UPSTAIRS, (x * T, y * T, T, T))
     for edge in range(lay.stride - FLOOR_GAP - 1, lay.width, lay.stride):  # the grass between floors (the camera may
         column = surf.subsurface((edge * T, 0, T, surf.get_height())).copy()  # show it) goes on like each floor's
         for i in range(1, FLOOR_GAP + 1):  # edge: the streets run on to the end of the view
@@ -118,6 +135,7 @@ def draw_layout(lay):
 
 
 ASPHALT, KERB, MIDDLE = (51, 60, 87), (236, 238, 242), (232, 210, 75)  # the city's roads (road_*.png)
+UPSTAIRS = (30, 34, 40)  # around the building on the floors above (main.py's background)
 KERB_LINES = (((-1, 0), (1, 0, 1, T)), ((1, 0), (T - 2, 0, 1, T)), ((0, -1), (0, 1, T, 1)), ((0, 1), (0, T - 2, T, 1)))
 
 

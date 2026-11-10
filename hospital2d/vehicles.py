@@ -51,6 +51,10 @@ class Car(Actor):
         if self.bay is None:  # a taxi or a car taking someone home: a drop-off bay, once one is free (it waits in town)
             self.doing, self.hidden = 'waiting in town for a drop-off bay', True
             while self.bay is None:
+                if self.h.closed and self.info is not None:  # closed while it waited in town: it takes its
+                    self.bringing = False  # patient somewhere else (only cars taking someone home still come)
+                    self.h.log(f"{self.name} doesn't come: the hospital is closed")
+                    return
                 self.tick()
                 # (one taking someone home may park in any bay: it has to wait there)
                 self.bay = self.h.claim_bay('dropoff') or (self.pickup and self.h.claim_bay('parking'))

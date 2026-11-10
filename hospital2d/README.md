@@ -222,8 +222,9 @@ weights: minutes waited and impatience (how close the patient is to giving up). 
 
 **Days, money and the bonus.** The simulation runs in days of `DAY_HOURS` hours of `HOUR_S` simulated seconds
 (24 × 60 s), from day 1, kept by its own thread (`Hospital.run_day`): it pays the wages by the hour, closes the
-doors at `CLOSE_HOUR` (23:00), at midnight sends home whoever is still waiting for a doctor (Reds excepted: they
-come back tomorrow, and pay nothing), pays `OVERTIME_PAY` (x1.5) for every minute past midnight with patients still
+doors at `CLOSE_HOUR` (23:00), from midnight sends home whoever no doctor has called yet (in the line, at triage, waiting; Reds excepted: they
+come back tomorrow, and pay nothing; whoever a doctor has called is seen to), turns away cars still waiting in town
+when it closes, pays `OVERTIME_PAY` (x1.5) for every minute past midnight with patients still
 inside, and when the last patient is gone it writes the day's report and pauses the world until the
 next day is started (`next_day`; in the game, the report's button or Enter; pause can't skip it). A treated
 patient pays `PRICE` by urgency (+ `SURGERY_PRICE`), all of it if it saw a doctor within `ON_TIME_S`, less the later

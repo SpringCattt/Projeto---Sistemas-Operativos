@@ -147,12 +147,9 @@ class Hospital:
             if not self.closed and hour >= config.CLOSE_HOUR:
                 self.closed = True
                 self.log(f'{config.CLOSE_HOUR}:00: no more patients today. The ones inside are seen to by midnight')
-            if overtime and not self.sent_home:  # midnight: who is still waiting (but Reds) comes back tomorrow
-                self.sent_home = True
-                waiting = [p for p in self.patients() if p.base_urgency < 2 and p.stage == 'waiting for a doctor']
-                for p in waiting:
-                    p.temperament, p.patience = 'passive', 0.0
-                self.log(f'Midnight: {len(waiting)} still waiting are sent home, to come back tomorrow')
+            if overtime and not self.sent_home:  # midnight: from now on, whoever no doctor has yet (but Reds)
+                self.sent_home = True  # goes home, to come back tomorrow (Patient.upkeep)
+                self.log('Midnight: whoever is still waiting goes home, to come back tomorrow')
             bringing = any(a.role == 'ambulance' or getattr(a, 'bringing', False) for a in self.actors)  # (an
             # ambulance or a car still on its way with someone)
             if self.closed and self.day_over is None and not self.patients() and not bringing:

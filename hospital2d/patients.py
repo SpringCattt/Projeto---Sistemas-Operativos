@@ -13,6 +13,15 @@ BASE_ROOMS = frozenset({'street', 'reception', 'waiting'})  # where a patient ma
 CALL_RANK = {'surgery': 4, 'exam': 4, 'consult': 3, 'triage': 2, 'register': 1, 'complaint': 1}
 
 
+# Where a patient is still only waiting (no doctor has it yet): from midnight, one that isn't Red goes home from there
+NOT_SEEN_YET = ('in line at reception', 'in line to complain', 'waiting for triage', 'going to the waiting room',
+                'waiting for a doctor')
+
+
+class GoHome(Exception):
+    """Midnight, and no doctor has it yet: it comes back tomorrow."""
+
+
 class Patient(Actor):
     role = 'patient'
     pace = (8, 20, 0.25)
@@ -50,7 +59,20 @@ class Patient(Actor):
         self.calls.put(summons)
 
     # ---- the visit ------------------------------------------------------------------------------------------
+    def upkeep(self, dt):
+        if self.h.sent_home and self.base_urgency < 2 and self.stage in NOT_SEEN_YET and not self.gone:
+            raise GoHome
+
     def life(self):
+        try:
+            self.visit()
+        except GoHome:
+            self.talk('give_up')
+            self.h.count('sent_home')
+            self.h.log(f'{self.label()} is sent home: closed, back tomorrow')
+            self.leave()
+
+    def visit(self):
         if self.delivered is not None:  # on the paramedics' stretcher: nothing to do until it's on a bed
             self.wait_until(self.delivered.is_set)
         if not self.triaged:

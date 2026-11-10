@@ -10,7 +10,7 @@ TILE = 16  # tile size in pixels (before zoom)
 N_NURSES = 6  # ward nurses (walking the medical wing)
 N_SECURITY = 2
 N_CLEANERS = 2
-N_PATIENTS = 40  # already triaged and waiting when the simulation starts
+N_PATIENTS = 0  # already triaged and waiting when the simulation starts (0: it opens empty)
 
 # Performance: below MIN_FPS the counter turns red (the hospital's limit)
 TARGET_FPS = 144
@@ -19,6 +19,9 @@ MIN_FPS = 30
 ACTOR_SPEED = 1.5  # tiles per second
 LIFT_FLOOR_S = 3.0  # the elevator, per floor (stretchers can't take the stairs)
 AMBULANCE_SPEED = 4.0  # tiles per second, coming down the road to the ambulance bay (and leaving)
+CAR_SPEED = 3.0  # tiles per second, the cars of the city (a third of it parking and backing out)
+YIELD_MAX_S = 4  # at a crossing a car gives way to the one on its right (Portugal), at most this long (four at once)
+CAR_COLORS = 7  # (art.CAR_PAINTS)
 RUN_SPEED = [1.4, 1.8, 2.4]  # x ACTOR_SPEED: staff run to a task in another room, faster the more urgent
 STRETCHER_SPEED = 2.4  # the two nurses pushing a stretcher (and the patient on it)
 TIME_SCALE = 1.0  # 2.0 = everything (walking, waiting, arrivals) happens twice as fast
@@ -30,7 +33,7 @@ SNAPSHOT_HZ = 60  # times per second the simulation writes where everyone is (sh
 WORDS_HZ = 10  # ...and sends the words (names, speech, cards, stats) through the snapshots queue
 
 # Arrivals (the arrivals process)
-ARRIVALS_PER_MINUTE = 6
+ARRIVALS_PER_MINUTE = 6  # (per simulated minute: with HOUR_S = 60, 6 an hour, ~140 a day)
 SURGE_EVERY_S = 240  # on average a surge starts this often...
 SURGE_SECONDS = 20  # ...lasts this long...
 SURGE_MULTIPLIER = 6  # ...and multiplies arrivals by this
@@ -76,11 +79,11 @@ SEND_HOME_AFTER_S = 90
 MAX_ON_CALL = 1.0  # how much of ON_CALL the Boss may call in at most (learned: 0 = nobody, 2 = twice as many)
 RUSH_FROM_HOUR = 22  # from this hour it calls staff in sooner (at half CALL_IN_AT), to be done by midnight (learned)
 
-# A day: DAY_HOURS hours of HOUR_S simulated seconds (24 x 30 s: 12 minutes at x1), from day 0. At midnight the
+# A day: DAY_HOURS hours of HOUR_S simulated seconds (24 x 60 s: 24 minutes at x1), from day 1. At midnight the
 # doors close: whoever is inside is seen to (or gives up), and once the last patient is gone the day is over. In the
 # game it then waits, paused, on the day's report until you start the next day.
 ANNOUNCE_S = 3.0  # a doctor's call: on the waiting room's screen and the loudspeaker this long before it goes
-HOUR_S = 30
+HOUR_S = 60
 DAY_HOURS = 24
 CLOSE_HOUR = 23  # no new patients from this hour: everyone inside should be seen to by DAY_HOURS (midnight)
 OVERTIME_PAY = 1.5  # past midnight, with patients still inside, every wage costs this many times more
@@ -103,11 +106,12 @@ BONUS_SHARE = 0.3
 SHARE = {'reception': 0.10, 'triage': 0.15, 'stretcher': 0.15, 'doctor': 0.60}
 CREDIT = {'fight': 40, 'clean': 20}
 
+WHEELCHAIRS = 4  # kept in storage: a cured Red patient goes home in one
 STRETCHERS = 4  # parked at the back of storage: with all of them out, a Red patient waits for one to come back
 
 # Fatigue (0-100)
 FATIGUE_PER_TASK = {'consult': (6, 9, 13), 'surgery': 25, 'fight': 10, 'clean': 6,
-                    'register': 2, 'stretcher': 8, 'complaint': 3, 'triage': 3}
+                    'register': 2, 'stretcher': 8, 'complaint': 3, 'triage': 3, 'wheelchair': 5}
 REST_AT = 70  # idle and this tired: goes to the rest room...
 RESTED_AT = 20  # ...until it's down to this
 RECOVER_PER_S = 0.15  # idle

@@ -13,6 +13,15 @@ BASE_ROOMS = frozenset({'street', 'reception', 'waiting'})  # where a patient ma
 CALL_RANK = {'surgery': 4, 'exam': 4, 'consult': 3, 'triage': 2, 'register': 1, 'complaint': 1}
 
 
+# Where a patient is still only waiting (no doctor has it yet): from midnight, one that isn't Red goes home from there
+NOT_SEEN_YET = ('in line at reception', 'in line to complain', 'waiting for triage', 'going to the waiting room',
+                'waiting for a doctor')
+
+
+class GoHome(Exception):
+    """Midnight, and no doctor has it yet: it comes back tomorrow."""
+
+
 class Patient(Actor):
     role = 'patient'
     pace = (8, 20, 0.25)
@@ -32,6 +41,8 @@ class Patient(Actor):
         self.delivered = None  # brought by ambulance: an Event, set once the paramedics have put it on a bed
         self.triaged = triaged
         self.provoke = None  # 'fight' / 'vomit': ordered from the admin tablet (done by its own thread)
+        self.car = None  # the car that brought it and waits for it (vehicles.Car), if any
+        self.wheelchair = False  # being wheeled out (staff.WardNurse.wheelchair)
 
     def label(self):
         return f'{self.name} ({config.URGENCY_NAMES[self.rank]})' if self.rank is not None else self.name
@@ -48,7 +59,20 @@ class Patient(Actor):
         self.calls.put(summons)
 
     # ---- the visit ------------------------------------------------------------------------------------------
+    def upkeep(self, dt):
+        if self.h.sent_home and self.base_urgency < 2 and self.stage in NOT_SEEN_YET and not self.gone:
+            raise GoHome
+
     def life(self):
+        try:
+            self.visit()
+        except GoHome:
+            self.talk('give_up')
+            self.h.count('sent_home')
+            self.h.log(f'{self.label()} is sent home: closed, back tomorrow')
+            self.leave()
+
+    def visit(self):
         if self.delivered is not None:  # on the paramedics' stretcher: nothing to do until it's on a bed
             self.wait_until(self.delivered.is_set)
         if not self.triaged:
@@ -84,7 +108,8 @@ class Patient(Actor):
                 break
             place = self.h.line.place(self)
             if place is not None:  # walk to its place (it moves up as the line advances)
-                spots, outside = self.lay.line_spots, self.lay.street_line
+                # (a long line goes on along the whole street in front, never all onto its last tile)
+                spots, outside = self.lay.line_spots, self.lay.street_line + self.lay.street_edge
                 spot = spots[place] if place < len(spots) else outside[min(place - len(spots), len(outside) - 1)]
                 if (self.tx, self.ty) != spot and not self.path:
                     self.set_path(self.route(spot))
@@ -243,12 +268,23 @@ class Patient(Actor):
         return None
 
     def leave(self):
+        if getattr(self, 'cured', False) and self.base_urgency == 2 and self.lay.city_in:  # Red: it can't walk out
+            self.stage = 'waiting for a wheelchair to go home'
+            self.h.discharge(self)
+            self.wait_until(self.home.is_set)
+            self.gone = True
+            return
         self.gone = True
         self.get_up()
         if self.task is not None:
             self.h.dispatcher.cancel(self.task)
         self.h.line.leave(self)
         self.stage, self.allowed = 'leaving', BASE_ROOMS | {'corridor', 'doctor', 'surgery'}
+        if self.car is not None:  # back to its car, which drives off with it
+            self.doing = 'back to the car'
+            self.go(self.car.bay['door'], timeout=180)
+            self.car.back.set()
+            return
         self.walk_out()  # corridor exits for whoever saw a doctor
         # the thread ends here; the hospital removes it
 
@@ -283,10 +319,13 @@ class Patient(Actor):
         None if the call was cancelled."""
         here = self.lay.room_at[self.ty][self.tx]
         self.stage, self.allowed = call.stage, BASE_ROOMS | call.allow | ({here.kind} if here else set())
+        result = None
         try:
-            return self._answer(call)
+            result = self._answer(call)
+            return result
         finally:
-            self.get_up()
+            if not (result == 'done' and self.base_urgency == 2 and self.lay.city_in):  # (Red: it stays lying
+                self.get_up()  # until its wheelchair comes)
             self.on_stretcher, self.speed = False, 1.0
 
     def _answer(self, call):
@@ -336,5 +375,6 @@ class Patient(Actor):
     def snapshot(self):
         s = super().snapshot()
         s['mark'] = 'cured' if getattr(self, 'cured', False) else self.rank  # (cured: on its way out)
+        s['wheelchair'] = self.wheelchair
         s['card'] = s['card'][1:]  # 'Doing' says nothing for a patient: 'Stage' does
         return s

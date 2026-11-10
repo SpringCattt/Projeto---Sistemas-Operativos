@@ -45,9 +45,16 @@ class Staff(Actor):
 
 
 def about(task):
-    """Id of the person a task is about (the patient, or whoever started a fight), if any."""
-    who = task.patient or task.target
+    """Id of the person a task is about (the patient, or whoever started a fight, or is going home), if any."""
+    who = task.patient or task.target or getattr(task, 'discharged', None)
     return who.id if who is not None else None
+
+
+def delivered(task):
+    """The patient is where it was going: the nurses are only taking the stretcher / wheelchair back (for the map,
+    that task is done)."""
+    t, p = getattr(task, 'transfer', None), getattr(task, 'discharged', None)
+    return (t is not None and t.arrived.is_set()) or (p is not None and p.home.is_set())
 
 
 class Boss(Actor):
@@ -93,7 +100,7 @@ class Boss(Actor):
         with d.cond:
             s['boss'] = {  # (who is doing it, who it's about or None, tile, urgency, label)
                 'working': [(a.id, about(a.task), a.task.where(), a.task.urgency, a.task.label())
-                            for a in d.staff if a.task],
+                            for a in d.staff if a.task and not delivered(a.task)],
                 'open': [(about(t), t.where(), t.urgency, t.label()) for t in d.open],
                 'decisions': list(d.decisions),
             }
@@ -193,7 +200,10 @@ class TriageNurse(Staff):
 
 
 class TaskStaff(Staff):
-    """Idles (wandering, or resting when tired) until the dispatcher hands it a task."""
+    """Idles (wandering, or resting when tired) until the dispatcher hands it a task. Just called in, it's ready
+    for one at once: it goes to its place only while it has none (a task it was called for, it does straight away)."""
+    takes_tasks = True
+    came_in = False  # (called in: at its place at least once)
 
     def life(self):
         while True:
@@ -227,6 +237,11 @@ class TaskStaff(Staff):
                 self.idle(self.tick())
 
     def idle(self, dt):
+        if self.commute and not self.came_in:  # just hired, nothing to do yet: on to its place
+            if (self.tx, self.ty) == self.commute:
+                self.came_in = True
+            elif not self.path:
+                self.set_path(self.route(self.commute))
         if self.path:
             self.step(dt)
         elif self.resting:
@@ -266,11 +281,14 @@ class Doctor(TaskStaff):
         self.area = [t for t in h.lay.free_tiles(room) if t not in h.lay.seats] + ([self.seat] if self.seat else [])
         self.extra_avoid = ()
 
-    def avoid(self):
-        return self.extra_avoid
+    def avoid(self):  # (never the kind of room it's in: it could never get out of it)
+        here = self.lay.room_at[self.ty][self.tx]
+        return tuple(k for k in self.extra_avoid if here is None or here.kind != k)
 
     def handle(self, task):
         if task.kind == 'consult':
+            # a doctor with a patient always runs (to its desk, to disinfection, to the theatre): never a stroll
+            self.speed = config.RUN_SPEED[max(1, task.urgency)]
             self.consult(task)
 
     def consult(self, task):
@@ -296,7 +314,7 @@ class Doctor(TaskStaff):
         # room half-way because the Boss found the doctor something more urgent (before the call, it still can)
         self.h.dispatcher.set_preemptable(task, False)
         try:
-            if not self.call(p, s, timeout=240 if s.stretcher else 120):
+            if not self.call(p, s, timeout=None):  # (it waits for it: only if it leaves does it give up)
                 if not p.gone:
                     self.h.dispatcher.submit(task)  # didn't come in time: try again later
                 return
@@ -309,8 +327,8 @@ class Doctor(TaskStaff):
                 exam = Summons(self, bed[0], 'exam', allow={'doctor'}, stage='on the exam bed', lie=bed[1])
                 s.finish('exam')
                 s = exam
-                if not self.call(p, s, timeout=30):
-                    return self.h.dispatcher.submit(task)
+                if not self.call(p, s, timeout=None):
+                    return
                 beside = self.next_to(bed[0])
                 if beside:
                     self.go(beside, timeout=10)
@@ -344,21 +362,27 @@ class Doctor(TaskStaff):
         """Surgery can't be interrupted. Take a free operating room (semaphore), wash in its disinfection room
         (semaphore: as many at once as sinks) and only then go in, straight from disinfection."""
         self.h.dispatcher.set_preemptable(task, False)
-        self.doing = f'surgery: {p.name}'
-        room = None
-        while room is None:
-            room = self.h.theatres.try_take(timeout=1 / config.ACTOR_HZ)
-            if room is None:
-                self.tick()
+        self.doing = f'surgery: {p.name}, waiting for a free operating room'
+        urgent = p.waiting_room is not None and p.waiting_room.kind == 'emergency'
+        theatres, room = self.h.theatres, None
+        with theatres.lock:
+            theatres.urgent += urgent
+        try:
+            while room is None:
+                room = theatres.try_take(timeout=1 / config.ACTOR_HZ, urgent=urgent)
+                if room is None:
+                    self.tick()
+        finally:
+            with theatres.lock:
+                theatres.urgent -= urgent
         try:
             self.h.log(f'{self.label()} takes {p.label()} to {room.name}')
-            self.disinfect(room.partner)
-            self.doing = f'surgery: {p.name}'
             patient_spot, doctor_spot = self.lay.surgery_spots[room]
             s = Summons(self, patient_spot, 'surgery', allow={'corridor', 'surgery'}, stage=f'going to {room.name}',
-                        lie=self.lay.table_spots[room],
-                        stretcher=p.waiting_room is not None and p.waiting_room.kind == 'emergency')
-            p.summon(s)
+                        lie=self.lay.table_spots[room], stretcher=urgent)
+            p.summon(s)  # on its way while the doctor washes
+            self.disinfect(room.partner)
+            self.doing = f'surgery: {p.name}'
             self.extra_avoid = ('corridor',)  # from disinfection straight into the theatre
             self.go(doctor_spot, timeout=120)
             self.extra_avoid = ()
@@ -369,10 +393,13 @@ class Doctor(TaskStaff):
                 self.h.log(f'{self.label()} finished the surgery of {p.label()}')
                 p.helpers['doctor'] = [self]
                 self.h.treated(p, surgery=True)
+                if p.base_urgency == 2 and self.lay.city_in:  # it leaves in a wheelchair: the room is its until then
+                    p.theatre = room
             s.finish('done')
         finally:
             self.extra_avoid = ()
-            self.h.theatres.give_back(room)
+            if getattr(p, 'theatre', None) is not room:
+                self.h.theatres.give_back(room)
 
     def disinfect(self, room):
         sem = self.h.disinfection[room]
@@ -434,12 +461,14 @@ class Cleaner(TaskStaff):
 
 
 class Cart:
-    """The empty stretcher: it takes up a tile like a person does, but has no thread (two nurses move it)."""
+    """The empty stretcher (or wheelchair): it takes up a tile like a person does, but has no thread (nurses move
+    it)."""
     speed, path, anim_t, driver, hidden = 0.0, (), 0.0, None, False
 
-    def __init__(self, tile):
+    def __init__(self, tile, kind='stretcher'):
         self.tx, self.ty = tile
         self.px, self.py, self.facing = tile[0] + 0.5, tile[1] + 0.5, 'down'
+        self.kind, self.home = kind, tile  # (home: where it's kept)
 
 
 def neighbours(tile):
@@ -447,7 +476,7 @@ def neighbours(tile):
     return [(x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)]
 
 
-PATIENT_NEVER = ('bar', 'control', 'storage', 'rest', 'disinfection')  # a stretcher with someone on it neither
+PATIENT_NEVER = ('control', 'storage', 'rest', 'disinfection')  # a stretcher with someone on it neither
 
 
 class WardNurse(TaskStaff):
@@ -457,6 +486,8 @@ class WardNurse(TaskStaff):
     pace = (2, 5, 0.8)
 
     def handle(self, task):
+        if task.kind == 'wheelchair':
+            return self.wheelchair(task)
         t = task.transfer
         self.h.dispatcher.set_preemptable(task, False)  # nobody leaves a stretcher half-way
         self.speed = config.STRETCHER_SPEED
@@ -577,7 +608,8 @@ class WardNurse(TaskStaff):
                 occ = self.world.occupied
                 free = lambda x, who: self.lay.walkable(*x) and occ.get(x) in (None, who)
                 options = sorted(((near.get(x, 10 ** 6) + far.get(k, 10 ** 6), c, x, k)
-                                 for c in occ.values() if isinstance(c, Cart) and c.driver is None
+                                 for c in occ.values() if isinstance(c, Cart) and c.kind == 'stretcher'
+                                 and c.driver is None
                                  for x in neighbours((c.tx, c.ty)) if free(x, self)
                                   for k in neighbours((c.tx, c.ty)) if k != x and free(k, back)), key=lambda o: o[0])
                 if options:
@@ -591,6 +623,83 @@ class WardNurse(TaskStaff):
             if self.go(x, timeout=30):
                 return cart
             cart.driver = None  # couldn't get to it: this transfer fails (the doctor will call again)
+            return None
+        return None
+
+    def wheelchair(self, task):
+        """A cured Red patient can't walk home: a wheelchair from storage to it (in the elevator if it's upstairs), it
+        sits in, out to the car waiting for it in the parking lot (once out: the operating room it was in is free
+        again), and the wheelchair back to storage."""
+        p, car = task.discharged, task.car
+        self.h.dispatcher.set_preemptable(task, False)
+        self.doing = f'getting a wheelchair for {p.name}'
+        chair = self.take_chair()
+        if chair is None:  # all out: try again in a while
+            self.wait(5)
+            return self.h.dispatcher.submit(task)
+        train = [chair, self]  # (the chair in front: the nurse pushes it)
+        for m in train:
+            m.driver = (self, train)
+        self.pushing, self.doing = chair, f'wheelchair for {p.name}'
+        try:
+            beside, _ = self.stop_beside(self.bed((p.px, p.py)) if p.lying else [(p.tx, p.ty)], train)
+            if not self.drive(train, beside):
+                self.h.dispatcher.submit(task)  # couldn't get to it: again later
+                return
+            p.lying, p.px, p.py = False, p.tx + 0.5, p.ty + 0.5  # off the bed / table...
+            self.swap(train, chair, p)  # ...into the chair
+            p.on_stretcher, p.wheelchair, self.pushing = False, True, None
+            p.driver, p.stage = (self, train), 'going home in a wheelchair'
+            with self.world.lock:  # out front to wait for the car: a free spot of its own (others wait there too)
+                spots = [t for t in self.lay.street_line + self.lay.street_edge if t not in self.world.occupied]
+            self.drive(train, spots[0] if spots else self.lay.street_line[0], with_patient=True)
+            self.h.give_back_theatre(p)
+            self.doing = f'waiting with {p.name} for the car'
+            self.wait_until(car.parked.is_set)
+            self.drive(train, car.bay['door'], with_patient=True, timeout=120)
+            with self.world.lock:  # into the car: the chair is left where the patient was
+                chair.tx, chair.ty, chair.px, chair.py, chair.facing = p.tx, p.ty, p.px, p.py, p.facing
+                self.world.occupied[(p.tx, p.ty)] = chair
+                p.hidden = True
+            train[train.index(p)], p.driver, p.wheelchair = chair, None, False
+            self.h.log(f'{self.label()} helps {p.label()} into the car taking it home')
+            p.home.set()
+            self.pushing, self.doing = chair, 'taking the wheelchair back'
+            car.back.set()  # (it's on the pavement, off the car's way: the car can go now)
+            self.tire(config.FATIGUE_PER_TASK['wheelchair'])
+            self.drive(train, chair.home, timeout=180)
+        finally:
+            self.pushing = None
+            self.h.give_back_theatre(p)
+            for m in (self, chair, p):
+                m.driver = None
+            with self.world.lock:  # shortcut: a chair that couldn't be pushed back reappears where it's kept
+                if (chair.tx, chair.ty) != chair.home and chair.home not in self.world.occupied \
+                        and self.world.occupied.get((chair.tx, chair.ty)) is chair:
+                    del self.world.occupied[(chair.tx, chair.ty)]
+                    chair.tx, chair.ty = chair.home
+                    chair.px, chair.py, chair.facing = chair.tx + 0.5, chair.ty + 0.5, 'down'
+                    self.world.occupied[chair.home] = chair
+
+    def take_chair(self):
+        """Walks up to a free wheelchair in storage, now this nurse's. None if none is free in time."""
+        end = self.h.clock() + 90
+        while self.h.clock() < end:
+            near = self.lay.distances_from((self.tx, self.ty))
+            with self.world.lock:
+                occ = self.world.occupied
+                options = [(near.get(x, 10 ** 6), i, c, x) for i, c in enumerate(occ.values())
+                           if isinstance(c, Cart) and c.kind == 'wheelchair' and c.driver is None
+                           for x in neighbours((c.tx, c.ty)) if self.lay.walkable(*x) and occ.get(x) in (None, self)]
+                if options:
+                    _, _, chair, x = min(options, key=lambda o: o[:2])
+                    chair.driver = (self, [self, chair])  # claimed
+            if not options:
+                self.tick()
+                continue
+            if self.go(x, timeout=40):
+                return chair
+            chair.driver = None
             return None
         return None
 
@@ -659,14 +768,29 @@ class WardNurse(TaskStaff):
         if not lifts:
             return False
         near = self.lay.distances_from((train[0].tx, train[0].ty))
-        # the one with the shortest queue (two elevators share the work), then the closest
-        lift = min(lifts, key=lambda e: (len(e.queue) + (e.rider is not None), near.get(e.stops[here][0][0], 10 ** 6)))
-        self.doing = 'waiting for the elevator'
-        lift.call(self, here)
+        # the one with the shortest queue (two elevators share the work), already on this floor, then the closest
+        lift = min(lifts, key=lambda e: (len(e.queue) + (e.rider is not None), e.floor != here,
+                                         near.get(e.stops[here][0][0], 10 ** 6)))
+        self.doing = 'going to the elevator'
         try:
-            # first close by (not holding it while it's still far away), off the tiles in front of its door
+            # first close by, off the tiles in front of its door, and only then in the queue: it's for whoever gets
+            # there first, not whoever called it from far away
             self.roll(train, self.near_lift(lift.stops[here][0], train), with_patient=with_patient, timeout=120)
-            if not self.wait_until(lambda: lift.take(self), timeout=600) \
+            self.doing = 'waiting for the elevator'
+            lift.call(self, here)
+
+            def take():  # its turn in this one; or the other one is here, empty and free: that one, then
+                nonlocal lift
+                if lift.take(self):
+                    return True
+                other = next((e for e in lifts if e is not lift and e.free_at(here)), None)
+                if other is None:
+                    return False
+                lift.leave(self)
+                lift = other
+                lift.call(self, here)
+                return lift.take(self)
+            if not self.wait_until(take, timeout=600) \
                     or not self.roll(train, lift.stops[here][0][0], with_patient=with_patient, timeout=120):
                 return False
             with self.world.lock:  # in: off the floor
@@ -692,7 +816,8 @@ class WardNurse(TaskStaff):
             taken = set(self.world.occupied) - mine
         near = self.lay.distances_from((train[0].tx, train[0].ty))
         around = self.lay.distances_from(column[0])
-        ok = lambda t: self.lay.floor_of(t[0]) == floor and t not in column and t not in taken
+        ok = lambda t: self.lay.floor_of(t[0]) == floor and t not in column and t not in taken \
+            and t not in self.lay.links  # (never on the stairs: everyone else going up or down would be stuck)
         beside = [t for t, d in around.items() if d <= 4 and abs(t[0] - column[0][0]) >= 2
                   and column[0][1] <= t[1] <= column[-1][1] and ok(t)]
         spots = beside or [t for t, d in around.items() if 4 <= d <= 8 and ok(t)]
@@ -720,7 +845,7 @@ class WardNurse(TaskStaff):
                 return True
         for a in in_the_way:
             if hasattr(a, 'make_way'):
-                a.make_way = True
+                a.make_way = frozenset(column)
         return False
 
     def roll(self, train, goal, last=None, with_patient=False, timeout=180, yielding=False):
@@ -749,8 +874,8 @@ class WardNurse(TaskStaff):
                     return True
                 other = self.world.occupied.get(path[0])
                 other_train = getattr(other, 'driver', None)
-                if other_train is None and other is not None and blocked_for > 0.3:
-                    other.make_way = True
+                if other_train is None and other is not None and blocked_for > 0.3 and hasattr(other, 'make_way'):
+                    other.make_way = frozenset(path[:8]) | {(m.tx, m.ty) for m in train}  # off the train's way
                 elif other_train and other_train[0] is not self and not yielding and blocked_for > 1 \
                         and self.rank(train) < other_train[0].rank(other_train[1]):
                     self.back_off(train, path[0], with_patient)
@@ -785,15 +910,18 @@ class WardNurse(TaskStaff):
         self.wait(1.5)
 
     def plan(self, train, goal, last, with_patient, around):
-        avoid = PATIENT_NEVER if with_patient else ()
+        # (an empty one never cuts through the disinfection rooms, the rest room or the Boss's: only to storage)
+        avoid = PATIENT_NEVER if with_patient else ('disinfection', 'rest', 'control')
         blocked = set(self.lay.staff_only) if with_patient else set()
         with self.world.lock:
             blocked |= self.world.messes.keys()
+            blocked |= {x for x, a in self.world.occupied.items() if getattr(a, 'role', None) == 'car' and x != goal}
             if around:
                 blocked |= {x for x, a in self.world.occupied.items()
                             if a not in train and abs(x[0] - self.tx) + abs(x[1] - self.ty) <= 8}
         options = []
-        for order in (train, train[::-1]):  # forwards, or turned round
+        for order in (train, train[::-1]) if len(train) == 3 else (train,):  # forwards, or turned round (a
+            # stretcher; a wheelchair always goes first)
             start = (order[0].tx, order[0].ty)
             r = [] if start == goal else self.lay.path(start, goal, avoid, blocked | {(m.tx, m.ty) for m in order[1:]},
                                                         stairs=False)
@@ -828,8 +956,8 @@ class WardNurse(TaskStaff):
                 m.anim_t += dt * self.speed
         with self.world.lock:
             occ = self.world.occupied
-            last = (train[2].tx, train[2].ty)
-            if occ.get(last) is train[2]:
+            last = (train[-1].tx, train[-1].ty)  # (the back: a stretcher's nurse, or a wheelchair's)
+            if occ.get(last) is train[-1]:
                 del occ[last]
             for m, x in zip(train, targets):
                 occ[x] = m
@@ -860,7 +988,7 @@ class WardNurse(TaskStaff):
                 goal = (onto[0], onto[1] - 0.1) if onto else (to[0] + 0.5, to[1] + 0.5)  # as Actor.lie_on
                 mover = old
                 old.on_stretcher = False
-        train[1] = new
+        train[train.index(old)] = new
         while (mover.px, mover.py) != goal:  # it climbs on / off
             dx, dy = goal[0] - mover.px, goal[1] - mover.py
             d, stride = (dx * dx + dy * dy) ** 0.5, 2.0 * self.tick()
@@ -897,8 +1025,10 @@ class Ambulance(Actor):
         self.doing = 'waiting for the ambulance bay'
 
     def life(self):
+        self.hidden = True  # (up the road, out of sight, until it's its turn)
         while not self.h.ambulance_bay.acquire(timeout=1 / config.ACTOR_HZ):
             self.tick()
+        self.hidden = False
         try:
             self.doing = 'arriving'
             self.drive_to(self.spot.y + self.spot.h / 2)
@@ -915,7 +1045,7 @@ class Ambulance(Actor):
 
     def drive_to(self, y):
         while abs(self.py - y) > 1e-3:
-            step = config.AMBULANCE_SPEED * self.tick()
+            step = config.AMBULANCE_SPEED * self.tick(config.ACTOR_HZ)
             self.py = y if abs(y - self.py) <= step else self.py + step * (1 if y > self.py else -1)
             self.anim_t += step
 
@@ -924,7 +1054,7 @@ class Ambulance(Actor):
         starts = [(m.px, m.py) for m in movers]
         done = 0.0
         while done < 1:
-            done = min(1.0, done + 1.5 * self.tick())
+            done = min(1.0, done + 1.5 * self.tick(config.ACTOR_HZ))
             for m, (sx, sy), (gx, gy) in zip(movers, starts, goals):
                 m.px, m.py = sx + (gx - sx) * done, sy + (gy - sy) * done
 
@@ -934,7 +1064,7 @@ class Ambulance(Actor):
             there = [self.world.occupied[t] for t in tiles if t in self.world.occupied]
         for a in there:
             if hasattr(a, 'make_way'):
-                a.make_way = True
+                a.make_way = frozenset(tiles)
         return not there
 
     def unload(self):

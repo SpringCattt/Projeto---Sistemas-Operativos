@@ -79,7 +79,7 @@ SEND_HOME_AFTER_S = 90
 MAX_ON_CALL = 1.0  # how much of ON_CALL the Boss may call in at most (learned: 0 = nobody, 2 = twice as many)
 RUSH_FROM_HOUR = 22  # from this hour it calls staff in sooner (at half CALL_IN_AT), to be done by midnight (learned)
 
-# A day: DAY_HOURS hours of HOUR_S simulated seconds (24 x 60 s: 24 minutes at x1), from day 0. At midnight the
+# A day: DAY_HOURS hours of HOUR_S simulated seconds (24 x 60 s: 24 minutes at x1), from day 1. At midnight the
 # doors close: whoever is inside is seen to (or gives up), and once the last patient is gone the day is over. In the
 # game it then waits, paused, on the day's report until you start the next day.
 ANNOUNCE_S = 3.0  # a doctor's call: on the waiting room's screen and the loudspeaker this long before it goes

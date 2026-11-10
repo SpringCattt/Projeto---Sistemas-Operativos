@@ -72,11 +72,27 @@ don't walk back against the people coming in through reception and the waiting r
 block: street → reception → a triage room on each side → the two waiting rooms; Emergency and
 storage are on top of the hall.
 
+**Symmetric.** Every floor is symmetric about the Main Hall's middle line (the middle of a tile: one wall runs down
+it where two rooms meet on it). The rooms on the right are the mirror image of those on the left, furniture and
+doors too; the rooms across the line (reception, the hall, the control room, the rest room, the middle
+disinfection room) are symmetric themselves, and so are Emergency and storage, each about its own middle. Six
+operating rooms: three on each side, in blocks of surgery | disinfection | surgery (the middle block under the hall).
+The only exception, on purpose: the stairs are on the left of the hall and both elevators on the right.
+
+**Everything you see is an image file**, ready to edit (nothing is drawn by the code): the ground tiles, including
+each look of a wall (its light and shadow edges: `assets/custom/baked/wall@nw.png`...), each door closed and open
+(`door@N.png`, `door@N_open.png`), the crossings with their kerbs and yellow lines (`road_x@N.png`), the
+ambulance bay's marks, the dark round the building upstairs (`floor_void.png`); the cars, one per colour and way
+(`assets/custom/cars/`); people lying under a blanket, one per character (`assets/custom/lying/`); the urgency
+marks over heads (`mark_0..2.png`). The maps point at those files.
+
 **Editing the building.** Open a floor (`maps/floorN.tmj`, 0 = ground floor) in Tiled (turn on *View → Snapping →
 Snap to Grid*). Another file `floor3.tmj` is another floor. Each map has three layers, and the game reads them all
 the next time it starts:
-* **ground** — paint tiles from the `hospital` tileset. `wall` is a wall, `door` a door, `floor_grass` outside;
-  any other floor tile is floor (each room type has its own look). `stairs` lead to the `stairs` tile at the same
+* **ground** — paint tiles from the `hospital` tileset. `wall` is a wall, `door` a door, `floor_grass` (or a
+  `grass_N`) and `floor_void` outside; any other floor tile is floor (each room type has its own look). A tile
+  named `<what>@<look>` (the files in `assets/custom/baked`) is a `<what>` that looks like that: `wall@nw` is a
+  wall with its edges at the top and left. `stairs` lead to the `stairs` tile at the same
   place on the floor above and below.
 * **rooms** — a rectangle over each room, walls included (an ellipse for a round one). Its *name* is shown in the
   game; its *class* is its kind: `waiting`, `reception`, `triage`, `doctor`, `emergency`, `surgery`, `disinfection`,
@@ -205,8 +221,9 @@ would have made the guess better (normalised least mean squares; one set of weig
 weights: minutes waited and impatience (how close the patient is to giving up). It starts as arrival order.
 
 **Days, money and the bonus.** The simulation runs in days of `DAY_HOURS` hours of `HOUR_S` simulated seconds
-(24 × 30 s), from day 0, kept by its own thread (`Hospital.run_day`): it pays the wages by the hour, closes the
-doors at `CLOSE_HOUR` (23:00), pays `OVERTIME_PAY` (x1.5) for every minute past midnight with patients still
+(24 × 60 s), from day 1, kept by its own thread (`Hospital.run_day`): it pays the wages by the hour, closes the
+doors at `CLOSE_HOUR` (23:00), at midnight sends home whoever is still waiting for a doctor (Reds excepted: they
+come back tomorrow, and pay nothing), pays `OVERTIME_PAY` (x1.5) for every minute past midnight with patients still
 inside, and when the last patient is gone it writes the day's report and pauses the world until the
 next day is started (`next_day`; in the game, the report's button or Enter; pause can't skip it). A treated
 patient pays `PRICE` by urgency (+ `SURGERY_PRICE`), all of it if it saw a doctor within `ON_TIME_S`, less the later

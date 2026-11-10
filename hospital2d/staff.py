@@ -203,6 +203,7 @@ class TaskStaff(Staff):
     """Idles (wandering, or resting when tired) until the dispatcher hands it a task. Just called in, it's ready
     for one at once: it goes to its place only while it has none (a task it was called for, it does straight away)."""
     takes_tasks = True
+    came_in = False  # (called in: at its place at least once)
 
     def life(self):
         while True:
@@ -236,9 +237,11 @@ class TaskStaff(Staff):
                 self.idle(self.tick())
 
     def idle(self, dt):
-        if self.commute:  # just hired, nothing to do yet: on to its place
-            self.set_path(self.route(self.commute))
-            self.commute = None
+        if self.commute and not self.came_in:  # just hired, nothing to do yet: on to its place
+            if (self.tx, self.ty) == self.commute:
+                self.came_in = True
+            elif not self.path:
+                self.set_path(self.route(self.commute))
         if self.path:
             self.step(dt)
         elif self.resting:

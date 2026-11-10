@@ -419,12 +419,12 @@ def test_day():
             assert h.admit(new_patient(h.rng)) is None  # closed: nobody else comes in
             assert until(lambda: h.day_over is not None, 60), 'the day never ended'
             report = h.day_over
-            assert h.speed == 0 and report['wages'] > 0 and report['day'] == 0 and report['overtime'] >= 0
+            assert h.speed == 0 and report['wages'] > 0 and report['day'] == 1 and report['overtime'] >= 0
             assert abs(report['profit'] - (report['income'] - report['wages'])) < 1e-6
             h.command(('pause',))
             assert h.speed == 0  # only starting the next day goes on
             h.command(('next_day',))
-            assert h.day == 1 and not h.closed and h.day_over is None and h.speed > 0
+            assert h.day == 2 and not h.closed and h.day_over is None and h.speed > 0
             assert h.today()['wages'] < report['wages']  # a new day, counted from zero
         finally:
             stop(h)

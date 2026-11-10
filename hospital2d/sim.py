@@ -58,7 +58,8 @@ class Hospital:
         self.errors = []
         self.surge_until = -1.0
         # The day: its number, when it started, doors closed (after midnight), its report once over (paused)
-        self.day, self.day_start, self.closed, self.day_over = 0, 0.0, False, None
+        self.day, self.day_start, self.closed, self.day_over = 1, 0.0, False, None
+        self.sent_home = False  # (today, at midnight)
         self.day_stats = Counter()  # self.stats when the day started (today = stats - day_stats)
         self.credit = Counter()  # today: staff label -> what it brought in (shares the bonus out)
         self.sim_hz, self.keep_up, self._hz_mark = 0.0, 1.0, (time.perf_counter(), 0, 0.0)
@@ -146,6 +147,12 @@ class Hospital:
             if not self.closed and hour >= config.CLOSE_HOUR:
                 self.closed = True
                 self.log(f'{config.CLOSE_HOUR}:00: no more patients today. The ones inside are seen to by midnight')
+            if overtime and not self.sent_home:  # midnight: who is still waiting (but Reds) comes back tomorrow
+                self.sent_home = True
+                waiting = [p for p in self.patients() if p.base_urgency < 2 and p.stage == 'waiting for a doctor']
+                for p in waiting:
+                    p.temperament, p.patience = 'passive', 0.0
+                self.log(f'Midnight: {len(waiting)} still waiting are sent home, to come back tomorrow')
             bringing = any(a.role == 'ambulance' or getattr(a, 'bringing', False) for a in self.actors)  # (an
             # ambulance or a car still on its way with someone)
             if self.closed and self.day_over is None and not self.patients() and not bringing:
@@ -184,6 +191,7 @@ class Hospital:
         with self.stats_lock:
             self.day_stats, self.credit = Counter(self.stats), Counter()
         self.day, self.day_start, self.closed, self.day_over = self.day + 1, self.clock(), False, None
+        self.sent_home = False
         self.set_speed(paused=False)
         self.log(f'Day {self.day} starts')
 
@@ -612,7 +620,7 @@ class Hospital:
     def summary(self):
         s = self.stats
         lines = [f'Simulated time: {self.clock():.0f} s',
-                 f'Days: {self.day + 1}  arrived: {s["arrived"]}  surges: {s["surges"]}',
+                 f'Days: {self.day}  arrived: {s["arrived"]}  surges: {s["surges"]}',
                  f'Earned: {s["income"]:.0f}  wages: {s["wages"]:.0f}  profit: {s["income"] - s["wages"]:.0f}',
                  f'Treated: {s["treated"]}  surgeries: {s["surgeries"]}  gave up: {s["gave_up"]}  '
                  f'thrown out: {s["expelled"]}',

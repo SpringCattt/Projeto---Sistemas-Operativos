@@ -17,7 +17,7 @@ import pygame
 import config
 from actors import ACTIONS, FACINGS, ROLE_LABEL
 from arrivals import run_arrivals
-from art import ASSETS, BUBBLE_TAIL_X, CHAR_H, CHAR_W, car_images, character, door_floor, draw_layout, furniture_sprites, glows, \
+from art import ASSETS, BUBBLE_TAIL_X, CHAR_H, CHAR_W, car_images, character, draw_layout, furniture_sprites, glows, \
     icon_bubble, image, LIFT, lying, text_bubble
 from eventlog import run_log
 from layout import EMPTY, FLOOR, FLOOR_GAP, WALL, load_layout
@@ -276,22 +276,21 @@ def run_ui(snapshots, commands, positions, sim=None):
     def lying_img(a):
         across = a.stretcher and a.facing in ('left', 'right')
         if (a.look, across) not in lying_imgs:
-            frame(a)
-            lying_imgs[(a.look, across)] = lying(looks[a.look], across)
+            lying_imgs[(a.look, across)] = lying(a.look, across)
         return lying_imgs[(a.look, across)]
 
     stretcher = {False: image('custom/stretcher_v'), True: image('custom/stretcher_h')}
-    chair_side = image('custom/wheelchair_h')  # (going left)
-    wheelchair = {'left': chair_side, 'right': pygame.transform.flip(chair_side, True, False),
+    wheelchair = {'left': image('custom/wheelchair_h'), 'right': image('custom/wheelchair_h_right'),
                   'down': image('custom/wheelchair_v'), 'up': image('custom/wheelchair_v')}
     cart_img = lambda kind, facing: wheelchair[facing] if kind == 'wheelchair' else stretcher[facing in ('left', 'right')]
-    def both_ways(img):  # (drawn nose up; coming in it faces down)
-        return {'up': img, 'down': pygame.transform.rotate(img, 180)}
-    vans = {None: both_ways(image('custom/ambulance'))}  # lights off; flashing; flashing with the back doors open
-    vans.update({(kind, i): both_ways(image(f'custom/ambulance_{kind}_{i}')) for kind in ('siren', 'open') for i in (0, 1)})
+    def both_ways(name):  # (going up: nose up; coming in: <name>_down)
+        return {'up': image(name), 'down': image(name + '_down')}
+    vans = {None: both_ways('custom/ambulance')}  # lights off; flashing; flashing with the back doors open
+    vans.update({(kind, i): both_ways(f'custom/ambulance_{kind}_{i}') for kind in ('siren', 'open') for i in (0, 1)})
     lift_frames = [image(f'custom/elevator_{i}') for i in range(3)]  # doors closed, half open, open
     shadow = image('custom/shadow')  # under everyone standing or walking
     cured_mark = image('custom/cured')  # over a treated patient, on its way out
+    marks = [image(f'custom/mark_{u}') for u in range(3)]  # over a triaged patient: its urgency
     lift_up = {True: image('custom/lift_up_on'), False: image('custom/lift_up_off')}
     lift_down = {True: image('custom/lift_down_on'), False: image('custom/lift_down_off')}
     lift_digit = [image(f'custom/lift_digit_{i}') for i in range(10)]
@@ -311,7 +310,7 @@ def run_ui(snapshots, commands, positions, sim=None):
     scaled = {}  # the map and the night as last scaled for the screen: (what for, surface)
     lifts = [(i, floor, piece) for i, stops in enumerate(lay.lifts) for floor, (_, _, piece) in stops.items()]
     lift_open = {}  # (lift, floor) -> how open its doors are drawn (0 to 2), easing towards the real state
-    door_open = {t: door_floor(lay, *t) for t in lay.doors}  # an open door: its floor (half each room's)...
+    door_open = {(x, y): image(lay.ground[y][x] + '_open') for x, y in lay.doors}  # an open door: its floor...
     door_leaf = {(o, end): image(f'custom/door_{o}_leaf_{end}') for o in 'hv' for end in (0, 1)}  # ...its leaves
     doorway = {}  # door tile -> all the tiles of its doorway (a double door opens as one)
     door_look = {}  # door tile -> (which way its wall goes, 'h' / 'v'; 0 / 1 at the doorway's first / last tile)
@@ -340,7 +339,7 @@ def run_ui(snapshots, commands, positions, sim=None):
     cam_y = (centre.y + centre.h / 2) * T - screen.get_height() / zoom / 2
     snap = {'actors': [], 'messes': [], 'events': [], 'stats': {}, 'time': 0.0, 'surge': False, 'sim_hz': 0.0,
             'line': 0, 'triage': 0, 'patients': 0, 'keep_up': 1.0, 'speed': config.TIME_SCALE, 'paused': False,
-            'staff': {}, 'day': 0, 'hour': 0.0, 'closed': False, 'day_over': None, 'today': {}, 'lifts': [], 'calls': []}
+            'staff': {}, 'day': 1, 'hour': 0.0, 'closed': False, 'day_over': None, 'today': {}, 'lifts': [], 'calls': []}
     show_tablet, opts, beat = False, {'count': 1, 'triaged': False}, 0.0
     actors, selected_id, room_sel, list_open, scroll, show_log, show_boss = [], None, None, False, 0, True, False
     view, sel_floor = 0, None  # the floor on screen; the one the selected person was on
@@ -598,8 +597,6 @@ def run_ui(snapshots, commands, positions, sim=None):
             else:
                 seated = (a.tx, a.ty) in lay.seats and not a.path or getattr(a, 'wheelchair', False)
                 x, y = to_screen(a.px - CHAR_W / 2 / T, a.py + FEET - CHAR_H / T)
-                if a.action == 'typing':  # bobs with the keystrokes
-                    y -= zoom * (int(beat * 8) % 2)
                 if seated:  # a little lower: on the seat (a backrest, desk or counter in front covers the legs)
                     y += SIT_DROP * zoom if lay.tiles[a.ty + 1][a.tx] != WALL else 0  # (not over a wall below)
                     blit_scaled(frame(a), x, y)
@@ -631,12 +628,8 @@ def run_ui(snapshots, commands, positions, sim=None):
             for a, hx, hy in heads:
                 if a.mark == 'cured':
                     blit_scaled(cured_mark, hx - cured_mark.get_width() * zoom / 2, hy - (cured_mark.get_height() + 1) * zoom)
-                elif a.mark is not None:
-                    r = zoom + 1
-                    pygame.draw.polygon(screen, URGENCY_COLORS[a.mark],
-                                        [(hx, hy - 3 * r), (hx + r, hy - 2 * r), (hx, hy - r), (hx - r, hy - 2 * r)])
-                    pygame.draw.polygon(screen, (30, 30, 30),
-                                        [(hx, hy - 3 * r), (hx + r, hy - 2 * r), (hx, hy - r), (hx - r, hy - 2 * r)], 1)
+                elif a.mark is not None:  # its urgency (mark_0 .. mark_2)
+                    blit_scaled(marks[a.mark], hx - marks[a.mark].get_width() * zoom / 2, hy - (marks[a.mark].get_height() + 1) * zoom)
                 key = ('say', a.speech) if a.speech else ('icon', a.bubble) if a.bubble else None
                 if key is not None:  # words win over an icon
                     if key not in bubbles:

@@ -19,12 +19,17 @@ MAPS = os.path.join(os.path.dirname(__file__), 'maps')  # the floors, drawn in t
 DRIVE = {f'road_{way}_{part}': way for way in 'nsew' for part in ('edge', 'mid')}
 DRIVE.update({'road_x': 'x', 'lot_e': 'e', 'lot_n': 'n', 'lot_s': 's', 'lot_x': 'x', 'lot_cross': 'e'})
 STEP = {'n': (0, -2), 's': (0, 2), 'e': (2, 0), 'w': (-2, 0)}  # (from one block to the next)
-GROUND = {'wall': WALL, 'door': DOOR, 'floor_grass': EMPTY,  # what a ground tile is; any other one is floor
+GROUND = {'wall': WALL, 'door': DOOR, 'floor_grass': EMPTY, 'floor_void': EMPTY, **{f'grass_{i}': EMPTY for i in range(4)},  # what a ground tile is; any other one is floor
           'road_l': EMPTY, 'road_r': EMPTY}  # (the ambulance's road: nobody walks on it)
 GROUND.update({name: EMPTY for name in DRIVE if name != 'lot_cross'})  # (people cross the lot's lane only at
 GROUND.update({name: EMPTY for name in ('lot_bay_l', 'lot_bay', 'lot_bay_r')})  # its zebra crossings; bays: cars')
 STAIRS = 'stairs'  # a stairs tile goes to the stairs tile at the same place on the floor above and below
-FLOOR_GAP = 4  # the floors lie side by side in one grid (grass between them: nobody walks across)
+FLOOR_GAP = 4  # the floors lie side by side in one grid (empty between them: nobody walks across)
+
+
+def base(name):
+    """What a ground tile is, from its image's name: custom/baked/wall@nw is a wall (after @: which look of it)."""
+    return name.rsplit('/', 1)[-1].split('@')[0]
 MARKERS = {'parking', 'dropoff'}  # where cars park (2 x 4 tiles; 'dropoff': taxis, and cars taking someone home)
 # Hung on the wall: on a room's top row they're drawn up on the wall above it, and don't take up the floor below
 WALL_MOUNTED = {'speaker', 'big_tv', 'call_screen', 'painting', 'painting_2', 'notice_board', 'first_aid',
@@ -90,7 +95,7 @@ def load_layout(folder=MAPS):
     floors = [read_floor(p) for p in paths]
     stride = max(len(f[0][0]) for f in floors) + FLOOR_GAP
     height = max(len(f[0]) for f in floors)
-    ground = [['custom/floor_grass'] * stride * len(floors) for _ in range(height)]
+    ground = [['custom/floor_void'] * stride * len(floors) for _ in range(height)]
     rooms, furniture, staff_only, stretchers, scenery = [], [], set(), [], []
     for n, (g, rs, fs, so, st, sc) in enumerate(floors):
         dx = n * stride
@@ -183,7 +188,7 @@ class Layout:
                       for t in stairs}
         # cached per plan (a cache on the method would keep every plan ever built alive: learn.py builds hundreds)
         self.distances_from = functools.lru_cache(maxsize=512)(self._distances_from)
-        self.tiles = [[GROUND.get(name.rsplit('/', 1)[-1], FLOOR) for name in row] for row in ground]
+        self.tiles = [[GROUND.get(base(name), FLOOR) for name in row] for row in ground]
         inside = lambda x, y: 0 <= x < self.width and 0 <= y < self.height
         self.room_at = [[None] * self.width for _ in range(self.height)]
         for r in sorted(rooms, key=lambda r: r.round):  # round rooms last: they sit inside another room
@@ -295,9 +300,13 @@ class Layout:
         self.stretcher_lane = {(x + dx, y + dy) for x, y in stretchers for dx in (-1, 0, 1) for dy in (-1, 0, 1)}
         self.stretcher_spots = [t for r in self.rooms_of('storage') for t in self.free_tiles(r)
                                 if t not in self.stretcher_lane]
-        # The wheelchairs (cured Red patients leave in one) are kept in the last of those
-        n = config.WHEELCHAIRS
-        self.wheelchair_spots, self.stretcher_spots = self.stretcher_spots[-n:], self.stretcher_spots[:-n]
+        # The wheelchairs (cured Red patients leave in one) are kept along the bottom row, by the side walls, in
+        # pairs on either side (the way to the door stays clear)
+        n, bottom = config.WHEELCHAIRS, max((t[1] for t in self.stretcher_spots), default=0)
+        mid2 = sum(r.x * 2 + r.w - 1 for r in self.rooms_of('storage')) / max(1, len(self.rooms_of('storage')))
+        row = sorted((t for t in self.stretcher_spots if t[1] == bottom), key=lambda t: -abs(2 * t[0] - mid2))
+        self.wheelchair_spots = row[:n]
+        self.stretcher_spots = [t for t in self.stretcher_spots if t not in self.wheelchair_spots]
         # Elevators: the same box at the same place on each floor it serves. It opens downwards, onto a column of
         # three tiles where a stretcher train (nurse, stretcher, nurse) waits to get in and comes out
         shafts = {}
@@ -317,8 +326,8 @@ class Layout:
         self.rest_spots = [t for r in self.rooms_of('rest') for t in self.free_tiles(r) if t in self.seats]
         # The city's roads, by blocks (DRIVE); cars come in where a lane enters floor 0 from beyond its edge (the
         # rest of the city), and leave where one goes out
-        self.drive = {(x, y): DRIVE[self.ground[y][x].rsplit('/', 1)[-1]] for y in range(0, self.height - 1, 2)
-                      for x in range(0, self.width - 1, 2) if self.ground[y][x].rsplit('/', 1)[-1] in DRIVE}
+        self.drive = {(x, y): DRIVE[base(self.ground[y][x])] for y in range(0, self.height - 1, 2)
+                      for x in range(0, self.width - 1, 2) if base(self.ground[y][x]) in DRIVE}
         # Keep right in a crossing too: each block of it is on a lane of each road that crosses there (the one
         # along its row, the one along its column), and a car in it may only go those two ways: never along the
         # other lane, against the traffic

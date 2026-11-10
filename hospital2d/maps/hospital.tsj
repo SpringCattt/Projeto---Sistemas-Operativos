@@ -6,7 +6,7 @@
  "columns": 0,
  "margin": 0,
  "spacing": 0,
- "tilecount": 125,
+ "tilecount": 241,
  "tilewidth": 77,
  "tileheight": 64,
  "objectalignment": "bottomleft",
@@ -1470,138 +1470,144 @@
   },
   {
    "id": 101,
-   "image": "../assets/custom/floor_waiting.png",
+   "image": "../assets/custom/floor_void.png",
    "imagewidth": 16,
    "imageheight": 16
   },
   {
    "id": 102,
-   "image": "../assets/custom/wall.png",
+   "image": "../assets/custom/floor_waiting.png",
    "imagewidth": 16,
    "imageheight": 16
   },
   {
    "id": 103,
-   "image": "../assets/custom/door.png",
+   "image": "../assets/custom/wall.png",
    "imagewidth": 16,
    "imageheight": 16
   },
   {
    "id": 104,
-   "image": "../assets/custom/stairs.png",
+   "image": "../assets/custom/door.png",
    "imagewidth": 16,
    "imageheight": 16
   },
   {
    "id": 105,
-   "image": "../assets/custom/road_n_edge.png",
+   "image": "../assets/custom/stairs.png",
    "imagewidth": 16,
    "imageheight": 16
   },
   {
    "id": 106,
-   "image": "../assets/custom/road_n_mid.png",
+   "image": "../assets/custom/road_n_edge.png",
    "imagewidth": 16,
    "imageheight": 16
   },
   {
    "id": 107,
-   "image": "../assets/custom/road_s_edge.png",
+   "image": "../assets/custom/road_n_mid.png",
    "imagewidth": 16,
    "imageheight": 16
   },
   {
    "id": 108,
-   "image": "../assets/custom/road_s_mid.png",
+   "image": "../assets/custom/road_s_edge.png",
    "imagewidth": 16,
    "imageheight": 16
   },
   {
    "id": 109,
-   "image": "../assets/custom/road_e_edge.png",
+   "image": "../assets/custom/road_s_mid.png",
    "imagewidth": 16,
    "imageheight": 16
   },
   {
    "id": 110,
-   "image": "../assets/custom/road_e_mid.png",
+   "image": "../assets/custom/road_e_edge.png",
    "imagewidth": 16,
    "imageheight": 16
   },
   {
    "id": 111,
-   "image": "../assets/custom/road_w_edge.png",
+   "image": "../assets/custom/road_e_mid.png",
    "imagewidth": 16,
    "imageheight": 16
   },
   {
    "id": 112,
-   "image": "../assets/custom/road_w_mid.png",
+   "image": "../assets/custom/road_w_edge.png",
    "imagewidth": 16,
    "imageheight": 16
   },
   {
    "id": 113,
-   "image": "../assets/custom/road_x.png",
+   "image": "../assets/custom/road_w_mid.png",
    "imagewidth": 16,
    "imageheight": 16
   },
   {
    "id": 114,
-   "image": "../assets/custom/lot_e.png",
+   "image": "../assets/custom/road_x.png",
    "imagewidth": 16,
    "imageheight": 16
   },
   {
    "id": 115,
-   "image": "../assets/custom/lot_n.png",
+   "image": "../assets/custom/lot_e.png",
    "imagewidth": 16,
    "imageheight": 16
   },
   {
    "id": 116,
-   "image": "../assets/custom/lot_s.png",
+   "image": "../assets/custom/lot_n.png",
    "imagewidth": 16,
    "imageheight": 16
   },
   {
    "id": 117,
-   "image": "../assets/custom/lot_x.png",
+   "image": "../assets/custom/lot_s.png",
    "imagewidth": 16,
    "imageheight": 16
   },
   {
    "id": 118,
-   "image": "../assets/custom/lot_cross.png",
+   "image": "../assets/custom/lot_x.png",
    "imagewidth": 16,
    "imageheight": 16
   },
   {
    "id": 119,
-   "image": "../assets/custom/lot_bay_l.png",
+   "image": "../assets/custom/lot_cross.png",
    "imagewidth": 16,
    "imageheight": 16
   },
   {
    "id": 120,
-   "image": "../assets/custom/lot_bay.png",
+   "image": "../assets/custom/lot_bay_l.png",
    "imagewidth": 16,
    "imageheight": 16
   },
   {
    "id": 121,
-   "image": "../assets/custom/lot_bay_r.png",
+   "image": "../assets/custom/lot_bay.png",
    "imagewidth": 16,
    "imageheight": 16
   },
   {
    "id": 122,
-   "image": "../assets/third_party/citypack/pieces/pavement.png",
+   "image": "../assets/custom/lot_bay_r.png",
    "imagewidth": 16,
    "imageheight": 16
   },
   {
    "id": 123,
+   "image": "../assets/third_party/citypack/pieces/pavement.png",
+   "imagewidth": 16,
+   "imageheight": 16
+  },
+  {
+   "id": 124,
    "image": "../assets/custom/parking.png",
    "imagewidth": 32,
    "imageheight": 64,
@@ -1624,7 +1630,7 @@
    ]
   },
   {
-   "id": 124,
+   "id": 125,
    "image": "../assets/custom/dropoff.png",
    "imagewidth": 32,
    "imageheight": 64,
@@ -1647,68 +1653,62 @@
    ]
   },
   {
-   "id": 125,
+   "id": 126,
    "image": "../assets/third_party/citypack/pieces/building_5.png",
    "imagewidth": 64,
    "imageheight": 48
   },
   {
-   "id": 126,
+   "id": 127,
    "image": "../assets/third_party/citypack/pieces/building_6.png",
    "imagewidth": 48,
    "imageheight": 48
   },
   {
-   "id": 127,
+   "id": 128,
    "image": "../assets/third_party/citypack/pieces/building_1.png",
    "imagewidth": 48,
    "imageheight": 96
   },
   {
-   "id": 128,
+   "id": 129,
    "image": "../assets/third_party/citypack/pieces/building_8.png",
    "imagewidth": 48,
    "imageheight": 48
   },
   {
-   "id": 129,
+   "id": 130,
    "image": "../assets/third_party/citypack/pieces/building_0.png",
    "imagewidth": 48,
    "imageheight": 96
   },
   {
-   "id": 130,
+   "id": 131,
    "image": "../assets/third_party/citypack/pieces/building_3.png",
    "imagewidth": 80,
    "imageheight": 96
   },
   {
-   "id": 131,
+   "id": 132,
    "image": "../assets/third_party/citypack/pieces/building_9.png",
    "imagewidth": 48,
    "imageheight": 42
   },
   {
-   "id": 132,
-   "image": "../assets/third_party/citypack/pieces/building_7.png",
-   "imagewidth": 64,
-   "imageheight": 54
-  },
-  {
    "id": 133,
-   "image": "../assets/third_party/citypack/pieces/building_2.png",
-   "imagewidth": 48,
-   "imageheight": 96
-  },
-  {
-   "id": 134,
    "image": "../assets/third_party/citypack/pieces/building_4.png",
    "imagewidth": 64,
    "imageheight": 42
   },
   {
+   "id": 134,
+   "image": "../assets/third_party/citypack/pieces/building_7.png",
+   "imagewidth": 64,
+   "imageheight": 54
+  },
+  {
    "id": 135,
-   "image": "../assets/third_party/citypack/pieces/building_11.png",
+   "image": "../assets/third_party/citypack/pieces/building_2.png",
    "imagewidth": 48,
    "imageheight": 96
   },
@@ -1720,27 +1720,27 @@
   },
   {
    "id": 137,
+   "image": "../assets/third_party/citypack/pieces/building_11.png",
+   "imagewidth": 48,
+   "imageheight": 96
+  },
+  {
+   "id": 138,
    "image": "../assets/third_party/citypack/pieces/lamp_1.png",
    "imagewidth": 36,
    "imageheight": 32
   },
   {
-   "id": 138,
+   "id": 139,
    "image": "../assets/third_party/citypack/pieces/lamp_0.png",
    "imagewidth": 31,
    "imageheight": 32
   },
   {
-   "id": 139,
+   "id": 140,
    "image": "../assets/third_party/citypack/pieces/lamp_2.png",
    "imagewidth": 31,
    "imageheight": 32
-  },
-  {
-   "id": 140,
-   "image": "../assets/third_party/citypack/pieces/traffic_light_4_0.png",
-   "imagewidth": 7,
-   "imageheight": 30
   },
   {
    "id": 141,
@@ -1750,39 +1750,597 @@
   },
   {
    "id": 142,
-   "image": "../assets/third_party/citypack/pieces/traffic_light_3_0.png",
+   "image": "../assets/third_party/citypack/pieces/traffic_light_4_0.png",
    "imagewidth": 7,
    "imageheight": 30
   },
   {
    "id": 143,
+   "image": "../assets/third_party/citypack/pieces/traffic_light_3_0.png",
+   "imagewidth": 7,
+   "imageheight": 30
+  },
+  {
+   "id": 144,
    "image": "../assets/third_party/citypack/pieces/tree_1.png",
    "imagewidth": 18,
    "imageheight": 27
   },
   {
-   "id": 144,
+   "id": 145,
    "image": "../assets/third_party/citypack/pieces/tree_0.png",
    "imagewidth": 16,
    "imageheight": 30
   },
   {
-   "id": 145,
+   "id": 146,
    "image": "../assets/third_party/citypack/pieces/billboard_0.png",
    "imagewidth": 48,
    "imageheight": 66
   },
   {
-   "id": 146,
+   "id": 147,
    "image": "../assets/third_party/citypack/pieces/billboard_1.png",
    "imagewidth": 48,
    "imageheight": 66
   },
   {
-   "id": 147,
+   "id": 148,
    "image": "../assets/third_party/citypack/pieces/billboard_2.png",
    "imagewidth": 48,
    "imageheight": 66
+  },
+  {
+   "id": 149,
+   "image": "../assets/custom/baked/door@0.png",
+   "imagewidth": 16,
+   "imageheight": 16
+  },
+  {
+   "id": 150,
+   "image": "../assets/custom/baked/door@1.png",
+   "imagewidth": 16,
+   "imageheight": 16
+  },
+  {
+   "id": 151,
+   "image": "../assets/custom/baked/door@10.png",
+   "imagewidth": 16,
+   "imageheight": 16
+  },
+  {
+   "id": 152,
+   "image": "../assets/custom/baked/door@11.png",
+   "imagewidth": 16,
+   "imageheight": 16
+  },
+  {
+   "id": 153,
+   "image": "../assets/custom/baked/door@12.png",
+   "imagewidth": 16,
+   "imageheight": 16
+  },
+  {
+   "id": 154,
+   "image": "../assets/custom/baked/door@13.png",
+   "imagewidth": 16,
+   "imageheight": 16
+  },
+  {
+   "id": 155,
+   "image": "../assets/custom/baked/door@14.png",
+   "imagewidth": 16,
+   "imageheight": 16
+  },
+  {
+   "id": 156,
+   "image": "../assets/custom/baked/door@15.png",
+   "imagewidth": 16,
+   "imageheight": 16
+  },
+  {
+   "id": 157,
+   "image": "../assets/custom/baked/door@16.png",
+   "imagewidth": 16,
+   "imageheight": 16
+  },
+  {
+   "id": 158,
+   "image": "../assets/custom/baked/door@17.png",
+   "imagewidth": 16,
+   "imageheight": 16
+  },
+  {
+   "id": 159,
+   "image": "../assets/custom/baked/door@18.png",
+   "imagewidth": 16,
+   "imageheight": 16
+  },
+  {
+   "id": 160,
+   "image": "../assets/custom/baked/door@19.png",
+   "imagewidth": 16,
+   "imageheight": 16
+  },
+  {
+   "id": 161,
+   "image": "../assets/custom/baked/door@2.png",
+   "imagewidth": 16,
+   "imageheight": 16
+  },
+  {
+   "id": 162,
+   "image": "../assets/custom/baked/door@20.png",
+   "imagewidth": 16,
+   "imageheight": 16
+  },
+  {
+   "id": 163,
+   "image": "../assets/custom/baked/door@21.png",
+   "imagewidth": 16,
+   "imageheight": 16
+  },
+  {
+   "id": 164,
+   "image": "../assets/custom/baked/door@22.png",
+   "imagewidth": 16,
+   "imageheight": 16
+  },
+  {
+   "id": 165,
+   "image": "../assets/custom/baked/door@23.png",
+   "imagewidth": 16,
+   "imageheight": 16
+  },
+  {
+   "id": 166,
+   "image": "../assets/custom/baked/door@3.png",
+   "imagewidth": 16,
+   "imageheight": 16
+  },
+  {
+   "id": 167,
+   "image": "../assets/custom/baked/door@4.png",
+   "imagewidth": 16,
+   "imageheight": 16
+  },
+  {
+   "id": 168,
+   "image": "../assets/custom/baked/door@5.png",
+   "imagewidth": 16,
+   "imageheight": 16
+  },
+  {
+   "id": 169,
+   "image": "../assets/custom/baked/door@6.png",
+   "imagewidth": 16,
+   "imageheight": 16
+  },
+  {
+   "id": 170,
+   "image": "../assets/custom/baked/door@7.png",
+   "imagewidth": 16,
+   "imageheight": 16
+  },
+  {
+   "id": 171,
+   "image": "../assets/custom/baked/door@8.png",
+   "imagewidth": 16,
+   "imageheight": 16
+  },
+  {
+   "id": 172,
+   "image": "../assets/custom/baked/door@9.png",
+   "imagewidth": 16,
+   "imageheight": 16
+  },
+  {
+   "id": 173,
+   "image": "../assets/custom/baked/floor_street@0.png",
+   "imagewidth": 16,
+   "imageheight": 16
+  },
+  {
+   "id": 174,
+   "image": "../assets/custom/baked/floor_street@1.png",
+   "imagewidth": 16,
+   "imageheight": 16
+  },
+  {
+   "id": 175,
+   "image": "../assets/custom/baked/floor_street@2.png",
+   "imagewidth": 16,
+   "imageheight": 16
+  },
+  {
+   "id": 176,
+   "image": "../assets/custom/baked/floor_street@3.png",
+   "imagewidth": 16,
+   "imageheight": 16
+  },
+  {
+   "id": 177,
+   "image": "../assets/custom/baked/floor_street@4.png",
+   "imagewidth": 16,
+   "imageheight": 16
+  },
+  {
+   "id": 178,
+   "image": "../assets/custom/baked/floor_street@5.png",
+   "imagewidth": 16,
+   "imageheight": 16
+  },
+  {
+   "id": 179,
+   "image": "../assets/custom/baked/floor_street@6.png",
+   "imagewidth": 16,
+   "imageheight": 16
+  },
+  {
+   "id": 180,
+   "image": "../assets/custom/baked/floor_street@7.png",
+   "imagewidth": 16,
+   "imageheight": 16
+  },
+  {
+   "id": 181,
+   "image": "../assets/custom/baked/floor_street@8.png",
+   "imagewidth": 16,
+   "imageheight": 16
+  },
+  {
+   "id": 182,
+   "image": "../assets/custom/baked/floor_void@0.png",
+   "imagewidth": 16,
+   "imageheight": 16
+  },
+  {
+   "id": 183,
+   "image": "../assets/custom/baked/floor_void@1.png",
+   "imagewidth": 16,
+   "imageheight": 16
+  },
+  {
+   "id": 184,
+   "image": "../assets/custom/baked/floor_void@2.png",
+   "imagewidth": 16,
+   "imageheight": 16
+  },
+  {
+   "id": 185,
+   "image": "../assets/custom/baked/floor_void@3.png",
+   "imagewidth": 16,
+   "imageheight": 16
+  },
+  {
+   "id": 186,
+   "image": "../assets/custom/baked/floor_void@4.png",
+   "imagewidth": 16,
+   "imageheight": 16
+  },
+  {
+   "id": 187,
+   "image": "../assets/custom/baked/lot_x@0.png",
+   "imagewidth": 16,
+   "imageheight": 16
+  },
+  {
+   "id": 188,
+   "image": "../assets/custom/baked/lot_x@1.png",
+   "imagewidth": 16,
+   "imageheight": 16
+  },
+  {
+   "id": 189,
+   "image": "../assets/custom/baked/lot_x@2.png",
+   "imagewidth": 16,
+   "imageheight": 16
+  },
+  {
+   "id": 190,
+   "image": "../assets/custom/baked/lot_x@3.png",
+   "imagewidth": 16,
+   "imageheight": 16
+  },
+  {
+   "id": 191,
+   "image": "../assets/custom/baked/lot_x@4.png",
+   "imagewidth": 16,
+   "imageheight": 16
+  },
+  {
+   "id": 192,
+   "image": "../assets/custom/baked/road_x@0.png",
+   "imagewidth": 16,
+   "imageheight": 16
+  },
+  {
+   "id": 193,
+   "image": "../assets/custom/baked/road_x@1.png",
+   "imagewidth": 16,
+   "imageheight": 16
+  },
+  {
+   "id": 194,
+   "image": "../assets/custom/baked/road_x@10.png",
+   "imagewidth": 16,
+   "imageheight": 16
+  },
+  {
+   "id": 195,
+   "image": "../assets/custom/baked/road_x@11.png",
+   "imagewidth": 16,
+   "imageheight": 16
+  },
+  {
+   "id": 196,
+   "image": "../assets/custom/baked/road_x@12.png",
+   "imagewidth": 16,
+   "imageheight": 16
+  },
+  {
+   "id": 197,
+   "image": "../assets/custom/baked/road_x@13.png",
+   "imagewidth": 16,
+   "imageheight": 16
+  },
+  {
+   "id": 198,
+   "image": "../assets/custom/baked/road_x@14.png",
+   "imagewidth": 16,
+   "imageheight": 16
+  },
+  {
+   "id": 199,
+   "image": "../assets/custom/baked/road_x@15.png",
+   "imagewidth": 16,
+   "imageheight": 16
+  },
+  {
+   "id": 200,
+   "image": "../assets/custom/baked/road_x@16.png",
+   "imagewidth": 16,
+   "imageheight": 16
+  },
+  {
+   "id": 201,
+   "image": "../assets/custom/baked/road_x@17.png",
+   "imagewidth": 16,
+   "imageheight": 16
+  },
+  {
+   "id": 202,
+   "image": "../assets/custom/baked/road_x@18.png",
+   "imagewidth": 16,
+   "imageheight": 16
+  },
+  {
+   "id": 203,
+   "image": "../assets/custom/baked/road_x@19.png",
+   "imagewidth": 16,
+   "imageheight": 16
+  },
+  {
+   "id": 204,
+   "image": "../assets/custom/baked/road_x@2.png",
+   "imagewidth": 16,
+   "imageheight": 16
+  },
+  {
+   "id": 205,
+   "image": "../assets/custom/baked/road_x@20.png",
+   "imagewidth": 16,
+   "imageheight": 16
+  },
+  {
+   "id": 206,
+   "image": "../assets/custom/baked/road_x@21.png",
+   "imagewidth": 16,
+   "imageheight": 16
+  },
+  {
+   "id": 207,
+   "image": "../assets/custom/baked/road_x@22.png",
+   "imagewidth": 16,
+   "imageheight": 16
+  },
+  {
+   "id": 208,
+   "image": "../assets/custom/baked/road_x@23.png",
+   "imagewidth": 16,
+   "imageheight": 16
+  },
+  {
+   "id": 209,
+   "image": "../assets/custom/baked/road_x@24.png",
+   "imagewidth": 16,
+   "imageheight": 16
+  },
+  {
+   "id": 210,
+   "image": "../assets/custom/baked/road_x@25.png",
+   "imagewidth": 16,
+   "imageheight": 16
+  },
+  {
+   "id": 211,
+   "image": "../assets/custom/baked/road_x@26.png",
+   "imagewidth": 16,
+   "imageheight": 16
+  },
+  {
+   "id": 212,
+   "image": "../assets/custom/baked/road_x@27.png",
+   "imagewidth": 16,
+   "imageheight": 16
+  },
+  {
+   "id": 213,
+   "image": "../assets/custom/baked/road_x@28.png",
+   "imagewidth": 16,
+   "imageheight": 16
+  },
+  {
+   "id": 214,
+   "image": "../assets/custom/baked/road_x@29.png",
+   "imagewidth": 16,
+   "imageheight": 16
+  },
+  {
+   "id": 215,
+   "image": "../assets/custom/baked/road_x@3.png",
+   "imagewidth": 16,
+   "imageheight": 16
+  },
+  {
+   "id": 216,
+   "image": "../assets/custom/baked/road_x@30.png",
+   "imagewidth": 16,
+   "imageheight": 16
+  },
+  {
+   "id": 217,
+   "image": "../assets/custom/baked/road_x@31.png",
+   "imagewidth": 16,
+   "imageheight": 16
+  },
+  {
+   "id": 218,
+   "image": "../assets/custom/baked/road_x@4.png",
+   "imagewidth": 16,
+   "imageheight": 16
+  },
+  {
+   "id": 219,
+   "image": "../assets/custom/baked/road_x@5.png",
+   "imagewidth": 16,
+   "imageheight": 16
+  },
+  {
+   "id": 220,
+   "image": "../assets/custom/baked/road_x@6.png",
+   "imagewidth": 16,
+   "imageheight": 16
+  },
+  {
+   "id": 221,
+   "image": "../assets/custom/baked/road_x@7.png",
+   "imagewidth": 16,
+   "imageheight": 16
+  },
+  {
+   "id": 222,
+   "image": "../assets/custom/baked/road_x@8.png",
+   "imagewidth": 16,
+   "imageheight": 16
+  },
+  {
+   "id": 223,
+   "image": "../assets/custom/baked/road_x@9.png",
+   "imagewidth": 16,
+   "imageheight": 16
+  },
+  {
+   "id": 224,
+   "image": "../assets/custom/baked/wall@e.png",
+   "imagewidth": 16,
+   "imageheight": 16
+  },
+  {
+   "id": 225,
+   "image": "../assets/custom/baked/wall@n.png",
+   "imagewidth": 16,
+   "imageheight": 16
+  },
+  {
+   "id": 226,
+   "image": "../assets/custom/baked/wall@ne.png",
+   "imagewidth": 16,
+   "imageheight": 16
+  },
+  {
+   "id": 227,
+   "image": "../assets/custom/baked/wall@ns.png",
+   "imagewidth": 16,
+   "imageheight": 16
+  },
+  {
+   "id": 228,
+   "image": "../assets/custom/baked/wall@nw.png",
+   "imagewidth": 16,
+   "imageheight": 16
+  },
+  {
+   "id": 229,
+   "image": "../assets/custom/baked/wall@s.png",
+   "imagewidth": 16,
+   "imageheight": 16
+  },
+  {
+   "id": 230,
+   "image": "../assets/custom/baked/wall@se.png",
+   "imagewidth": 16,
+   "imageheight": 16
+  },
+  {
+   "id": 231,
+   "image": "../assets/custom/baked/wall@w.png",
+   "imagewidth": 16,
+   "imageheight": 16
+  },
+  {
+   "id": 232,
+   "image": "../assets/custom/baked/wall@we.png",
+   "imagewidth": 16,
+   "imageheight": 16
+  },
+  {
+   "id": 233,
+   "image": "../assets/custom/baked/wall@ws.png",
+   "imagewidth": 16,
+   "imageheight": 16
+  },
+  {
+   "id": 234,
+   "image": "../assets/custom/grass_0.png",
+   "imagewidth": 16,
+   "imageheight": 16
+  },
+  {
+   "id": 235,
+   "image": "../assets/custom/grass_1.png",
+   "imagewidth": 16,
+   "imageheight": 16
+  },
+  {
+   "id": 236,
+   "image": "../assets/custom/grass_2.png",
+   "imagewidth": 16,
+   "imageheight": 16
+  },
+  {
+   "id": 237,
+   "image": "../assets/custom/grass_3.png",
+   "imagewidth": 16,
+   "imageheight": 16
+  },
+  {
+   "id": 238,
+   "image": "../assets/custom/street_0.png",
+   "imagewidth": 16,
+   "imageheight": 16
+  },
+  {
+   "id": 239,
+   "image": "../assets/custom/street_1.png",
+   "imagewidth": 16,
+   "imageheight": 16
+  },
+  {
+   "id": 240,
+   "image": "../assets/custom/street_2.png",
+   "imagewidth": 16,
+   "imageheight": 16
   }
  ]
 }

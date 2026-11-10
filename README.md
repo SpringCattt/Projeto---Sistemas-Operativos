@@ -1,62 +1,66 @@
 # Hospital simulator — Operating Systems project
 
 A pixel-art hospital where **every person is a thread**. Patients arrive, register, get triaged, wait, see a
-doctor (or go to surgery) and leave. Doctors, nurses, receptionists, security and cleaners do their jobs, and the
-**Boss** — sitting in the round control room at the centre — decides who does what.
-
-It's the project for *Comunicação e Sincronização entre Processos* (Universidade de Aveiro): **processes** that
-only talk through queues, and **threads** that share memory and synchronise with locks, conditions, events and
-semaphores.
+doctor (or go to surgery) and go home. Doctors, nurses, receptionists, security and cleaners do their jobs, and the
+**Boss**, in the round control room at the centre, decides who does what.
 
 ![The control room, with the Boss in the middle, and people talking](docs/screenshot.png)
 
+## The story
+
+This started as the project for *Comunicação e Sincronização entre Processos* (Universidade de Aveiro), and that
+version was handed in a long time ago (it's still here: [`SO Projeto Hospital/`](SO%20Projeto%20Hospital/), in
+Tkinter). I came back to it to understand process synchronisation better, and to make it more interesting to
+watch: pixel art, animations, a city with cars, day and night.
+
+At the same time I've been learning AI algorithms in class, so I tried them on the Boss, to see if it could make
+the hospital run better. That's where all the money comes from: patients pay, staff cost wages, and the Boss
+learns to make the most profit.
+
+Fair warning: I had never made a map before, so the building isn't exactly *aesthetic*. It works, though.
+
 ## Run it
 
-1. Install Python 3.12+ and the game library:
-   ```
-   pip install pygame-ce
-   ```
-2. Download the five free asset packs (their licences don't allow uploading them here) and unzip them into
-   `hospital2d/assets/third_party/`:
+1. Python 3.12+ and the game library: `pip install pygame-ce`
+2. The art packs (their licences don't allow uploading them): unzip each into `hospital2d/assets/third_party/`:
 
-   | Unzip into | Pack | Author |
-   |---|---|---|
-   | `hospital/` (with `Pngs/` inside) | [Hospital Top-Down Pixel Pack](https://soppycraft.itch.io/top-down-hospital) | Soppycraft |
-   | `characters/` (`000.png` … `039.png`) | [2D Top-Down Pixel Art Characters](https://gamebetweenthelines.itch.io/top-down-pixel-art-characters) | Jephed — Game Between The Lines |
-   | `moderntown/` (with `sprites/` inside) | [Modern Town Tileset — Free Sample](https://chuckyassets.itch.io/modern-town-tileset-free-sample) | Chucky Assets |
-   | `citypack/` (`CP_V1.0.4_nyknck/`, `Animations/`); then run `python slice_city.py` in `hospital2d/` once | [City Pack — Top Down — Pixel Art](https://nyknck.itch.io/citypackpixelart) | NYKNCK |
-   | `furniture/` (the `Furniture (N).png` files) | a furniture pixel-art pack (demo) | — |
+   | Folder | Pack |
+   |---|---|
+   | `hospital/` (with `Pngs/`) | [Hospital Top-Down Pixel Pack](https://soppycraft.itch.io/top-down-hospital) — Soppycraft |
+   | `characters/` (`000.png` … `039.png`) | [2D Top-Down Pixel Art Characters](https://gamebetweenthelines.itch.io/top-down-pixel-art-characters) — Jephed |
+   | `moderntown/` (with `sprites/`) | [Modern Town Tileset — Free Sample](https://chuckyassets.itch.io/modern-town-tileset-free-sample) — Chucky Assets |
+   | `citypack/`, then `python slice_city.py` once in `hospital2d/` | [City Pack — Top Down](https://nyknck.itch.io/citypackpixelart) — NYKNCK |
+   | `furniture/` (`Furniture (N).png`) | a furniture pixel-art pack (demo) |
 
-   Everything else (floors, walls, reception desk, speech bubbles…) is our own art, already in
-   `hospital2d/assets/custom/`.
-3. Start it:
-   ```
-   cd hospital2d
-   python main.py
-   ```
+   The rest of the art (floors, walls, roads, bubbles, cars in each colour...) is ours, in `hospital2d/assets/custom/`.
+3. `cd hospital2d` and `python main.py`
 
-**Controls:** WASD or right-drag to move · mouse wheel to zoom · click a person (or any room) to see what's going
-on · `B` see what the Boss is doing · `L` event log · `ESC` close · `Tab` **admin tablet** (pause, speed, send
-patients, trigger events, hire/send home staff) · `Space` pause · `+`/`-` speed · `Enter` start the next day.
+**Controls:** WASD or right-drag to move · wheel to zoom · click a person or a room to see what's going on ·
+`PgUp`/`PgDn` change floor · `B` what the Boss is doing · `L` event log · `Tab` admin tablet (pause, speed, send
+patients, events, hire staff) · `Space` pause · `+`/`-` speed · `Enter` next day.
 
-**Days and money.** It starts on day 0; a day is 24 hours, one every 30 seconds (12 minutes at x1). At 23:00 the
-doors close; everyone inside should be seen to by midnight, and every minute past it is overtime (wages x1.5). When
-the last patient is gone the day ends: the game pauses on the day's report (what the patients paid, the wages and
-how much of it was overtime, the profit and the staff bonus) until you start the next day. Patients pay by
-urgency, less the longer they waited for a doctor, nothing if they gave up; staff are paid by the hour; 30 % of the
-profit is the staff bonus, shared out by what each one brought in, so a bigger profit is a bigger bonus. All the numbers are in
-[`config.py`](hospital2d/config.py) (`PRICE`, `WAGE`, `BONUS_SHARE`...).
+## What happens
 
-To make it calmer or bigger, change [`hospital2d/config.py`](hospital2d/config.py): `TIME_SCALE` (0.5 = half
-speed), `N_PATIENTS`, `ARRIVALS_PER_MINUTE`… The building itself is a map you draw in
-[Tiled](https://www.mapeditor.org/), one map per floor: [`hospital2d/maps/`](hospital2d/maps/). Three floors:
-emergencies (and the stretchers' storage) on the ground floor, doctors' rooms on the first, surgeries and rest on
-the second; `PgUp` /
-`PgDn` (or the floor buttons) show another one.
+Three floors, symmetric about the middle of the hall: emergencies on the ground floor (reception, triage, waiting
+rooms, Emergency, storage, the Boss's control room), the doctors' rooms on the first, operating rooms and the
+staff's rest room on the second. Around it, a city: roads, cars that park and keep right, taxis, ambulances.
 
-## How it works, in short
+A patient's day: **street → reception → triage (Green / Yellow) → waiting room → doctor → home**. Red patients
+come by ambulance, go to a bed in Emergency, to surgery on a stretcher (elevator included) and home in a
+wheelchair, to a car that comes for them.
 
-**4 processes.** They talk through queues, plus **shared memory** for where everyone is and two shared flags:
+Things go wrong on purpose: surges of patients, patients getting worse while they wait, people running out of
+patience (they leave, complain or start a fight: security comes), vomit (cleaners come), tired staff going to rest.
+Everyone talks in speech bubbles.
+
+**A day** is 24 hours of 60 seconds (24 minutes at x1), from day 1. At 23:00 the doors close; from midnight,
+whoever no doctor has called yet goes home (Reds excepted) and every extra minute is overtime (wages x1.5). When
+the last patient leaves, the day's report: what patients paid, wages, profit, the staff bonus. All the numbers are
+in [`hospital2d/config.py`](hospital2d/config.py).
+
+## The Operating Systems part
+
+**4 processes**, talking through queues, plus **shared memory** for where everyone is:
 
 ```
  Arrivals ──patients──> Simulation ══positions (shared memory, seqlock, 60/s)══> UI (what you see)
@@ -64,71 +68,51 @@ the second; `PgUp` /
     └─ "doors open" (Event) ┘───────events──────> Log (hospital.log)
 ```
 
-Each kind of data goes the way that suits it. Positions are a few numbers per person, the same size every time,
-changing every frame: the simulation writes them straight into memory both processes see. Instead of a lock it's a
-**seqlock**: the simulation makes a counter odd while it writes and even when it's done, and the UI keeps a copy
-only if it saw the same even number before and after (else it copies again). The writer never waits for a reader,
-not even for one that froze or died half-way (with a lock, that would block the simulation for good), and the
-counter is also a version: 83 % of the UI's frames find nothing new and skip the copy. Words have any length and
-change now and then: they go through a queue, which copies them and does its own synchronisation. Measured with
-68 people, moving data to the UI went from 5.3 % of a CPU core (everything through the queue, 60 times a second)
-to 2.1 %.
+Positions go through shared memory with a **seqlock** (the writer never waits for the reader, even if the reader
+dies); text goes through a queue. That took moving data to the UI from 5.3 % of a CPU core to 2.1 %.
 
-At closing time the simulation clears a shared **Event**, "doors open", and the arrivals process sleeps on it until the
-next day (it used to keep sending patients nobody let in). If the simulation process dies, the window says so
-instead of showing a world frozen for no reason.
-
-**Inside the simulation, one thread per person.** Each one runs its own routine step by step. A patient's is:
-
-> street → reception line → registration → triage (Green / Yellow) → waiting room → doctor → exit
-
-Red patients can't walk: an ambulance brings them (down its road, siren on), its two paramedics carry them on their
-stretcher to a bed in Emergency, and from there the hospital's stretcher takes them to surgery.
-
-They share the building, so they synchronise:
+**Inside the simulation, one thread per person**, sharing the building:
 
 | Problem | Solution |
 |---|---|
-| Two people stepping onto the same tile | a **lock**: checking and taking a tile is one single step |
-| The reception line | a **monitor** (`Condition`): receptionists wait until someone is first in line |
+| Two people stepping onto the same tile | a **lock**: checking and taking a tile is one step |
+| The reception line | a **monitor** (`Condition`) |
 | Registered patients waiting for a triage nurse | a **queue** (producer–consumer) |
-| A doctor calls a patient and waits for them | two **events**: "I'm here" and "you can go" |
-| Only so many operating rooms and sinks | **semaphores** |
-| Two nurses meet at storage before bringing a stretcher | **condition + events** (rendezvous) |
-| One elevator for every stretcher, between floors | a **monitor** with its own thread (the car): first come, first served, one stretcher at a time |
-| One ambulance bay | a **semaphore**: the next ambulance waits up the road until the bay is free |
-| Who handles each task | the **Boss**, a thread that scores everyone by distance, fatigue and how busy they are |
-| Two people blocking each other in a doorway | whoever has waited too long steps aside (no deadlock) |
+| A doctor calls a patient and waits for them | two **events**: "I'm here", "you can go" |
+| Only so many operating rooms and sinks | **semaphores** (emergencies first) |
+| Two nurses meet at storage to bring a stretcher | **condition + events** (rendezvous) |
+| Two elevators for the stretchers | a **monitor** each, with its own thread: first there, first served |
+| One ambulance bay | a **semaphore**: the next ambulance waits up the road |
+| Two cars at a crossing | a crossing is taken whole or not at all (no deadlock); priority to the right |
+| Two people blocking each other in a doorway | only one of them steps aside (no deadlock, no dancing) |
+| Who does each task | the **Boss**, a thread scoring everyone by distance, fatigue and how busy they are |
 
-**Things happen:** surges of patients, patients getting worse while they wait, people running out of patience
-(they leave, complain at reception or start a fight — security comes), vomit (cleaners come), tired staff going
-to rest. Everyone talks in speech bubbles.
+**Limit:** about 900 threads on a Ryzen 5 3600 before the simulation can't keep up (Python's GIL).
 
-**Limit:** about 900 people (threads) on a Ryzen 5 3600 before the simulation can't keep up (Python's GIL).
+## The AI part
 
-More details — every file, every synchronisation, tests and performance numbers — in
-[`hospital2d/README.md`](hospital2d/README.md). The first version of the project (Tkinter) is in
-[`SO Projeto Hospital/`](SO%20Projeto%20Hospital/).
+The **Boss learns** to make the most profit in a day: who to see first among patients of the same colour (the most
+urgent colour always goes first, like real triage), and when to **call in staff on call** and send them home (more
+staff, more wages; fewer, longer waits and patients who give up). `python learn.py 8 4` plays 4 hospitals at once
+without the window, a whole day each round, trying small changes and keeping what makes more (Ctrl+C stops it);
+`python charts.py` draws how it's going (needs `pip install matplotlib`).
 
-## Tests
+## More
+
+Every file, every synchronisation, the tests and the performance numbers:
+[`hospital2d/README.md`](hospital2d/README.md). The building is a [Tiled](https://www.mapeditor.org/) map per
+floor ([`hospital2d/maps/`](hospital2d/maps/)), and everything you see is an image you can edit.
 
 ```
 cd hospital2d
 python test_layout.py   # the building
-python test_sim.py      # the simulation with real threads (~1.5 min)
-python bench.py         # how far it scales
+python test_sim.py      # the simulation, with real threads (~5 min)
 ```
-
-**The Boss learns** to make the biggest staff bonus, that is, the most profit in a day. What it decides: who to see
-first among patients of the same colour (the most urgent colour always goes first, like real triage), and when to
-**call in staff on call** and send them home (more staff, more wages; fewer, longer waits and patients who give
-up). `python learn.py 8 4` plays 4 hospitals at once without the window, a whole day each round, trying small
-changes and keeping what makes more (Ctrl+C stops it), and `python charts.py` draws how it's going (needs
-`pip install matplotlib`).
 
 ## Credits
 
 - [Hospital Top-Down Pixel Pack](https://soppycraft.itch.io/top-down-hospital) — Soppycraft
 - [2D Top-Down Pixel Art Characters](https://gamebetweenthelines.itch.io/top-down-pixel-art-characters) — Jephed, [Game Between The Lines](https://gamebetweenthelines.com/)
 - [Modern Town Tileset — Free Sample](https://chuckyassets.itch.io/modern-town-tileset-free-sample) — [Chucky Assets](https://chuckyassets.itch.io/)
-- [m5x7](https://managore.itch.io/m5x7) font (speech bubbles) — Daniel Linssen, CC0; included in `hospital2d/assets/fonts/`
+- [City Pack — Top Down — Pixel Art](https://nyknck.itch.io/citypackpixelart) — NYKNCK (buildings, cars, street furniture)
+- [m5x7](https://managore.itch.io/m5x7) font (speech bubbles) — Daniel Linssen, CC0

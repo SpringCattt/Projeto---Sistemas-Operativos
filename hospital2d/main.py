@@ -345,6 +345,8 @@ def run_ui(snapshots, commands, positions, sim=None):
     view, sel_floor = 0, None  # the floor on screen; the one the selected person was on
     version, rows = None, {}  # the positions block's version we have, and its rows
     dragging, cache, hits, people = False, {}, [], []
+    shot = os.environ.get('H2D_SCREENSHOT')  # "file.png:seconds": save a screenshot then and quit (the README's)
+    shot_at = time.perf_counter() + float(shot.rsplit(':', 1)[1]) if shot else None
 
     while True:
         dt = min(clock.tick(config.TARGET_FPS) / 1000, 0.1)
@@ -709,6 +711,10 @@ def run_ui(snapshots, commands, positions, sim=None):
                                 'L: log   B: boss   Tab: admin   Space: pause   +/-: speed   ESC: close',
                                 True, (200, 200, 200), (20, 22, 28)), (10, sh - 26))
         pygame.display.flip()
+        if shot_at and time.perf_counter() > shot_at:
+            pygame.image.save(screen, shot.rsplit(':', 1)[0])
+            pygame.event.post(pygame.event.Event(pygame.QUIT))
+            shot_at = None
 
 
 def main():

@@ -86,6 +86,9 @@ ambulance bay's marks, the dark round the building upstairs (`floor_void.png`); 
 (`assets/custom/cars/`); people lying under a blanket, one per character (`assets/custom/lying/`); the urgency
 marks over heads (`mark_0..2.png`). The maps point at those files.
 
+**After editing a map** in Tiled, from `hospital2d`: `python tools/mirror_rooms.py` (to keep it symmetric, edit only
+the left half: it copies it to the right) and `python tools/bake.py` (it makes the image files again).
+
 **Editing the building.** Open a floor (`maps/floorN.tmj`, 0 = ground floor) in Tiled (turn on *View → Snapping →
 Snap to Grid*). Another file `floor3.tmj` is another floor. Each map has three layers, and the game reads them all
 the next time it starts:
@@ -222,7 +225,7 @@ weights: minutes waited and impatience (how close the patient is to giving up). 
 
 **Days, money and the bonus.** The simulation runs in days of `DAY_HOURS` hours of `HOUR_S` simulated seconds
 (24 × 60 s), from day 1, kept by its own thread (`Hospital.run_day`): it pays the wages by the hour, closes the
-doors at `CLOSE_HOUR` (23:00), from midnight sends home whoever no doctor has called yet (in the line, at triage, waiting; Reds excepted: they
+doors at `CLOSE_HOUR` (23:00), from `LAST_CALL_HOUR` (23:30) sends home whoever no doctor has called yet (in the line, at triage, waiting; Reds excepted: they
 come back tomorrow, and pay nothing; whoever a doctor has called is seen to), turns away cars still waiting in town
 when it closes, pays `OVERTIME_PAY` (x1.5) for every minute past midnight with patients still
 inside, and when the last patient is gone it writes the day's report and pauses the world until the
@@ -321,7 +324,10 @@ straight instead of zig-zagging.
 | File | What it does |
 |---|---|
 | `main.py` | starts the processes; the UI (pygame) |
-| `sim.py` | the simulation process: `Hospital` (actors, threads, stats, snapshots) |
+| `sim.py` | the simulation process: `Hospital` (actors, threads, the clock, the elevators, stats, snapshots), made of the three below |
+| `days.py` | the day and the money: wages by the hour, closing time, the last call, the day's report, payments |
+| `staffing.py` | the staff: hiring, sending home, calling in staff on call |
+| `arrivals_flow.py` | patients coming and going: cars, taxis, ambulances, beds in Emergency, parking bays, the wheelchair home |
 | `world.py` | everything the threads share, and how they synchronise |
 | `actors.py` | what every actor has in common: ticks, walking, pathfinding, giving way |
 | `staff.py` | dispatcher, receptionists, triage nurses, doctors, security, cleaners, ward nurses |
@@ -329,6 +335,9 @@ straight instead of zig-zagging.
 | `arrivals.py` | the arrivals process |
 | `eventlog.py` | the log process |
 | `layout.py` | reads the maps: rooms, doors, furniture, named spots, roads and parking bays |
+| `tools/mirror_rooms.py` | after editing the left half of a floor in Tiled: copies it to the right half (mirror image) |
+| `tools/bake.py` | makes the image files the game draws from the maps (walls, doors, crossings, cars...): run it after any map edit |
+| `tools/art_procedural.py` | the drawing code `bake.py` uses to make those files |
 | `vehicles.py` | the cars of the city |
 | `slice_city.py` | cuts the City Pack into one PNG per piece (run once) |
 | `maps/` | the building, one Tiled map per floor (`floor0.tmj`...), and the tileset with every floor, wall, stairs and furniture PNG (`hospital.tsj`) |

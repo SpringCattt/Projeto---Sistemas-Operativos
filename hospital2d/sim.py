@@ -15,17 +15,17 @@ import config
 from actors import ROW
 from arrivals import new_patient
 from layout import load_layout
-from patients import Patient
-from staff import Ambulance, Boss, Cart, Cleaner, Doctor, Receptionist, Security, TriageNurse, WardNurse
-from vehicles import Car
+from staff import Boss, Cart, Cleaner, Doctor, Receptionist, Security, TriageNurse, WardNurse
+from arrivals_flow import PatientFlowMixin
+from days import DayMixin
+from staffing import JOBS, StaffingMixin
 
 SPEEDS = (0.25, 0.5, 1, 2, 4, 8)  # what the admin tablet offers
 BRAIN = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'boss_brain.json')  # written by learn.py
-JOBS = {c.__name__: c for c in (Doctor, WardNurse, TriageNurse, Receptionist, Security, Cleaner)}
-from world import Dispatcher, Elevator, Line, Task, Theatres, Transfer, World
+from world import Dispatcher, Elevator, Line, Theatres, World
 
 
-class Hospital:
+class Hospital(DayMixin, StaffingMixin, PatientFlowMixin):  # (each part in its own file)
     def __init__(self, seed=None, n_doctors=None, n_surgeries=None, n_patients=None, log_out=None, brain=None,
                  on_call=False):
         """brain: file with what the Boss learned (learn.py), to start from instead of config's weights.
@@ -128,69 +128,9 @@ class Hospital:
             self._spawn(self.run_lift, (lift,), f'elevator-{i}')
         self._spawn(self.run_day, (), 'day')
 
-    def run_day(self):
-        """The day's own thread: pays the staff by the hour, closes the doors at midnight, and ends the day when the
-        last patient is gone (the world then stays paused on the day's report until next_day)."""
-        last = self.clock()
-        while not self.stop.wait(0.1):
-            now = self.clock()
-            with self.actors_lock:
-                staff = [a for a in self.actors if a.role != 'patient']
-            hourly = sum(config.WAGE.get(a.role, 0) * (config.ON_CALL_PAY if a.on_call else 1) for a in staff)
-            hour = (now - self.day_start) / config.HOUR_S
-            overtime = hour >= config.DAY_HOURS  # past midnight: everyone still here is on overtime
-            paid = hourly * (now - last) / config.HOUR_S * (config.OVERTIME_PAY if overtime else 1)
-            self.count('wages', paid)
-            if overtime:
-                self.count('overtime', paid)
-            last = now
-            if not self.closed and hour >= config.CLOSE_HOUR:
-                self.closed = True
-                self.log(f'{config.CLOSE_HOUR}:00: no more patients today. The ones inside are seen to by midnight')
-            if overtime and not self.sent_home:  # midnight: from now on, whoever no doctor has yet (but Reds)
-                self.sent_home = True  # goes home, to come back tomorrow (Patient.upkeep)
-                self.log('Midnight: whoever is still waiting goes home, to come back tomorrow')
-            bringing = any(a.role == 'ambulance' or getattr(a, 'bringing', False) for a in self.actors)  # (an
-            # ambulance or a car still on its way with someone)
-            if self.closed and self.day_over is None and not self.patients() and not bringing:
-                self.end_day()
 
-    def today(self):
-        """Today's numbers so far (stats since the day started)."""
-        with self.stats_lock:
-            today = Counter(self.stats)
-            today.subtract(self.day_stats)
-        return today
 
-    def end_day(self):
-        """The day's report, the bonus shared out, and the world paused until next_day."""
-        today = self.today()
-        with self.stats_lock:
-            credit = dict(self.credit)
-        profit = today['income'] - today['wages']
-        pool = config.BONUS_SHARE * max(0.0, profit)
-        total = sum(credit.values())
-        bonus = sorted(((pool * c / total, who) for who, c in credit.items()), reverse=True) if total else []
-        late = max(0.0, (self.clock() - self.day_start) / config.HOUR_S - config.DAY_HOURS) * 60  # game minutes
-        self.day_over = {'day': self.day, 'income': today['income'], 'wages': today['wages'], 'profit': profit,
-                         'overtime': today['overtime'], 'overtime_min': late,
-                         'bonus': pool, 'treated': today['treated'], 'gave_up': today['gave_up'],
-                         'expelled': today['expelled'], 'surgeries': today['surgeries'],
-                         'called_in': today['called_in'], 'staff_bonus': bonus}
-        self.set_speed(paused=True)
-        self.log(f'End of day {self.day}: earned {today["income"]:.0f}, wages {today["wages"]:.0f}, '
-                 f'profit {profit:.0f}, staff bonus {pool:.0f}')
 
-    def next_day(self):
-        """After the report: the next day starts (from 00:00, doors open)."""
-        if self.day_over is None:
-            return
-        with self.stats_lock:
-            self.day_stats, self.credit = Counter(self.stats), Counter()
-        self.day, self.day_start, self.closed, self.day_over = self.day + 1, self.clock(), False, None
-        self.sent_home = False
-        self.set_speed(paused=False)
-        self.log(f'Day {self.day} starts')
 
     def run_lift(self, lift):
         """An elevator's own thread: to wherever it's needed (Elevator.target), one of its floors at a time."""
@@ -234,67 +174,11 @@ class Hospital:
         return self.summary()
 
     # ---- patients coming and going ------------------------------------------------------------------------------
-    def admit(self, info):
-        """A patient walks in from the street (sent by the arrivals process); none after midnight."""
-        if self.closed:
-            return None
-        self.count('arrived')
-        if info['urgency'] == 2 and self.lay.ambulance_spot is not None:  # Red: it can't walk, an ambulance brings it
-            self.log(f'An ambulance is bringing {info["name"]}')
-            a = Ambulance(self, info, self.rng)
-            with self.actors_lock:
-                self.actors.append(a)
-            if self.running:
-                self._spawn(a.run, (), f'ambulance-{a.id}')
-            return a
-        if info['urgency'] == 2:  # (a map with no ambulance: straight onto a bed in Emergency)
-            return self.add_waiting(info)
-        if self.lay.city_in and self.lay.bays['dropoff']:  # by car: its own if a bay is free, or else a taxi
-            car = Car(self, self.rng, info, self.claim_bay('parking'))
-            with self.actors_lock:
-                self.actors.append(car)
-            if self.running:
-                self._spawn(car.run, (), f'car-{car.id}')
-            return car
-        return self.out_of_car(info, None, None)  # (a map with no city: it walks in from the street)
 
-    def out_of_car(self, info, tiles, car):
-        """The patient a car brought, getting out on one of `tiles` (it goes back to that car when it leaves)."""
-        p = Patient(self, tiles or self.lay.street_edge, self.rng, info)
-        p.car = car
-        with self.actors_lock:
-            self.actors.append(p)
-        if self.running:
-            self._spawn(p.run, (), f'patient-{p.id}')
-        return p
 
-    def discharge(self, p):
-        """A cured Red patient can't walk out: a car comes to take it home, and a nurse wheels it there (a task)."""
-        p.home = threading.Event()
-        car = Car(self, self.rng, pickup=p)
-        with self.actors_lock:
-            self.actors.append(car)
-        if self.running:
-            self._spawn(car.run, (), f'car-{car.id}')
-        task = Task('wheelchair', 'nurse', 0, tile=(p.tx, p.ty), created=self.clock())
-        task.discharged, task.car = p, car
-        self.dispatcher.submit(task)
-        self.log(f'{p.label()} is going home: a wheelchair, and a car on its way')
 
-    def give_back_theatre(self, p):
-        """The operating room a cured Red patient stayed in (Doctor.operate), once it's out of it."""
-        room, p.theatre = getattr(p, 'theatre', None), None
-        if room is not None:
-            self.theatres.give_back(room)
 
-    def claim_bay(self, kind):
-        """A free bay of the parking lot ('parking' or 'dropoff'), now the claimer's; None if they're all taken."""
-        with self.bays_lock:
-            return self.free_bays[kind].pop(0) if self.free_bays[kind] else None
 
-    def free_bay(self, bay):
-        with self.bays_lock:
-            self.free_bays[bay['kind']].append(bay)
 
     def announce(self, p, room):
         """A doctor calls p from its waiting room: its name and where to go come up on that room's call screen and
@@ -312,59 +196,10 @@ class Hospital:
             going = 0 if target is None or target == e.floor else (1 if target > e.floor else -1)
             return e.floor, e.open and e.rider is not None, going
 
-    def carried_in(self, info, tile):
-        """A Red patient out of an ambulance, lying on the paramedics' stretcher at `tile`: its thread waits until
-        they've put it on a bed (delivered)."""
-        p = Patient(self, [tile], self.rng, info, triaged=True)
-        p.lying = p.on_stretcher = True
-        p.delivered, p.stage = threading.Event(), 'brought in by ambulance'
-        with self.actors_lock:
-            self.actors.append(p)
-        if self.running:
-            self._spawn(p.run, (), f'patient-{p.id}')
-        return p
 
-    def claim_bed(self, p):
-        """A free bed in Emergency for the paramedics to take p to: (room, the tile beside it, its middle), kept for
-        them until release_bed; None if they're all taken."""
-        near = self.lay.distances_from((p.tx, p.ty))
-        with self.world.lock:
-            free = [(near.get(side, 10 ** 6), room, side, middle) for room, beds in self.lay.emergency_beds.items()
-                    for side, middle in beds if side not in self.world.occupied and side not in self.bed_claims]
-            if not free:
-                return None
-            _, room, side, middle = min(free, key=lambda f: (f[0], f[2]))
-            self.bed_claims.add(side)
-            return room, side, middle
 
-    def release_bed(self, side):
-        with self.world.lock:
-            self.bed_claims.discard(side)
 
-    def delivered(self, p, room):
-        """p is on a bed in Emergency: from now on it waits there for a doctor (and the stretcher to surgery)."""
-        p.waiting_room, p.triaged_at = room, self.clock()
-        self.queue_for_doctor(p)
-        self.log(f'The paramedics leave {p.label()} in {room.name}')
-        p.delivered.set()
 
-    def add_waiting(self, info, room=None, arrive=None):
-        """A patient that is already triaged, sitting in a waiting room (the start of the day, and tests), or Red in
-        Emergency. arrive: tiles it appears on and walks from (the ambulance bay) instead of already being there."""
-        rooms = self.lay.rooms_of('waiting')
-        for er, beds in self.lay.emergency_beds.items():  # Red: a free bed in Emergency, if there is one
-            if room is None and info['urgency'] == 2 and any(side not in self.world.occupied for side, _ in beds):
-                room = er
-        room = room or rooms[len(self.patients()) % len(rooms)]
-        spots = [side for side, _ in self.lay.emergency_beds.get(room, [])] or self.lay.waiting_seats.get(room)
-        p = Patient(self, arrive or spots or self.lay.free_tiles(room), self.rng, info, triaged=True)
-        p.waiting_room = room
-        self.queue_for_doctor(p)
-        with self.actors_lock:
-            self.actors.append(p)
-        if self.running:
-            self._spawn(p.run, (), f'patient-{p.id}')
-        return p
 
     # ---- the admin tablet ---------------------------------------------------------------------------------------
     def command(self, cmd):
@@ -402,95 +237,11 @@ class Hospital:
         elif kind == 'fire':
             self.fire(JOBS[args[0]])
 
-    def working(self, job):
-        with self.actors_lock:
-            return [a for a in self.actors if type(a) is job and not a.quitting]
 
-    def places(self, job):
-        """Desks, rooms or seats a job needs one of each (None: no limit)."""
-        lay = self.lay
-        return {Doctor: lay.rooms_of('doctor'), Receptionist: lay.reception_desks,
-                TriageNurse: lay.triage_desks}.get(job)
 
-    def hire(self, job, on_call=False):
-        """A new member of staff walks in from the street to its place (on_call: the Boss called it in)."""
-        lay, rng = self.lay, self.rng
-        places = self.places(job)
-        if places is not None:
-            taken = {getattr(a, 'room', None) if job is Doctor else a.seat for a in self.working(job)}
-            free = [p for p in places if (p if job is Doctor else p[0] if job is Receptionist else p[1]) not in taken]
-            if not free:
-                return self.log(f'Admin: no free place for another {job.__name__}')
-            a = job(self, free[0], rng) if job is Doctor else job(self, *free[0], rng)
-            home = a.seat or (a.tx, a.ty) if job is Doctor else a.seat
-        else:
-            a = job(self, self.areas[job], rng)
-            a.area, home = self.areas[job], (a.tx, a.ty)
-        door = [t for r in lay.rooms if r.name == 'Exit' for t in lay.free_tiles(r) if t not in self.world.occupied]
-        with self.world.lock:  # it appears at the door, not at its place
-            if self.world.occupied.get((a.tx, a.ty)) is a:
-                del self.world.occupied[(a.tx, a.ty)]
-            a.tx, a.ty = rng.choice(door) if door else lay.street_edge[0]
-            a.px, a.py = a.tx + 0.5, a.ty + 0.5
-            self.world.occupied.setdefault((a.tx, a.ty), a)
-        a.commute = home
-        with self.actors_lock:
-            self.actors.append(a)
-        if job in (Doctor, WardNurse, Security, Cleaner):  # they get their work from the dispatcher
-            with self.dispatcher.cond:
-                self.dispatcher.staff.append(a)
-        if self.running:
-            self._spawn(a.run, (), f'{a.role}-{a.id}')
-        a.on_call = on_call
-        if on_call:
-            self.count('called_in')
-        self.log(f'Boss calls in {a.label()} (on call)' if on_call else f'Admin: {a.label()} starts a shift')
 
-    def fire(self, job, on_call=False):
-        """Sends one home (an idle one if possible): it finishes what it's doing and walks out."""
-        staff = [a for a in self.working(job) if a.on_call or not on_call]  # on_call: only those called in
-        if not staff:
-            return
-        a = min(staff, key=lambda a: (a.task is not None, a.doing != 'idle'))
-        a.quitting = True
-        with self.dispatcher.cond:
-            if a in self.dispatcher.staff:
-                self.dispatcher.staff.remove(a)  # no more tasks for it
-        self.log(f'Boss sends {a.label()} home: it\'s quiet again' if on_call else f'Admin: {a.label()} goes home')
 
-    def staffing(self):
-        """The Boss calls in staff on call when tasks pile up for a role, and sends them home once it has been
-        quiet for a while, like a real shift (config.ON_CALL). Called by the Boss's thread."""
-        now, d = self.clock(), self.dispatcher
-        with d.cond:
-            waiting = Counter(t.role for t in d.open)
-            free = Counter(a.role for a in d.staff if a.task is None and not a.resting)
-        for name, most in config.ON_CALL.items():
-            job = JOBS[name]
-            called = [a for a in self.working(job) if a.on_call]
-            places = self.places(job)
-            call_in_at, send_home_after, max_on_call, rush_from = d.policy[2:6]  # (learned: learn.py)
-            if (now - self.day_start) / config.HOUR_S >= rush_from:  # racing the clock to be done by midnight
-                call_in_at /= 2
-            most = round(most * max_on_call)
-            if waiting[job.role] >= free[job.role] + call_in_at:
-                self.quiet_since[name] = None
-                room = places is None or len(self.working(job)) < len(places)
-                if room and len(called) < most and now - self.last_call.get(name, -10 ** 9) > config.CALL_EVERY_S:
-                    self.last_call[name] = now
-                    self.hire(job, on_call=True)
-            elif waiting[job.role]:
-                self.quiet_since[name] = None
-            else:
-                if self.quiet_since.get(name) is None:
-                    self.quiet_since[name] = now
-                if called and now - self.quiet_since[name] > send_home_after:
-                    self.quiet_since[name] = now
-                    self.fire(job, on_call=True)
 
-    def staff_counts(self):
-        return {name: (len(self.working(job)), None if self.places(job) is None else len(self.places(job)))
-                for name, job in JOBS.items()}
 
     def surge(self, seconds):
         if self.closed:
@@ -502,47 +253,10 @@ class Hospital:
             p.say('?', 3)
         self.log(f'SURGE! Lots of patients arriving for the next {seconds:.0f} s')
 
-    def queue_for_doctor(self, p):
-        p.task = Task('consult', 'doctor', p.rank, patient=p, created=self.clock())
-        self.dispatcher.submit(p.task)
 
-    def fetch_stretcher(self, p, summons):
-        """Two nurses (two tasks for the dispatcher) bring `p` to `summons.tile` on a stretcher."""
-        summons.transfer = Transfer(p, summons)
-        team = [Task('stretcher', 'nurse', 2, patient=p, created=self.clock()) for _ in range(2)]
-        for task in team:
-            task.transfer, task.team = summons.transfer, team
-        self.dispatcher.submit(*team)
 
-    def consult_started(self, p):
-        if p.triaged_at is not None:
-            with self.stats_lock:
-                p.waited = self.clock() - p.triaged_at
-                self.waits[p.base_urgency].append(p.waited)
-            p.triaged_at = None  # only the first time counts (not after an interruption)
 
-    def treated(self, p, surgery=False):
-        """p pays: by its urgency, less the longer it waited for a doctor (config.PRICE). The payment is credited to
-        whoever did each step for it (config.SHARE): that shares the day's bonus out."""
-        p.cured = True  # (the UI shows it over its head until it's gone)
-        u, on_time = p.base_urgency, config.ON_TIME_S[p.base_urgency]
-        late = max(0.0, p.waited - on_time) / (2 * on_time)  # 0 on time, 1 at three times that
-        pay = (config.PRICE[u] + (config.SURGERY_PRICE if surgery else 0)) \
-            * max(config.LATE_PAYS, 1 - (1 - config.LATE_PAYS) * late)
-        shares = {step: share for step, share in config.SHARE.items() if p.helpers.get(step)}
-        shares['doctor'] = shares.get('doctor', 0) + 1 - sum(shares.values())  # the steps nobody did
-        with self.stats_lock:
-            self.stats['treated'] += 1
-            self.stats['income'] += pay
-            for step, share in shares.items():
-                who = p.helpers.get(step, [])
-                for a in who:
-                    self.credit[a.label()] += pay * share / len(who)
 
-    def credit_for(self, actor, kind):
-        """Security and cleaners: what a fight stopped or a mess cleaned counts for the bonus (config.CREDIT)."""
-        with self.stats_lock:
-            self.credit[actor.label()] += config.CREDIT[kind]
 
     def retire(self, actor):
         """An actor's thread ended: it leaves the map."""

@@ -352,7 +352,8 @@ class Layout:
         # way its nose points once in, and the tile beside it where its people get out and back in
         self.bays = {kind: [] for kind in MARKERS}
         for f in self.furniture:
-            lane = next(((f.x, y) for y in (f.y + f.h, f.y - 2) if (f.x, y) in self.drive), None) if f.kind in MARKERS else None
+            lane = next(((f.x - f.x % 2, y) for y in (f.y + f.h, f.y - 2) if (f.x - f.x % 2, y) in self.drive), None) \
+                if f.kind in MARKERS else None  # (the block of lane it's on, even if it starts on an odd column)
             if lane:
                 below = lane[1] > f.y  # (the lane below the bay: it drives in upwards)
                 self.bays[f.kind].append({'kind': f.kind, 'tiles': f.tiles(), 'lane': lane, 'stop': (f.x + f.w / 2, f.y + f.h / 2),

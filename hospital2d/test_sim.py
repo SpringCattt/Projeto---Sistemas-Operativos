@@ -213,6 +213,8 @@ def test_called_by_loudspeaker():
     h.start()
     try:
         assert until(lambda: h.calls, 30), 'nobody was called'
+        # (it may still be on its way to a seat when called: it sits down first, then hears its name)
+        assert until(lambda: p.stage.startswith('hearing its name'), 10), 'it never heard its name'
         called_at, who = h.calls[-1][:2]
         assert who == p.id
         seat = (p.tx, p.ty)

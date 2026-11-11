@@ -13,7 +13,7 @@ BASE_ROOMS = frozenset({'street', 'reception', 'waiting'})  # where a patient ma
 CALL_RANK = {'surgery': 4, 'exam': 4, 'consult': 3, 'triage': 2, 'register': 1, 'complaint': 1}
 
 
-# Where a patient is still only waiting (no doctor has it yet): from midnight, one that isn't Red goes home from there
+# Where a patient is still only waiting (no doctor has it yet): from the last call (23:30), one that isn't Red goes home
 NOT_SEEN_YET = ('in line at reception', 'in line to complain', 'waiting for triage', 'going to the waiting room',
                 'waiting for a doctor')
 

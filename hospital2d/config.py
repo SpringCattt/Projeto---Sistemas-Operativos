@@ -86,6 +86,7 @@ ANNOUNCE_S = 3.0  # a doctor's call: on the waiting room's screen and the loudsp
 HOUR_S = 60
 DAY_HOURS = 24
 CLOSE_HOUR = 23  # no new patients from this hour: everyone inside should be seen to by DAY_HOURS (midnight)
+LAST_CALL_HOUR = 23.5  # from then, whoever no doctor has called yet (but Reds) goes home: back tomorrow
 OVERTIME_PAY = 1.5  # past midnight, with patients still inside, every wage costs this many times more
 
 # Money (game numbers). A treated patient pays PRICE for its urgency at triage (+ SURGERY_PRICE if operated on):

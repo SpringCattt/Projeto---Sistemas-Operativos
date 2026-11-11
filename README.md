@@ -31,6 +31,7 @@ Fair warning: I had never made a map before, so the building isn't exactly *aest
    | `moderntown/` (with `sprites/`) | [Modern Town Tileset — Free Sample](https://chuckyassets.itch.io/modern-town-tileset-free-sample) — Chucky Assets |
    | `citypack/`, then `python slice_city.py` once in `hospital2d/` | [City Pack — Top Down](https://nyknck.itch.io/citypackpixelart) — NYKNCK |
    | `furniture/` (`Furniture (N).png`) | a furniture pixel-art pack (demo) |
+   | `pixel_retro/` (the PNGs of its `textures/`, and its font, which comes inside `pixel_retro_lite.tres`, as `umlaut_pixel_8.ttf`) | [Pixel Retro UI Theme Lite](https://juliusschmidt.itch.io/godot-ui-themes-lite) — Julius Schmidt |
 
    The rest of the art (floors, walls, roads, bubbles, cars in each colour...) is ours, in `hospital2d/assets/custom/`.
 3. `cd hospital2d` and `python main.py`
@@ -53,7 +54,7 @@ Things go wrong on purpose: surges of patients, patients getting worse while the
 patience (they leave, complain or start a fight: security comes), vomit (cleaners come), tired staff going to rest.
 Everyone talks in speech bubbles.
 
-**A day** is 24 hours of 60 seconds (24 minutes at x1), from day 1. At 23:00 the doors close; from midnight,
+**A day** is 24 hours of 60 seconds (24 minutes at x1), from day 1. At 23:00 the doors close; from 23:30,
 whoever no doctor has called yet goes home (Reds excepted) and every extra minute is overtime (wages x1.5). When
 the last patient leaves, the day's report: what patients paid, wages, profit, the staff bonus. All the numbers are
 in [`hospital2d/config.py`](hospital2d/config.py).

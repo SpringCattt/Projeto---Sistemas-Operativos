@@ -18,9 +18,9 @@ import config
 from actors import ACTIONS, FACINGS, ROLE_LABEL
 from arrivals import run_arrivals
 from art import ASSETS, BUBBLE_TAIL_X, CHAR_H, CHAR_W, car_images, character, draw_layout, furniture_sprites, glows, \
-    icon_bubble, image, LIFT, lying, text_bubble
+    icon_bubble, image, LIFT, lying, text_bubble, ui_box
 from eventlog import run_log
-from layout import EMPTY, FLOOR, FLOOR_GAP, WALL, load_layout
+from layout import DOOR, EMPTY, FLOOR, FLOOR_GAP, WALL, load_layout
 from sim import new_positions, read_positions, run_simulation
 
 T = config.TILE
@@ -30,15 +30,17 @@ SIT_DROP = 5  # someone sitting is drawn this many pixels lower
 NIGHT = (20, 6.5)  # the city's lights go on at 20:00 and off at 6:30
 CALL_S = 2.5  # a waiting room's call screen: seconds each call stays on it (blinking at first)
 WALK_CYCLE = [0, 1, 2, 1]  # sheet columns: step, idle, step, idle
-CARD_W, ROW_H, LIST_ROWS = 320, 20, 12  # info card width, row height, people listed at once
-TEXT, MUTED, HOVER, HIGHLIGHT = (240, 240, 240), (150, 160, 175), (60, 66, 80), (250, 220, 60)
+CARD_W, ROW_H, LIST_ROWS = 400, 20, 12  # info card width, row height, people listed at once
+TEXT, MUTED, PRESSED = (238, 242, 247), (154, 163, 184), (155, 227, 240)  # the UI theme's: on a pressed button
+HIGHLIGHT, GREEN, RED = (250, 220, 60), (110, 220, 120), (240, 110, 100)
 URGENCY_COLORS = [(70, 200, 90), (240, 200, 50), (235, 70, 70)]
+BAR_H, TOP = 40, 52  # the HUD and the controls bar; where what's under the HUD starts
 
 
 def card_panel(screen, n_rows):
-    panel = pygame.Surface((CARD_W, 16 + ROW_H * n_rows), pygame.SRCALPHA)
-    panel.fill((20, 22, 28, 220))
-    return panel, panel.get_rect(topright=(screen.get_width() - 10, 10))
+    panel = ui_box('panel', (CARD_W, 24 + ROW_H * n_rows)).copy()
+    panel.set_clip(panel.get_rect().inflate(-16, -16))  # (text never runs over the frame)
+    return panel, panel.get_rect(topright=(screen.get_width() - 6, TOP))
 
 
 def info_lines(a):
@@ -49,8 +51,8 @@ def info_lines(a):
 def draw_card(screen, font, lines):
     panel, rect = card_panel(screen, len(lines))
     for i, (k, v) in enumerate(lines):
-        panel.blit(font.render(f'{k}:', True, MUTED), (12, 8 + ROW_H * i))
-        panel.blit(font.render(str(v), True, TEXT), (110, 8 + ROW_H * i))
+        panel.blit(font.render(f'{k}:', False, MUTED), (16, 10 + ROW_H * i))
+        panel.blit(font.render(str(v), False, TEXT), (148, 10 + ROW_H * i))
     screen.blit(panel, rect)
     return [(rect, ('card',))]
 
@@ -64,10 +66,10 @@ def draw_room_card(screen, font, room, people, list_open, scroll):
     hits = []
 
     def row(i, text, color, action=None):
-        r = pygame.Rect(rect.x, rect.y + 8 + ROW_H * i - 2, CARD_W, ROW_H)
+        r = pygame.Rect(rect.x, rect.y + 12 + ROW_H * i, CARD_W, ROW_H)
         if action and r.collidepoint(mouse):
-            panel.fill(HOVER, (0, r.y - rect.y, CARD_W, ROW_H))
-        panel.blit(font.render(text, True, color), (12, r.y - rect.y + 2))
+            panel.blit(ui_box('hover', (CARD_W - 16, ROW_H)), (8, r.y - rect.y))
+        panel.blit(font.render(text, False, color), (16, r.y - rect.y - 2))
         if action:
             hits.append((r, action))
 
@@ -85,48 +87,47 @@ def draw_room_card(screen, font, room, people, list_open, scroll):
 
 
 def draw_panel(screen, font, title, lines, topright, width=CARD_W):
-    """A titled list of (text, colour) lines under the info card. Returns the bottom of the panel."""
-    panel = pygame.Surface((width, 30 + 18 * len(lines)), pygame.SRCALPHA)
-    panel.fill((20, 22, 28, 215))
-    panel.blit(font.render(title, True, HIGHLIGHT), (10, 6))
+    """A titled list of (text, colour) lines under the info card."""
+    panel = ui_box('panel', (width, 24 + 18 * (1 + len(lines)))).copy()
+    panel.set_clip(panel.get_rect().inflate(-16, -16))  # (a long line is cut at the frame)
+    panel.blit(font.render(title, False, HIGHLIGHT), (16, 10))
     for i, (text, color) in enumerate(lines):
-        panel.blit(font.render(text[:width // 7], True, color), (10, 26 + 18 * i))
-    rect = panel.get_rect(topright=topright)
-    screen.blit(panel, rect)
-    return rect.bottom
+        panel.blit(font.render(text, False, color), (16, 10 + 18 * (1 + i)))
+    screen.blit(panel, panel.get_rect(topright=topright))
 
 
-def draw_day_report(screen, font, small, r):
+def draw_day_report(screen, font, title_font, r):
     """The end of the day: what came in, what the staff cost, the profit and who got the biggest bonus. The world
     waits, paused, until the button (or Enter) starts the next day. Returns the clickable areas."""
-    green, red = (110, 220, 120), (240, 110, 100)
     lines = [(f'Treated {r["treated"]:.0f}   gave up {r["gave_up"]:.0f}   thrown out {r["expelled"]:.0f}'
-              f'   surgeries {r["surgeries"]:.0f}', TEXT),
-             (f'Staff called in by the Boss: {r["called_in"]:.0f}', TEXT),
-             ('', TEXT),
-             (f'Patients paid      {r["income"]:10,.0f}', green),
-             (f'Wages              {-r["wages"]:10,.0f}', red),
-             (f'  of it overtime   {-r["overtime"]:10,.0f}  ({r["overtime_min"]:.0f} min past midnight)',
-              red if r['overtime'] else MUTED),
-             (f'Profit             {r["profit"]:10,.0f}', green if r['profit'] >= 0 else red),
-             (f'Staff bonus ({100 * config.BONUS_SHARE:.0f}%)  {r["bonus"]:10,.0f}', HIGHLIGHT),
-             ('', TEXT)]
-    lines += [(f'  {amount:7,.0f}  {who}', TEXT) for amount, who in r['staff_bonus'][:5]]
+              f'   surgeries {r["surgeries"]:.0f}', None, '', TEXT),  # (text, amount, after it, colour)
+             (f'Staff called in by the Boss: {r["called_in"]:.0f}', None, '', TEXT),
+             ('', None, '', TEXT),
+             ('Patients paid', r['income'], '', GREEN),
+             ('Wages', -r['wages'], '', RED),
+             ('  of it overtime', -r['overtime'], f'({r["overtime_min"]:.0f} min past midnight)',
+              RED if r['overtime'] else MUTED),
+             ('Profit', r['profit'], '', GREEN if r['profit'] >= 0 else RED),
+             (f'Staff bonus ({100 * config.BONUS_SHARE:.0f}%)', r['bonus'], '', HIGHLIGHT),
+             ('', None, '', TEXT)]
+    lines += [('', amount, who, TEXT) for amount, who in r['staff_bonus'][:5]]
     sw, sh = screen.get_size()
-    w, h = 480, 90 + 22 * len(lines)
-    box = pygame.Rect(0, 0, w, h)
+    box = pygame.Rect(0, 0, 600, 122 + 22 * len(lines))
     box.center = (sw // 2, sh // 2)
-    panel = pygame.Surface(box.size, pygame.SRCALPHA)
-    panel.fill((20, 22, 28, 235))
-    screen.blit(panel, box)
-    pygame.draw.rect(screen, HIGHLIGHT, box, 2, border_radius=6)
-    title = font.render(f'End of day {r["day"]}', True, HIGHLIGHT)
-    screen.blit(title, title.get_rect(midtop=(box.centerx, box.y + 12)))
-    for i, (text, color) in enumerate(lines):
-        screen.blit(font.render(text, True, color), (box.x + 24, box.y + 44 + 22 * i))
+    screen.blit(ui_box('panel', box.size), box)
+    title = title_font.render(f'End of day {r["day"]}', False, HIGHLIGHT)
+    screen.blit(title, title.get_rect(midtop=(box.centerx, box.y + 8)))
+    for i, (text, amount, after, color) in enumerate(lines):
+        y = box.y + 60 + 22 * i
+        screen.blit(font.render(text, False, color), (box.x + 24, y))
+        if amount is not None:  # (the font isn't monospaced: amounts lined up by their right end)
+            figure = font.render(f'{amount:,.0f}', False, color)
+            screen.blit(figure, figure.get_rect(topright=(box.x + 330, y)))
+        screen.blit(font.render(after, False, color), (box.x + 342, y))
     go = pygame.Rect(0, 0, 220, 30)
-    go.midbottom = (box.centerx, box.bottom - 12)
-    return [(button(screen, font, go, f'Start day {r["day"] + 1} (Enter)', on=True), ('cmd', ('next_day',)))]
+    go.midbottom = (box.centerx, box.bottom - 16)
+    focus_frame(screen, go)  # (Enter presses it)
+    return [(button(screen, font, go, f'Start day {r["day"] + 1} (Enter)'), ('cmd', ('next_day',)))]
 
 
 def draw_dispatcher(screen, font, boss, to_screen, by_id, shown):
@@ -154,77 +155,99 @@ def draw_dispatcher(screen, font, boss, to_screen, by_id, shown):
 def draw_events(screen, font, events):
     if not events:
         return
-    panel = pygame.Surface((560, 10 + 18 * len(events)), pygame.SRCALPHA)
-    panel.fill((20, 22, 28, 190))
+    panel = ui_box('inset', (700, 16 + ROW_H * len(events))).copy()
+    panel.set_clip(panel.get_rect().inflate(-12, -12))
     for i, (t, text) in enumerate(events):
         color = (255, 120, 110) if text.startswith(('SURGE', 'ERROR')) else (225, 225, 225)
-        panel.blit(font.render(f'{int(t // 60):02d}:{int(t % 60):02d}  {text}'[:78], True, color), (8, 5 + 18 * i))
-    screen.blit(panel, (10, screen.get_height() - 36 - panel.get_height()))
+        panel.blit(font.render(f'{int(t // 60):02d}:{int(t % 60):02d}  {text}'[:78], False, color), (10, 6 + ROW_H * i))
+    screen.blit(panel, (6, screen.get_height() - BAR_H - 10 - panel.get_height()))
 
 
 JOB_LABELS = [('Doctor', 'Doctors'), ('WardNurse', 'Ward nurses'), ('TriageNurse', 'Triage nurses'),
               ('Receptionist', 'Receptionists'), ('Security', 'Security'), ('Cleaner', 'Cleaners')]
-TABLET_W = 340
+TABLET_W = 460
+CONTROLS = [('WASD/right-drag', 'move'), ('wheel', 'zoom'), ('PgUp/PgDn', 'floor'), ('click', 'NPC or room info'),
+            ('L', 'log'), ('B', 'boss'), ('Tab', 'admin'), ('Space', 'pause'), ('+/-', 'speed'), ('ESC', 'close')]
 
 
-def button(screen, font, rect, text, color=(58, 64, 80), on=False):
-    pygame.draw.rect(screen, HIGHLIGHT if on else color, rect, border_radius=4)
-    label = font.render(text, True, (20, 22, 28) if on else TEXT)
-    screen.blit(label, label.get_rect(center=rect.center))
+def button(screen, font, rect, text, color=TEXT, on=False):
+    """The theme's button: pressed while on (the floor on screen, the option chosen), lit under the mouse."""
+    state = 'pressed' if on else 'hover' if rect.collidepoint(pygame.mouse.get_pos()) else 'normal'
+    screen.blit(ui_box('button_' + state, rect.size), rect)
+    label = font.render(text, False, PRESSED if on and color == TEXT else color)
+    # (the face is lower when pressed: the shadow is above it then, below it otherwise)
+    screen.blit(label, label.get_rect(center=(rect.centerx, rect.centery + (1 if on else -1))))
     return rect
 
 
-def draw_tablet(screen, font, small, snap, opts, top):
+def select_frame(screen, rect):
+    """A yellow frame just outside rect: what's selected on the map."""
+    rect = pygame.Rect(rect).inflate(4, 4)
+    screen.blit(ui_box('custom/select', rect.size), rect)
+
+
+def focus_frame(screen, rect):
+    """The theme's dashed frame, just outside rect: what's selected."""
+    rect = pygame.Rect(rect).inflate(8, 8)
+    screen.blit(ui_box('focus', rect.size), rect)
+
+
+def banner(screen, font, text, midtop):
+    label = font.render(text, False, RED)
+    box = label.get_rect(midtop=midtop).inflate(32, 12)
+    screen.blit(ui_box('panel', box.size), box)
+    screen.blit(label, label.get_rect(center=box.center))
+
+
+def draw_tablet(screen, font, snap, opts, top):
     """The admin tablet: changes the world while it runs. Returns the clickable areas as [(rect, action)]."""
-    x0, w = 10, TABLET_W
-    frame = pygame.Rect(x0, top, w, 36 + 4 * 26 + 5 * 28 + 22 + len(JOB_LABELS) * 28 + 6)  # headings, rows, lines
-    pygame.draw.rect(screen, (12, 13, 17), frame.inflate(10, 10), border_radius=14)  # the tablet's bezel
-    pygame.draw.rect(screen, (28, 31, 39), frame, border_radius=8)
+    x0, w = 6, TABLET_W
+    frame = pygame.Rect(x0, top, w, 40 + 4 * 26 + 5 * 34 + 24 + len(JOB_LABELS) * 34 + 12)  # headings, rows, lines
+    screen.blit(ui_box('panel', frame.size), frame)
     hits = []  # (the tablet itself goes last: the first area under the mouse wins, so its buttons go first)
-    screen.blit(font.render('Admin tablet', True, HIGHLIGHT), (x0 + 12, top + 8))
-    y = top + 36
+    screen.blit(font.render('Admin tablet', False, HIGHLIGHT), (x0 + 16, top + 10))
+    y = top + 40
 
     def heading(text):
         nonlocal y
-        screen.blit(small.render(text, True, MUTED), (x0 + 12, y + 6))
+        screen.blit(font.render(text, False, MUTED), (x0 + 16, y + 2))
         y += 26
 
-    def row(*buttons):  # (text, action, colour, on): side by side, sharing the width
+    def row(*buttons):  # (text, action, text colour, on): side by side, sharing the width
         nonlocal y
-        bw = (w - 24 - 6 * (len(buttons) - 1)) // len(buttons)
+        bw = (w - 32 - 6 * (len(buttons) - 1)) // len(buttons)
         for i, (text, action, color, on) in enumerate(buttons):
-            r = button(screen, small, pygame.Rect(x0 + 12 + i * (bw + 6), y, bw, 22), text, color, on)
+            r = button(screen, font, pygame.Rect(x0 + 16 + i * (bw + 6), y, bw, 30), text, color, on)
             hits.append((r, action))
-        y += 28
+        y += 34
 
-    grey = (58, 64, 80)
     heading('World')
     paused = snap['paused']
-    row(('Resume' if paused else 'Pause', ('cmd', ('pause',)), (190, 60, 60) if paused else grey, False),
-        ('Slower', ('cmd', ('speed', -1)), grey, False), ('Faster', ('cmd', ('speed', 1)), grey, False))
-    screen.blit(small.render(f'speed x{snap["speed"]:g}' + ('  (paused)' if paused else ''), True, TEXT),
-                (x0 + 14, y))
-    y += 22
+    row(('Resume' if paused else 'Pause', ('cmd', ('pause',)), RED if paused else TEXT, False),
+        ('Slower', ('cmd', ('speed', -1)), TEXT, False), ('Faster', ('cmd', ('speed', 1)), TEXT, False))
+    screen.blit(font.render(f'speed x{snap["speed"]:g}' + ('  (paused)' if paused else ''), False, TEXT),
+                (x0 + 18, y - 2))
+    y += 24
     heading('Patients (click to send)')
-    row(*((f'x{n}', ('opt', 'count', n), grey, opts['count'] == n) for n in (1, 5, 20)))
-    row(('At the door', ('opt', 'triaged', False), grey, not opts['triaged']),
-        ('Already triaged', ('opt', 'triaged', True), grey, opts['triaged']))
+    row(*((f'x{n}', ('opt', 'count', n), TEXT, opts['count'] == n) for n in (1, 5, 20)))
+    row(('At the door', ('opt', 'triaged', False), TEXT, not opts['triaged']),
+        ('Already triaged', ('opt', 'triaged', True), TEXT, opts['triaged']))
     send = lambda u, s: ('cmd', ('patient', u, s, opts['count'], opts['triaged']))
-    dark = [tuple(c // 2 for c in col) for col in URGENCY_COLORS]
-    row(('Green', send(0, False), dark[0], False), ('Yellow', send(1, False), dark[1], False),
-        ('Red', send(2, False), dark[2], False), ('Red+surg.', send(2, True), dark[2], False))
+    row(('Green', send(0, False), URGENCY_COLORS[0], False), ('Yellow', send(1, False), URGENCY_COLORS[1], False),
+        ('Red', send(2, False), URGENCY_COLORS[2], False), ('Red+surg.', send(2, True), URGENCY_COLORS[2], False))
     heading('Events')
-    row(('Surge', ('cmd', ('surge',)), grey, False), ('Fight', ('cmd', ('fight',)), grey, False),
-        ('Vomit', ('cmd', ('vomit',)), grey, False))
+    row(('Surge', ('cmd', ('surge',)), TEXT, False), ('Fight', ('cmd', ('fight',)), TEXT, False),
+        ('Vomit', ('cmd', ('vomit',)), TEXT, False))
     heading('Staff (on shift / places)')
     for job, label in JOB_LABELS:
         n, most = snap['staff'].get(job, (0, None))
-        screen.blit(small.render(label, True, TEXT), (x0 + 14, y + 4))
-        screen.blit(small.render(f'{n}' + (f' / {most}' if most is not None else ''), True, TEXT), (x0 + 200, y + 4))
-        hits.append((button(screen, small, pygame.Rect(x0 + 150, y, 34, 22), '-'), ('cmd', ('fire', job))))
-        hits.append((button(screen, small, pygame.Rect(x0 + 260, y, 34, 22), '+'), ('cmd', ('hire', job))))
-        y += 28
-    return hits + [(frame.inflate(10, 10), ('card',))]
+        screen.blit(font.render(label, False, TEXT), (x0 + 18, y + 1))
+        count = font.render(f'{n}' + (f' / {most}' if most is not None else ''), False, TEXT)
+        screen.blit(count, count.get_rect(midtop=(x0 + 335, y + 1)))
+        hits.append((button(screen, font, pygame.Rect(x0 + 250, y, 40, 30), '-'), ('cmd', ('fire', job))))
+        hits.append((button(screen, font, pygame.Rect(x0 + 380, y, 40, 30), '+'), ('cmd', ('hire', job))))
+        y += 34
+    return hits + [(frame, ('card',))]
 
 
 SKY = [(0, (14, 22, 60, 150)), (5, (14, 22, 60, 150)), (6.5, (255, 170, 120, 60)), (7.5, (255, 255, 255, 0)),
@@ -249,9 +272,9 @@ def run_ui(snapshots, commands, positions, sim=None):
     screen = pygame.display.set_mode((1280, 720), pygame.RESIZABLE)
     pygame.display.set_caption('Hospital')
     clock = pygame.time.Clock()
-    font = pygame.font.SysFont('consolas', 15)
-    small = pygame.font.SysFont('consolas', 13)
-    banner_font = pygame.font.SysFont('consolas', 28, bold=True)
+    # Umlaut Pixel 8 (it comes with the UI theme, see README) at 2x and 4x like the theme's frames, no antialiasing
+    ui_font = os.path.join(ASSETS, 'third_party', 'pixel_retro', 'umlaut_pixel_8.ttf')
+    font, title_font = pygame.font.Font(ui_font, 16), pygame.font.Font(ui_font, 32)
     # m5x7 (Daniel Linssen, CC0) at its native size, without antialiasing, scaled up with the rest: pixel text
     bubble_font = pygame.font.Font(os.path.join(ASSETS, 'fonts', 'm5x7.ttf'), 16)
     bubbles = {}  # what's said (or an icon) -> its speech bubble
@@ -300,12 +323,17 @@ def run_ui(snapshots, commands, positions, sim=None):
     screen_lines = {}  # what a call screen shows -> those lines, drawn
     # Outside (grass, road, street) gets dark at night and warm at dawn and dusk; inside the lights are on
     outdoor = pygame.Surface(floor_map.get_size(), pygame.SRCALPHA)
+    out = lambda x, y: lay.tiles[y][x] == EMPTY or (lay.room_at[y][x] is None and lay.tiles[y][x] == FLOOR) or (
+        lay.room_at[y][x] is not None and lay.room_at[y][x].kind == 'street')
     for y in range(lay.height):
         for x in range(lay.width):
-            room = lay.room_at[y][x]
-            if lay.tiles[y][x] == EMPTY or (room is None and lay.tiles[y][x] == FLOOR) or (room is not None and
-                                                                                   room.kind == 'street'):
+            if out(x, y):
                 outdoor.fill((255, 255, 255, 255), (x * T, y * T, T, T))
+            elif lay.tiles[y][x] == DOOR:  # a door out: the half of it on the outside side gets dark too
+                for dx, dy, half in ((0, -1, (0, 0, T, T // 2)), (0, 1, (0, T // 2, T, T // 2)),
+                                     (-1, 0, (0, 0, T // 2, T)), (1, 0, (T // 2, 0, T // 2, T))):
+                    if out(x + dx, y + dy):
+                        outdoor.fill((255, 255, 255, 255), (x * T + half[0], y * T + half[1], half[2], half[3]))
     sky_key, sky_shade = None, None  # (floor, quarter of an hour) it was made for, and the shade itself
     scaled = {}  # the map and the night as last scaled for the screen: (what for, surface)
     lifts = [(i, floor, piece) for i, stops in enumerate(lay.lifts) for floor, (_, _, piece) in stops.items()]
@@ -580,7 +608,7 @@ def run_ui(snapshots, commands, positions, sim=None):
                 x, y = to_screen(a.px - img.get_width() / 2 / T, a.py - img.get_height() / 2 / T)
                 blit_scaled(img, x, y)
                 if a is selected:
-                    pygame.draw.rect(screen, HIGHLIGHT, (x, y, img.get_width() * zoom, img.get_height() * zoom), 2)
+                    select_frame(screen, (x, y, img.get_width() * zoom, img.get_height() * zoom))
                 continue
             if a.role == 'ambulance':  # a vehicle, not a person: nose first, lights flashing, back doors open
                 frames = vans[(a.action, int(beat * 6) % 2) if a.action in ('siren', 'open') else None]
@@ -588,7 +616,7 @@ def run_ui(snapshots, commands, positions, sim=None):
                 x, y = to_screen(a.px - img.get_width() / 2 / T, a.py - img.get_height() / 2 / T)
                 blit_scaled(img, x, y)
                 if a is selected:
-                    pygame.draw.rect(screen, HIGHLIGHT, (x, y, img.get_width() * zoom, img.get_height() * zoom), 2)
+                    select_frame(screen, (x, y, img.get_width() * zoom, img.get_height() * zoom))
                 continue
             # Feet a bit below the tile centre; the body sticks up over the tile behind (3/4 view)
             if a.lying:
@@ -607,7 +635,7 @@ def run_ui(snapshots, commands, positions, sim=None):
                     blit_scaled(frame(a), x, y)
             heads.append((a, x + CHAR_W * zoom / 2, y))
             if a is selected:
-                pygame.draw.rect(screen, HIGHLIGHT, (x, y, CHAR_W * zoom, CHAR_H * zoom), 2)
+                select_frame(screen, (x, y, CHAR_W * zoom, CHAR_H * zoom))
 
         key = (view, int(snap['hour'] % 24 * 4))  # the light outside, by the quarter hour
         if key != sky_key:
@@ -656,60 +684,62 @@ def run_ui(snapshots, commands, positions, sim=None):
             hits = draw_card(screen, font, info_lines(selected))
         if room_sel and not selected:
             x, y = to_screen(room_sel.x, room_sel.y)
-            pygame.draw.rect(screen, HIGHLIGHT, (x, y, room_sel.w * T * zoom, room_sel.h * T * zoom), 2)
+            select_frame(screen, (x, y, room_sel.w * T * zoom, room_sel.h * T * zoom))
             people = sorted((a for a in actors if lay.room_at[a.ty][a.tx] is room_sel),
                             key=lambda a: (ROLE_LABEL[a.role], a.name))
             scroll = max(0, min(scroll, len(people) - LIST_ROWS))
             hits = draw_room_card(screen, font, room_sel, people, list_open, scroll)
         if watching_boss:  # what it's juggling and why it decided what it did
-            top = hits[0][0].bottom + 6 if hits else 10
+            top = hits[-1][0].bottom + 6 if hits else TOP  # (the card's own area is the last one)
             working = [(f'{label}  <- {next((a.name for a in actors if a.id == i), "?")}',
                         URGENCY_COLORS[u]) for i, _, _, u, label in boss.boss['working']]
             waiting = [(label, URGENCY_COLORS[u]) for _, _, u, label in boss.boss['open']] or [('nothing', MUTED)]
             decisions = [(text, TEXT)
                          for t, text in boss.boss['decisions'][::-1]] or [('nothing yet', MUTED)]
-            def first(lines, n):  # keeps the panels on screen
+            def first(lines, n):  # keeps the panel on screen
                 return lines[:n] + ([(f'... and {len(lines) - n} more', MUTED)] if len(lines) > n else [])
 
-            top = draw_panel(screen, small, 'Boss: being done now', first(working or [('nothing', MUTED)], 6),
-                             (sw - 10, top), 560) + 6
-            top = draw_panel(screen, small, 'Boss: waiting for someone', first(waiting, 6), (sw - 10, top), 560) + 6
-            draw_panel(screen, small, 'Boss: last decisions (newest first)', decisions[:5], (sw - 10, top), 560)
+            # up to 6 of each list, fewer if that's all that fits above the controls bar (3 titles, 5 decisions)
+            n = max(1, min(6, ((sh - BAR_H - 12 - top - 24) // 18 - 10) // 2))
+            draw_panel(screen, font, 'Boss: being done now', first(working or [('nothing', MUTED)], n)
+                       + [('Boss: waiting for someone', HIGHLIGHT)] + first(waiting, n)
+                       + [('Boss: last decisions (newest first)', HIGHLIGHT)] + decisions[:5], (sw - 6, top), 560)
 
+        mid = (202 + 98 * lay.floors + sw - CARD_W - 6) // 2  # (between the floor buttons and the card)
         if sim is not None and not sim.is_alive():  # it crashed: say so, instead of a world frozen for no reason
-            text = banner_font.render('The simulation stopped (see the terminal and hospital.log)', True, TEXT)
-            box = text.get_rect(midtop=(sw // 2, 90)).inflate(24, 10)
-            pygame.draw.rect(screen, (120, 30, 30), box, border_radius=6)
-            screen.blit(text, text.get_rect(center=box.center))
+            banner(screen, font, 'The simulation stopped (see the terminal and hospital.log)', (mid, TOP + 46))
         if snap['surge']:
-            text = banner_font.render('SURGE! Lots of patients arriving', True, (255, 255, 255))
-            box = text.get_rect(midtop=(sw // 2, 44)).inflate(24, 10)
-            pygame.draw.rect(screen, (200, 40, 40), box, border_radius=6)
-            screen.blit(text, text.get_rect(center=box.center))
+            banner(screen, font, 'SURGE! Lots of patients arriving', (mid, TOP + 3))
         if show_log and not show_tablet:
-            draw_events(screen, small, snap['events'])
+            draw_events(screen, font, snap['events'])
         if snap['day_over']:  # over everything: nothing goes on until the next day starts
-            hits = draw_day_report(screen, font, small, snap['day_over'])
+            hits = draw_day_report(screen, font, title_font, snap['day_over'])
         elif show_tablet:
-            hits += draw_tablet(screen, font, small, snap, opts, 46)
+            hits += draw_tablet(screen, font, snap, opts, TOP)
         else:
-            hits.append((button(screen, small, pygame.Rect(10, 38, 150, 22), 'Admin tablet (Tab)'), ('tablet',)))
+            hits.append((button(screen, font, pygame.Rect(6, TOP, 190, 30), 'Admin tablet (Tab)'), ('tablet',)))
             for f in range(lay.floors):  # top floor on the left
-                rect = pygame.Rect(170 + (lay.floors - 1 - f) * 74, 38, 68, 22)
-                hits.append((button(screen, small, rect, f'Floor {f}', on=f == view), ('floor', f)))
+                rect = pygame.Rect(202 + (lay.floors - 1 - f) * 98, TOP, 92, 30)
+                hits.append((button(screen, font, rect, f'Floor {f}', on=f == view), ('floor', f)))
 
         fps, st, hour, today = clock.get_fps(), snap['stats'], snap['hour'], snap['today']
-        hud = (f'FPS {fps:4.0f}   sim {100 * snap["keep_up"]:3.0f}%   day {snap["day"]} '
+        hud = (f'FPS {fps:4.0f}  sim {100 * snap["keep_up"]:3.0f}%  day {snap["day"]} '
                f'{int(hour):02d}:{int(hour % 1 * 60):02d}{" closed" if snap["closed"] else ""}'
-               f'   today {today.get("income", 0) - today.get("wages", 0):+,.0f}   floor {view}'
-               f'   patients {snap["patients"]}   treated {st.get("treated", 0)}   gave up {st.get("gave_up", 0)}'
-               f'   line {snap["line"]}   triage {snap["triage"]}   zoom x{zoom}'
-               f'   {"PAUSED" if snap["paused"] else "speed x" + format(snap["speed"], "g")}')
+               f'  today {today.get("income", 0) - today.get("wages", 0):+,.0f}  floor {view}'
+               f'  patients {snap["patients"]}  treated {st.get("treated", 0)}  gave up {st.get("gave_up", 0)}'
+               f'  line {snap["line"]}  triage {snap["triage"]}  zoom x{zoom}'
+               f'  {"PAUSED" if snap["paused"] else "speed x" + format(snap["speed"], "g")}')
         slow = 0 < fps < config.MIN_FPS or snap['keep_up'] < 0.8
-        screen.blit(font.render(hud, True, (240, 90, 90) if slow else TEXT, (20, 22, 28)), (10, 10))
-        screen.blit(font.render('WASD/right-drag: move   wheel: zoom   PgUp/PgDn: floor   click: NPC or room info   '
-                                'L: log   B: boss   Tab: admin   Space: pause   +/-: speed   ESC: close',
-                                True, (200, 200, 200), (20, 22, 28)), (10, sh - 26))
+        screen.blit(ui_box('panel', (sw - 12, BAR_H)), (6, 6))
+        screen.blit(font.render(hud, False, RED if slow else TEXT), (20, 14))
+        screen.blit(ui_box('panel', (sw - 12, BAR_H)), (6, sh - BAR_H - 6))
+        x = 20
+        for key, what in CONTROLS:  # each key, then what it does
+            for text, color in ((key, HIGHLIGHT), (what, TEXT)):
+                label = font.render(text, False, color)
+                screen.blit(label, (x, sh - BAR_H + 2))
+                x += label.get_width() + 6
+            x += 10
         pygame.display.flip()
         if shot_at and time.perf_counter() > shot_at:
             pygame.image.save(screen, shot.rsplit(':', 1)[0])

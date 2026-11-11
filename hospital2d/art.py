@@ -1,4 +1,5 @@
 # art.py - Loads the PNG assets (Top Down Hospital pack + our own in assets/custom) and draws the map
+import functools
 import os
 
 import pygame
@@ -53,6 +54,13 @@ FACING_AWAY = {'chair_up', 'bench'}  # their backs to us: drawn over whoever sit
 LIFT = {'pc': 9, 'bell': 9, 'cake': 9, 'donuts': 9, 'books': 9}  # pixels up: they stand on a counter/desk top
 LIFT.update({k: 12 for k in WALL_MOUNTED})  # (and these hang on the wall above their tile)
 
+# The UI's frames, from the Pixel Retro theme (third_party/pixel_retro, see README): name -> the margins kept as they
+# are (left, top, right, bottom, as its pixel_retro_lite.tres has them), and whether the rest is tiled or stretched
+UI_BOXES = {'panel': ((12, 12, 12, 12), True), 'focus': ((10, 10, 10, 10), True), 'inset': ((8, 8, 8, 8), False),
+            'hover': ((4, 4, 4, 4), False), 'button_normal': ((8, 8, 8, 10), False),
+            'button_hover': ((8, 8, 8, 10), False), 'button_pressed': ((8, 10, 8, 8), False),
+            'custom/select': ((3, 3, 3, 3), False)}  # (what's selected on the map: a yellow frame)
+
 _cache = {}
 
 
@@ -60,6 +68,29 @@ def image(name):
     if name not in _cache:
         _cache[name] = pygame.image.load(os.path.join(ASSETS, name + '.png')).convert_alpha()
     return _cache[name]
+
+
+@functools.lru_cache(maxsize=64)  # (bounded: a room's frame at a high zoom is a big surface)
+def ui_box(name, size):
+    """One of the theme's frames at any size: its corners as they are, its edges and middle tiled or stretched."""
+    (left, top, right, bottom), tiled = UI_BOXES[name]
+    src, (w, h) = image(name if '/' in name else 'third_party/pixel_retro/' + name), size
+    iw, ih = src.get_size()
+    box = pygame.Surface(size, pygame.SRCALPHA)
+    for sx, pw, dx, dw in ((0, left, 0, left), (left, iw - left - right, left, w - left - right),
+                           (iw - right, right, w - right, right)):
+        for sy, ph, dy, dh in ((0, top, 0, top), (top, ih - top - bottom, top, h - top - bottom),
+                               (ih - bottom, bottom, h - bottom, bottom)):
+            piece = src.subsurface(sx, sy, pw, ph)
+            if tiled:
+                box.set_clip((dx, dy, dw, dh))
+                for x in range(dx, dx + dw, pw):
+                    for y in range(dy, dy + dh, ph):
+                        box.blit(piece, (x, y))
+            else:
+                box.blit(pygame.transform.scale(piece, (max(dw, 0), max(dh, 0))), (dx, dy))
+    box.set_clip(None)
+    return box
 
 
 def tile_image(lay, x, y):

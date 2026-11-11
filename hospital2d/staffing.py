@@ -2,7 +2,7 @@
 from collections import Counter
 import config
 from staff import Cleaner, Doctor, Receptionist, Security, TriageNurse, WardNurse
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 
 JOBS: dict[str, Any] = {c.__name__: c for c in (Doctor, WardNurse, TriageNurse, Receptionist, Security, Cleaner)}  # (the admin tablet's names)
@@ -10,8 +10,22 @@ JOBS: dict[str, Any] = {c.__name__: c for c in (Doctor, WardNurse, TriageNurse, 
 
 class StaffingMixin:
     """The staff: hiring and sending home (the admin tablet, and the Boss calling in staff on call), how many of each."""
-    if TYPE_CHECKING:  # the rest of the Hospital (sim.py) is reached through self
-        def __getattr__(self, name: str) -> Any: ...
+    # The rest of the Hospital (sim.py) it uses: declared for the type checker only (no value: nothing at run time)
+    _spawn: Any
+    actors: Any
+    actors_lock: Any
+    areas: Any
+    clock: Any
+    count: Any
+    day_start: Any
+    dispatcher: Any
+    last_call: Any
+    lay: Any
+    log: Any
+    quiet_since: Any
+    rng: Any
+    running: Any
+    world: Any
 
     def working(self, job):
         with self.actors_lock:

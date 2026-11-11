@@ -4,13 +4,31 @@ from patients import Patient
 from staff import Ambulance
 from vehicles import Car
 from world import Task, Transfer
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 
 class PatientFlowMixin:
     """Patients coming and going: by car, taxi or ambulance, the beds in Emergency, the parking bays, the wheelchair home."""
-    if TYPE_CHECKING:  # the rest of the Hospital (sim.py) is reached through self
-        def __getattr__(self, name: str) -> Any: ...
+    # The rest of the Hospital (sim.py) it uses: declared for the type checker only (no value: nothing at run time)
+    _spawn: Any
+    actors: Any
+    actors_lock: Any
+    bays_lock: Any
+    bed_claims: Any
+    clock: Any
+    closed: Any
+    count: Any
+    dispatcher: Any
+    free_bays: Any
+    lay: Any
+    log: Any
+    patients: Any
+    rng: Any
+    running: Any
+    stats_lock: Any
+    theatres: Any
+    waits: Any
+    world: Any
 
     def admit(self, info) -> Any:
         """A patient walks in from the street (sent by the arrivals process); none after midnight."""

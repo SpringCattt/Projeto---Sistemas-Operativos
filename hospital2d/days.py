@@ -1,13 +1,29 @@
 # days.py - part of the Hospital (sim.py): The day and the money: wages by the hour, closing time, the last call, the day's report, payments and the staff bonus credit.
 from collections import Counter
 import config
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 
 class DayMixin:
     """The day and the money: wages by the hour, closing time, the last call, the day's report, payments and the staff bonus credit."""
-    if TYPE_CHECKING:  # the rest of the Hospital (sim.py) is reached through self
-        def __getattr__(self, name: str) -> Any: ...
+    # The rest of the Hospital (sim.py) it uses: declared for the type checker only (no value: nothing at run time)
+    actors: Any
+    actors_lock: Any
+    clock: Any
+    closed: Any
+    count: Any
+    credit: Any
+    day: Any
+    day_over: Any
+    day_start: Any
+    day_stats: Any
+    log: Any
+    patients: Any
+    sent_home: Any
+    set_speed: Any
+    stats: Any
+    stats_lock: Any
+    stop: Any
 
     def run_day(self):
         """The day's own thread: pays the staff by the hour, closes the doors at midnight, and ends the day when the

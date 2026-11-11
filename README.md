@@ -1,5 +1,12 @@
 # Hospital simulator — Operating Systems project
 
+> **A concurrent hospital simulation in Python**, where every person is a thread: up to **~900 threads** at once.
+> **4 processes** (simulation, UI, arrivals, log) talking through queues and **shared memory with a seqlock**;
+> locks, monitors, semaphores and events inside; an AI "Boss" that learns to staff the hospital (evolution strategy).
+> Python · pygame-ce · threading · multiprocessing · Tiled maps
+
+![The ground floor at midday: reception, waiting rooms, triage](docs/demo.gif)
+
 A pixel-art hospital where **every person is a thread**. Patients arrive, register, get triaged, wait, see a
 doctor (or go to surgery) and go home. Doctors, nurses, receptionists, security and cleaners do their jobs, and the
 **Boss**, in the round control room in the middle, decides who does what.

@@ -655,8 +655,14 @@ class WardNurse(TaskStaff):
             self.swap(train, chair, p)  # ...into the chair
             p.on_stretcher, p.wheelchair, self.pushing = False, True, None
             p.driver, p.stage = (self, train), 'going home in a wheelchair'
-            with self.world.lock:  # out front to wait for the car: a free spot of its own (others wait there too)
-                spots = [t for t in self.lay.street_line + self.lay.street_edge if t not in self.world.occupied]
+            # Out front to wait for the car: a free spot of its own in a corner of the street, out of everyone's way
+            # (not in front of the entrance, where the line is and people come and go, nor at a car's door)
+            ex = self.lay.street_line[0][0]
+            doors = {(b['door'][0] + i, b['door'][1]) for bays in self.lay.bays.values() for b in bays for i in (0, 1)}
+            with self.world.lock:
+                spots = sorted((t for t in self.lay.street_edge if abs(t[0] - ex) >= 9 and t not in doors
+                                and t not in self.world.occupied), key=lambda t: (-abs(t[0] - ex), t[1]))
+                spots = spots or [t for t in self.lay.street_line + self.lay.street_edge if t not in self.world.occupied]
             self.drive(train, spots[0] if spots else self.lay.street_line[0], with_patient=True)
             self.h.give_back_theatre(p)
             self.doing = f'waiting with {p.name} for the car'

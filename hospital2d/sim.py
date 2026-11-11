@@ -9,6 +9,7 @@ import random
 import struct
 import threading
 import time
+from typing import Any
 from collections import Counter, defaultdict, deque
 
 import config
@@ -58,13 +59,15 @@ class Hospital(DayMixin, StaffingMixin, PatientFlowMixin):  # (each part in its 
         self.errors = []
         self.surge_until = -1.0
         # The day: its number, when it started, doors closed (after midnight), its report once over (paused)
-        self.day, self.day_start, self.closed, self.day_over = 1, 0.0, False, None
+        self.day, self.day_start, self.closed = 1, 0.0, False
+        self.day_over: Any = None
         self.sent_home = False  # (today, at midnight)
         self.day_stats = Counter()  # self.stats when the day started (today = stats - day_stats)
         self.credit = Counter()  # today: staff label -> what it brought in (shares the bonus out)
         self.sim_hz, self.keep_up, self._hz_mark = 0.0, 1.0, (time.perf_counter(), 0, 0.0)
         self._retired_ticks, self._retired_planned = 0, 0.0  # counted by actors that already left
-        self.actors, self.actors_lock, self.threads = [], threading.Lock(), []
+        self.actors: list[Any] = []  # (staff and patients)
+        self.actors_lock, self.threads = threading.Lock(), []
         self.running = False
 
         lay, rng = self.lay, self.rng

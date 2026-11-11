@@ -57,7 +57,7 @@ class Room:
     w: int
     h: int
     walls: bool = True
-    partner: 'Room' = None  # triage -> its waiting room; surgery -> the disinfection room doctors enter through
+    partner: 'Room | None' = None  # triage -> its waiting room; surgery -> the disinfection room doctors enter through
     round: bool = False  # a circle inside its box (the control room); its walls follow the circle
 
     @property
@@ -175,7 +175,7 @@ def read_floor(path):
 
 
 class Layout:
-    def __init__(self, ground, rooms, furniture, staff_only, stretchers, stride=None, scenery=()):
+    def __init__(self, ground, rooms: list[Room], furniture, staff_only, stretchers, stride=None, scenery=()):
         """ground: the image of each tile ([y][x], from the assets folder), which also says what it is (GROUND).
         stride: how far apart the floors are in x (load_layout). The rest as read_floor reads it from the maps."""
         self.ground, self.rooms, self.width, self.height = ground, rooms, len(ground[0]), len(ground)
@@ -190,7 +190,7 @@ class Layout:
         self.distances_from = functools.lru_cache(maxsize=512)(self._distances_from)
         self.tiles = [[GROUND.get(base(name), FLOOR) for name in row] for row in ground]
         inside = lambda x, y: 0 <= x < self.width and 0 <= y < self.height
-        self.room_at = [[None] * self.width for _ in range(self.height)]
+        self.room_at: list[list[Room | None]] = [[None] * self.width for _ in range(self.height)]
         for r in sorted(rooms, key=lambda r: r.round):  # round rooms last: they sit inside another room
             for y in range(r.y, r.y + r.h):
                 for x in range(r.x, r.x + r.w):
@@ -423,7 +423,7 @@ class Layout:
         s = self.stride
         return abs(a[0] % s - b[0] % s) + abs(a[1] - b[1]) + abs(a[0] // s - b[0] // s)
 
-    def path(self, start, goal, avoid=(), blocked=frozenset(), limit=None, stairs=True):
+    def path(self, start, goal, avoid=(), blocked: frozenset | set = frozenset(), limit=None, stairs=True):
         """4-direction A*: the shortest route, and of all the shortest ones the one with fewest turns, so people walk
         straight instead of zig-zagging. Returns the tiles up to goal (start excluded), or [] if unreachable.
         avoid: room kinds the walker may not step into (e.g. patients and the corridor).

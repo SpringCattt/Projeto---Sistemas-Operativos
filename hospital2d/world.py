@@ -15,6 +15,7 @@ import json
 import os
 import threading
 from collections import deque
+from typing import Any
 
 import config
 
@@ -115,6 +116,9 @@ class Task:
     _ids = itertools.count(1)
 
     def __init__(self, kind, role, urgency, tile=None, patient=None, created=0.0):
+        self.discharged: Any = None  # wheelchair tasks: the patient going home, and the car that comes for them
+        self.car: Any = None
+        self.transfer: Any = None  # stretcher tasks: the Transfer they share (Hospital.fetch_stretcher)
         self.id = next(Task._ids)
         self.kind, self.role, self._urgency, self.tile, self.patient = kind, role, urgency, tile, patient
         self.created = created
@@ -122,9 +126,10 @@ class Task:
         self.cancelled = False
         self.done = threading.Event()
         self.interruptions = 0
-        self.target, self.result = None, None  # fights: who started it, and how security ended it
-        self.guess = None  # (actor, features, seconds it should take, when) while someone is on it
-        self.team = None  # tasks that are handed out together or not at all (the two nurses of a stretcher)
+        self.target: Any = None
+        self.result = None  # fights: who started it, and how security ended it
+        self.guess: Any = None  # (actor, features, seconds it should take, when) while someone is on it
+        self.team: Any = None  # tasks that are handed out together or not at all (the two nurses of a stretcher)
 
     @property
     def urgency(self):  # a patient's condition can get worse while they wait

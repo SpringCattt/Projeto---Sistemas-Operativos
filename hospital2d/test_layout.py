@@ -61,7 +61,7 @@ for lay in [load_layout()]:
     assert all(lay.walkable(*t) and t not in staff for t in patient_spots)
     assert all(p and d for p, d in lay.surgery_spots.values()) and all(lay.sink_spots.values())
     assert all(s.partner and s.partner.kind == 'disinfection' for s in lay.rooms_of('surgery'))
-    assert all(t.partner.kind == 'waiting' for t in lay.rooms_of('triage')) and lay.rest_spots
+    assert all(t.partner and t.partner.kind == 'waiting' for t in lay.rooms_of('triage')) and lay.rest_spots
     assert all(len(b) >= 2 for b in lay.emergency_beds.values()) and lay.stretcher_spots
     assert len(lay.stretcher_bay) >= config.STRETCHERS and not set(lay.stretcher_bay) & set(lay.stretcher_spots)
     # Even with every stretcher parked, each one has a side whoever parks it can stand on and still get out from

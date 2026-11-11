@@ -4,6 +4,7 @@
 #   Cleaner (messes). WardNurse just walks the medical wing for now.
 import queue
 import time
+from typing import Any
 
 import config
 from actors import Actor, Interrupted, OffShift, Stopped
@@ -34,7 +35,7 @@ class Staff(Actor):
     def card(self):
         return [('Fatigue', f'{self.fatigue:.0f}/100'), ('Resting', 'yes' if self.resting else 'no')]
 
-    def call(self, patient, summons, timeout=90):
+    def call(self, patient, summons, timeout: float | None = 90):
         """Calls a patient and waits until it arrives. False (call cancelled) if it doesn't come or leaves."""
         patient.summon(summons)
         ok = self.wait_until(lambda: summons.arrived.is_set() or summons.cancelled or patient.gone, timeout)
@@ -463,7 +464,8 @@ class Cleaner(TaskStaff):
 class Cart:
     """The empty stretcher (or wheelchair): it takes up a tile like a person does, but has no thread (nurses move
     it)."""
-    speed, path, anim_t, driver, hidden = 0.0, (), 0.0, None, False
+    speed, path, anim_t, hidden = 0.0, (), 0.0, False
+    driver: Any = None
 
     def __init__(self, tile, kind='stretcher'):
         self.tx, self.ty = tile
@@ -543,6 +545,7 @@ class WardNurse(TaskStaff):
             t.failed = True
             self.driver = back.driver = None
             return
+        assert stretcher is not None  # (the same one)
         self.pushing, self.doing = cart, f'stretcher for {p.name}'
         train = [self, cart, back]
         for m in train:  # a train from now on: whoever walks gives way to it
@@ -604,6 +607,8 @@ class WardNurse(TaskStaff):
         self.doing = 'getting a stretcher'
         while self.h.clock() < end and not t.aborted():
             near, far = self.lay.distances_from((self.tx, self.ty)), self.lay.distances_from((back.tx, back.ty))
+            cart: Any = None  # (set under the lock when there are options, which the code below checks)
+            x = None
             with self.world.lock:
                 occ = self.world.occupied
                 free = lambda x, who: self.lay.walkable(*x) and occ.get(x) in (None, who)
@@ -686,6 +691,8 @@ class WardNurse(TaskStaff):
         end = self.h.clock() + 90
         while self.h.clock() < end:
             near = self.lay.distances_from((self.tx, self.ty))
+            chair: Any = None
+            x = None
             with self.world.lock:
                 occ = self.world.occupied
                 options = [(near.get(x, 10 ** 6), i, c, x) for i, c in enumerate(occ.values())

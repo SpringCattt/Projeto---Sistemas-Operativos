@@ -22,7 +22,7 @@ def measure(n_patients):
     h.measure()
     cpu = (time.process_time() - cpu0) / MEASURE_S
     # What the UI process gets SNAPSHOT_HZ times a second: build it and serialise it (what a Queue does)
-    timings = []
+    timings, data = [], b''
     for _ in range(5):
         t0 = time.perf_counter()
         data = pickle.dumps(h.snapshot())

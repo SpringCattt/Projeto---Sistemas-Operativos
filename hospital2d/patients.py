@@ -3,6 +3,7 @@
 #   (-> surgery) -> street.  While it waits its patience runs down and its condition may get worse; when the
 #   patience is gone it reacts by temperament: passive leaves, medium complains at reception, aggressive fights.
 import queue
+from typing import Any
 
 import config
 from actors import Actor
@@ -30,7 +31,7 @@ class Patient(Actor):
         super().__init__(h, candidates, rng, name=info['name'], look=info['look'])
         self.reason, self.base_urgency = info['reason'], info['urgency']
         self.needs_surgery, self.temperament = info['surgery'], info['temperament']
-        self.rank = self.base_urgency if triaged else None  # urgency once triaged: 0 Green, 1 Yellow, 2 Red
+        self.rank: Any = self.base_urgency if triaged else None  # urgency once triaged: 0 Green, 1 Yellow, 2 Red
         self.patience, self.patience_loss = 100.0, self.rng.uniform(*config.PATIENCE_LOSS)
         self.stage, self.allowed = 'arriving', BASE_ROOMS
         self.calls = queue.Queue()  # Summons from staff
@@ -38,11 +39,12 @@ class Patient(Actor):
         self.waiting_room, self.waiting_since, self.triaged_at = None, None, None
         self.waited = 0.0  # from triage to the doctor (what it pays depends on it: Hospital.treated)
         self.helpers = {}  # step ('reception', 'triage', 'stretcher', 'doctor') -> who did it (shares its payment)
-        self.delivered = None  # brought by ambulance: an Event, set once the paramedics have put it on a bed
+        self.delivered: Any = None  # brought by ambulance: an Event, set once the paramedics have put it on a bed
         self.triaged = triaged
         self.provoke = None  # 'fight' / 'vomit': ordered from the admin tablet (done by its own thread)
         self.car = None  # the car that brought it and waits for it (vehicles.Car), if any
         self.wheelchair = False  # being wheeled out (staff.WardNurse.wheelchair)
+        self.home: Any = None  # the Event that releases it once the wheelchair has brought it back (Hospital.discharge)
 
     def label(self):
         return f'{self.name} ({config.URGENCY_NAMES[self.rank]})' if self.rank is not None else self.name

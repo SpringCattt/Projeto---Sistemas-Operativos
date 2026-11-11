@@ -10,6 +10,7 @@ import multiprocessing as mp
 import os
 import queue
 import time
+from typing import Any
 from types import SimpleNamespace
 
 import pygame
@@ -308,7 +309,7 @@ def run_ui(snapshots, commands, positions, sim=None):
     cart_img = lambda kind, facing: wheelchair[facing] if kind == 'wheelchair' else stretcher[facing in ('left', 'right')]
     def both_ways(name):  # (going up: nose up; coming in: <name>_down)
         return {'up': image(name), 'down': image(name + '_down')}
-    vans = {None: both_ways('custom/ambulance')}  # lights off; flashing; flashing with the back doors open
+    vans: dict[Any, Any] = {None: both_ways('custom/ambulance')}  # lights off; flashing; flashing with the back doors open
     vans.update({(kind, i): both_ways(f'custom/ambulance_{kind}_{i}') for kind in ('siren', 'open') for i in (0, 1)})
     lift_frames = [image(f'custom/elevator_{i}') for i in range(3)]  # doors closed, half open, open
     shadow = image('custom/shadow')  # under everyone standing or walking
@@ -676,10 +677,10 @@ def run_ui(snapshots, commands, positions, sim=None):
 
         boss = next((a for a in actors if a.role == 'dispatcher'), None)
         watching_boss = boss is not None and (show_boss or selected is boss)
-        if watching_boss:
+        if boss is not None and watching_boss:
             draw_dispatcher(screen, font, boss.boss, to_screen, {a.id: a for a in actors}, shown)
 
-        hits = []
+        hits: list[Any] = []
         if selected:
             hits = draw_card(screen, font, info_lines(selected))
         if room_sel and not selected:
@@ -689,7 +690,7 @@ def run_ui(snapshots, commands, positions, sim=None):
                             key=lambda a: (ROLE_LABEL[a.role], a.name))
             scroll = max(0, min(scroll, len(people) - LIST_ROWS))
             hits = draw_room_card(screen, font, room_sel, people, list_open, scroll)
-        if watching_boss:  # what it's juggling and why it decided what it did
+        if boss is not None and watching_boss:  # what it's juggling and why it decided what it did
             top = hits[-1][0].bottom + 6 if hits else TOP  # (the card's own area is the last one)
             working = [(f'{label}  <- {next((a.name for a in actors if a.id == i), "?")}',
                         URGENCY_COLORS[u]) for i, _, _, u, label in boss.boss['working']]
@@ -741,7 +742,7 @@ def run_ui(snapshots, commands, positions, sim=None):
                 x += label.get_width() + 6
             x += 10
         pygame.display.flip()
-        if shot_at and time.perf_counter() > shot_at:
+        if shot and shot_at and time.perf_counter() > shot_at:
             pygame.image.save(screen, shot.rsplit(':', 1)[0])
             pygame.event.post(pygame.event.Event(pygame.QUIT))
             shot_at = None

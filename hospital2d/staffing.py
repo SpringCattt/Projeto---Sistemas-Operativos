@@ -2,13 +2,16 @@
 from collections import Counter
 import config
 from staff import Cleaner, Doctor, Receptionist, Security, TriageNurse, WardNurse
+from typing import TYPE_CHECKING, Any
 
 
-JOBS = {c.__name__: c for c in (Doctor, WardNurse, TriageNurse, Receptionist, Security, Cleaner)}  # (the admin tablet's names)
+JOBS: dict[str, Any] = {c.__name__: c for c in (Doctor, WardNurse, TriageNurse, Receptionist, Security, Cleaner)}  # (the admin tablet's names)
 
 
 class StaffingMixin:
     """The staff: hiring and sending home (the admin tablet, and the Boss calling in staff on call), how many of each."""
+    if TYPE_CHECKING:  # the rest of the Hospital (sim.py) is reached through self
+        def __getattr__(self, name: str) -> Any: ...
 
     def working(self, job):
         with self.actors_lock:
@@ -20,7 +23,7 @@ class StaffingMixin:
         return {Doctor: lay.rooms_of('doctor'), Receptionist: lay.reception_desks,
                 TriageNurse: lay.triage_desks}.get(job)
 
-    def hire(self, job, on_call=False):
+    def hire(self, job: Any, on_call=False):
         """A new member of staff walks in from the street to its place (on_call: the Boss called it in)."""
         lay, rng = self.lay, self.rng
         places = self.places(job)
@@ -29,7 +32,8 @@ class StaffingMixin:
             free = [p for p in places if (p if job is Doctor else p[0] if job is Receptionist else p[1]) not in taken]
             if not free:
                 return self.log(f'Admin: no free place for another {job.__name__}')
-            a = job(self, free[0], rng) if job is Doctor else job(self, *free[0], rng)
+            args = (free[0],) if job is Doctor else free[0]
+            a = job(self, *args, rng=rng)
             home = a.seat or (a.tx, a.ty) if job is Doctor else a.seat
         else:
             a = job(self, self.areas[job], rng)
@@ -97,5 +101,5 @@ class StaffingMixin:
                     self.fire(job, on_call=True)
 
     def staff_counts(self):
-        return {name: (len(self.working(job)), None if self.places(job) is None else len(self.places(job)))
+        return {name: (len(self.working(job)), None if (places := self.places(job)) is None else len(places))
                 for name, job in JOBS.items()}

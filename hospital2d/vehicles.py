@@ -2,6 +2,7 @@
 # map (the rest of the city), drives along the lanes block by block (Layout.drive_path), parks in a bay of the
 # parking lot, and goes back to the city.
 import threading
+from typing import Any
 
 import config
 from actors import Actor
@@ -20,7 +21,7 @@ class Car(Actor):
     the lot's lane is asked to step aside."""
     role = 'car'
 
-    def __init__(self, h, rng, info=None, bay=None, pickup=None):
+    def __init__(self, h, rng, info: Any = None, bay=None, pickup: Any = None):
         start = rng.choice(h.lay.city_in)
         taxi = bay is None and pickup is None
         super().__init__(h, [start], rng, look=0 if taxi else 1 + rng.randrange(config.CAR_COLORS),
@@ -34,7 +35,7 @@ class Car(Actor):
         self.px, self.py = start[0] + 1 - 1.5 * dx, start[1] + 1 - 1.5 * dy  # just off the map, coming in
         self.facing = FACE[self.lay.drive[start]]
         self.info, self.bay, self.pickup = info, bay, pickup
-        self.passenger = None  # the patient it brought
+        self.passenger: Any = None  # the patient it brought
         self.back = threading.Event()  # whoever it waits for is in
         self.parked = threading.Event()
         self.bringing = info is not None  # (the day doesn't end while a car is still bringing someone)
@@ -77,7 +78,9 @@ class Car(Actor):
         if self.passenger is not None and self.name == 'Taxi':
             self.passenger.car = None  # (a taxi doesn't wait: its passenger goes home on foot)
         else:
-            self.doing = f'waiting for {(self.pickup or self.passenger).name}'
+            who = self.pickup or self.passenger
+            assert who  # (a taxi has a passenger; the others a pickup)
+            self.doing = f'waiting for {who.name}'
             self.wait_until(self.back.is_set)
         self.doing = 'leaving'
         lane = self.bay['lane']

@@ -197,7 +197,7 @@ def test_preemption():
         try:
             assert until(lambda: any('sees' in t for _, t in h.events), 30), 'the Green consultation never started'
             stages = []
-            red = h.add_waiting(info(2))
+            h.add_waiting(info(2))
             assert until(lambda: stages.append(green.stage) or h.stats['treated'] >= 1, 30), 'Green never seen through'
             assert h.stats['interruptions'] == 0 and 'going to the waiting room' not in stages, stages
             assert until(lambda: h.waits.get(2), 60), 'the Red patient was not seen after'

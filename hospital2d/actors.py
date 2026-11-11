@@ -9,6 +9,8 @@ import struct
 import time
 import traceback
 from collections import deque
+from collections.abc import Collection
+from typing import Any
 
 import config
 import dialogue
@@ -65,7 +67,7 @@ class OffShift(Exception):
 
 class Actor:
     _ids = itertools.count(1)
-    role = None
+    role: Any = None
     takes_tasks = False  # gets its work from the dispatcher (TaskStaff): no walk to its place first
     pace = (3, 8, 0.5)  # idle wandering: (min pause, max pause in seconds, chance of walking when it ends)
 
@@ -89,7 +91,9 @@ class Actor:
         self.facing, self.anim_t = 'down', 0.0
         self.pause = self.rng.uniform(0, self.pace[1])
         self.area = []  # where it wanders when idle
-        self.ticks, self.planned, self._last, self._next = 0, 0.0, None, None
+        self.ticks, self.planned = 0, 0.0
+        self._last: Any = None
+        self._next: Any = None
         self.fatigue, self.resting = 0.0, False
         self.task = None  # what it's committed to (set by the dispatcher for doctors, security and cleaners)
         self.doing = 'idle'  # shown on the info card
@@ -100,7 +104,8 @@ class Actor:
         self.lying = self.on_stretcher = False
         self.action = None  # animation while working: 'typing', 'mopping'
         self.pushing = None  # the empty stretcher, while it drives one (staff.WardNurse)
-        self.commute, self.quitting = None, False  # hired / sent home (admin tablet, or the Boss)
+        self.commute: Any = None
+        self.quitting = False  # hired / sent home (admin tablet, or the Boss)
         self.on_call = False  # called in by the Boss when work piled up (Hospital.staffing)
         self.detour_after = 0.0  # sim time: after a detour that found nothing better, it doesn't look for a while
         self.make_way = False  # a stretcher needs its tile: it steps aside at its next tick (unless it can't)
@@ -191,7 +196,7 @@ class Actor:
         return self.name.split()[0]
 
     # ---- movement -------------------------------------------------------------------------------------------
-    def avoid(self):
+    def avoid(self) -> Collection[str]:
         """Room kinds it may not walk through."""
         return ()
 
@@ -315,7 +320,8 @@ class Actor:
         off = blocked_tile if isinstance(blocked_tile, frozenset) else {blocked_tile}
         # The closest free tile off `off` (the way the other one needs), a few steps off if need be: next to it
         # there may be none (a door, a corridor), and then it walks on along that way until it can step off it
-        came, todo = {(self.tx, self.ty): None}, deque([(self.tx, self.ty)])
+        came: dict[Any, Any] = {(self.tx, self.ty): None}
+        todo = deque([(self.tx, self.ty)])
         with self.world.lock:
             while todo:
                 t = todo.popleft()

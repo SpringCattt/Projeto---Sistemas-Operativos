@@ -222,6 +222,7 @@ def icon_bubble(kind):
 
 def text_bubble(font, text):
     words = font.render(text, False, (24, 24, 28))  # no antialiasing: pixel text, scaled like the rest
+    name = TEXT_BUBBLES[0]
     for name in TEXT_BUBBLES:
         if words.get_width() + 2 * BUBBLE_PAD <= image(f'custom/{name}').get_width():
             break

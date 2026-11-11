@@ -70,6 +70,7 @@ def hospital(i, speed, jobs, reports):
             if h.day_over is None:  # (didn't end: the day so far)
                 h.end_day()
             day = h.day_over
+            assert day is not None  # (end_day sets it)
             red = sum(h.waits.get(2, [])) / 60
             reports.put((i, {'profit': day['profit'], 'treated': day['treated'], 'gave_up': day['gave_up'], 'red': red,
                              'called_in': day['called_in'], 'overtime': day['overtime'], 'brain': d.brain,

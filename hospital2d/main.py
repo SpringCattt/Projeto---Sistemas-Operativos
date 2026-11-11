@@ -5,10 +5,12 @@
 # Controls: WASD/arrows or right-drag = move camera | wheel = zoom | click an NPC or a room = info card
 #           L = event log on/off | B = what the dispatcher (Boss) is doing | ESC = close the card
 #           Tab = admin tablet (events, patients, staff) | Space = pause | +/- = speed
+import ctypes
 import heapq
 import multiprocessing as mp
 import os
 import queue
+import sys
 import time
 from typing import Any
 from types import SimpleNamespace

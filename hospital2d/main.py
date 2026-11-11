@@ -269,7 +269,10 @@ def run_ui(snapshots, commands, positions, sim=None):
     """commands: Queue -> simulation, for the admin tablet (None: the tablet does nothing). positions: the shared
     block the simulation writes (sim.write_positions). sim: the simulation process, to notice if it stops."""
     send = commands.put if commands is not None else (lambda cmd: None)
+    if sys.platform == 'win32':  # its own taskbar entry and icon, not Python's
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID('hospital2d.simulator')
     pygame.init()
+    pygame.display.set_icon(pygame.image.load(os.path.join(ASSETS, 'custom', 'icon.png')))  # (before the window)
     screen = pygame.display.set_mode((1280, 720), pygame.RESIZABLE)
     pygame.display.set_caption('Hospital')
     clock = pygame.time.Clock()

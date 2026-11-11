@@ -19,6 +19,8 @@ KEEP = {'elevator', 'energy_core'}  # left where they are
 ACROSS = {'reception', 'corridor', 'control', 'disinfection', 'surgery'}  # mirrored onto themselves
 OWN = {'emergency', 'storage'}  # symmetric about their own middle
 NOT_FLOOR = ('wall', 'door', 'stairs', 'floor_grass', 'floor_void')
+SURFACES = {'counter', 'desk'}  # what other pieces stand on
+ON_TOP = {'pc', 'bell', 'books', 'tray'}  # pieces that stand on a counter or a desk
 
 
 def footprint(o):
@@ -34,6 +36,10 @@ def tiles(o):
 
 def kind(o):
     return props.get(o['gid'], {}).get('kind')
+
+
+def surface_tiles(objs):
+    return set().union(set(), *(tiles(o) for o in objs if kind(o) in SURFACES))
 
 
 for floor in range(3):
@@ -75,10 +81,11 @@ for floor in range(3):
         left = [o for o in mine if 2 * (round(o['x'] / T) + footprint(o)[0]) <= c2]
         right = [o for o in mine if 2 * round(o['x'] / T) >= c2]
         out = [o for o in out if not any(o is q for q in right)]
-        taken = set().union(*(tiles(o) for o in out)) if out else set()
+        under = [o for o in out if kind(o) not in SURFACES]  # (what sits on a counter or desk may share its tiles)
+        taken = set().union(*(tiles(o) for o in under)) if under else set()
         for o in left:
             c = mirrored(o, c2)
-            if fits(c, taken):
+            if fits(c, taken if kind(o) not in ON_TOP else taken - surface_tiles(out)):
                 out.append(c)
                 taken |= tiles(c)
         done.add(r['id'])

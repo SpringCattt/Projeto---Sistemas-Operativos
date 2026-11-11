@@ -66,7 +66,9 @@ class Car(Actor):
         self.doing = 'parking'
         self.take(self.bay['tiles'], keep=self.held)  # the bay first, from a block back: whoever is in it gets out
         self.drive(route[-1:])  # by the lane in front (it would shut them in), then in front of it
-        self.glide(self.bay['stop'], self.bay['nose'], config.CAR_SPEED / 3)
+        stop = self.bay['stop']
+        self.glide((stop[0], self.py), None, config.CAR_SPEED / 3)  # on along the lane until right in front of it,
+        self.glide(stop, self.bay['nose'], config.CAR_SPEED / 3)  # then it turns and drives straight in
         self.release(keep=self.bay['tiles'])
         self.tx, self.ty = self.bay['tiles'][0]
         self.parked.set()
@@ -85,7 +87,8 @@ class Car(Actor):
         self.doing = 'leaving'
         lane = self.bay['lane']
         self.take(BLOCK(lane), keep=self.bay['tiles'])
-        self.glide((lane[0] + 1, lane[1] + 1), self.facing, config.CAR_SPEED / 3)  # backs out
+        self.glide((self.px, lane[1] + 1), self.facing, config.CAR_SPEED / 3)  # backs straight out onto the lane,
+        self.glide((lane[0] + 1, lane[1] + 1), FACE[self.lay.drive[lane]], config.CAR_SPEED / 3)  # lines up with it
         self.release(keep=self.held[-4:])
         self.h.free_bay(self.bay)
         self.block, self.tx, self.ty = lane, lane[0], lane[1]

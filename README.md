@@ -2,9 +2,9 @@
 
 A pixel-art hospital where **every person is a thread**. Patients arrive, register, get triaged, wait, see a
 doctor (or go to surgery) and go home. Doctors, nurses, receptionists, security and cleaners do their jobs, and the
-**Boss**, in the round control room at the centre, decides who does what.
+**Boss**, in the round control room in the middle, decides who does what.
 
-![The control room, with the Boss in the middle, and people talking](docs/screenshot.png)
+![The control room, with the Boss in the middle](docs/screenshot.png)
 
 ## The story
 
@@ -33,31 +33,71 @@ Fair warning: I had never made a map before, so the building isn't exactly *aest
    | `furniture/` (`Furniture (N).png`) | a furniture pixel-art pack (demo) |
    | `pixel_retro/` (the PNGs of its `textures/`, and its font, which comes inside `pixel_retro_lite.tres`, as `umlaut_pixel_8.ttf`) | [Pixel Retro UI Theme Lite](https://juliusschmidt.itch.io/godot-ui-themes-lite) — Julius Schmidt |
 
-   The rest of the art (floors, walls, roads, bubbles, cars in each colour...) is ours, in `hospital2d/assets/custom/`.
+   The rest of the art (floors, walls, roads, bubbles, cars in each colour, the window icon...) is ours, in
+   `hospital2d/assets/custom/`.
 3. `cd hospital2d` and `python main.py`
 
 **Controls:** WASD or right-drag to move · wheel to zoom · click a person or a room to see what's going on ·
-`PgUp`/`PgDn` change floor · `B` what the Boss is doing · `L` event log · `Tab` admin tablet (pause, speed, send
-patients, events, hire staff) · `Space` pause · `+`/`-` speed · `Enter` next day.
+`PgUp`/`PgDn` (or the floor buttons) change floor · `B` what the Boss is doing · `L` event log · `Tab` admin tablet
+· `Space` pause · `+`/`-` speed · `Enter` next day · `ESC` close.
+
+## The building
+
+Three floors, and every one is **symmetric**: the right half is the mirror of the left one, rooms, doors and
+furniture included (the only exception, on purpose: the stairs are on the left of the hall and both elevators on
+the right).
+
+**Ground floor — emergencies.** Reception in the middle, a triage room and a waiting room on each side, Emergency
+(with the ambulance bay on top) next to the storage room, where the stretchers and the wheelchairs are kept. In the
+middle of the hall, the Boss's round control room: server racks blinking, a big screen with a neural network
+learning, the AI's core glowing. Below the entrance, the parking lot.
+
+![Ground floor](docs/floor0.png)
+
+**First floor — the doctors.** Ten doctor's rooms around the hall (a desk, a chair for the patient, an exam bed).
+
+![First floor](docs/floor1.png)
+
+**Second floor — surgery.** Six operating rooms, in blocks of operating room | disinfection room | operating
+room (the doctor washes in between), and the staff's rest room on top, with sofas, a TV, beds, a coffee corner.
+
+![Second floor](docs/floor2.png)
+
+**The city** goes round the hospital: a ring road, streets out to the edges of the map, pavements, buildings,
+lamps, trees, traffic lights. Cars drive on the right, give way to the car on their right at crossings (like in
+Portugal), stop for people on the zebra crossings, and never crash: a crossing is taken all at once or not at all.
+
+![The whole city](docs/city.png)
 
 ## What happens
 
-Three floors, symmetric about the middle of the hall: emergencies on the ground floor (reception, triage, waiting
-rooms, Emergency, storage, the Boss's control room), the doctors' rooms on the first, operating rooms and the
-staff's rest room on the second. Around it, a city: roads, cars that park and keep right, taxis, ambulances.
+**A patient's day:** street → reception line → registration → triage (Green / Yellow) → waiting room → called by
+name on the screen and the loudspeaker → doctor → home. Most come by car (it parks, waits, and takes them home),
+some by taxi.
 
-A patient's day: **street → reception → triage (Green / Yellow) → waiting room → doctor → home**. Red patients
-come by ambulance, go to a bed in Emergency, to surgery on a stretcher (elevator included) and home in a
-wheelchair, to a car that comes for them.
+**Red patients** come by **ambulance** (siren on, down its own street), two paramedics carry them to a bed in
+Emergency, two nurses take them to surgery on a stretcher (in the elevator if needed), and once cured they go home
+in a **wheelchair**: a nurse pushes them out to a car that comes for them.
 
-Things go wrong on purpose: surges of patients, patients getting worse while they wait, people running out of
-patience (they leave, complain or start a fight: security comes), vomit (cleaners come), tired staff going to rest.
-Everyone talks in speech bubbles.
+**Things go wrong on purpose:** surges of patients, patients getting worse while they wait, people running out of
+patience (they leave, complain at reception or start a fight: security comes), vomit (cleaners come with a mop),
+tired staff going to rest. Everyone talks in speech bubbles.
 
-**A day** is 24 hours of 60 seconds (24 minutes at x1), from day 1. At 23:00 the doors close; from 23:30,
-whoever no doctor has called yet goes home (Reds excepted) and every extra minute is overtime (wages x1.5). When
-the last patient leaves, the day's report: what patients paid, wages, profit, the staff bonus. All the numbers are
-in [`hospital2d/config.py`](hospital2d/config.py).
+**People move like people:** they walk around each other, give way in doorways (only one of them steps aside,
+so nobody dances), look for another way when someone doesn't move, never walk across chairs, and staff run when
+it's urgent.
+
+**A day** is 24 hours of 60 seconds (24 minutes at x1), from day 1. At 23:00 the doors close, at 23:30 the doctors
+make their last call (whoever no doctor has called yet goes home and comes back tomorrow, except the Reds), and
+past midnight the staff cost overtime (x1.5). When the last patient leaves, the day's report: what patients paid,
+the wages, the profit and the staff bonus. All the numbers are in [`hospital2d/config.py`](hospital2d/config.py).
+
+![End of the day](docs/day_report.png)
+
+**The admin tablet** (`Tab`) lets you play god: pause, change the speed, send patients of any colour, trigger a
+surge, a fight or vomit, hire staff or send them home.
+
+![Admin tablet and the Boss's panel](docs/admin_tablet.png)
 
 ## The Operating Systems part
 
@@ -84,6 +124,7 @@ dies); text goes through a queue. That took moving data to the UI from 5.3 % of 
 | Two nurses meet at storage to bring a stretcher | **condition + events** (rendezvous) |
 | Two elevators for the stretchers | a **monitor** each, with its own thread: first there, first served |
 | One ambulance bay | a **semaphore**: the next ambulance waits up the road |
+| Parking bays | a list under a **lock**: a car claims its bay before turning in |
 | Two cars at a crossing | a crossing is taken whole or not at all (no deadlock); priority to the right |
 | Two people blocking each other in a doorway | only one of them steps aside (no deadlock, no dancing) |
 | Who does each task | the **Boss**, a thread scoring everyone by distance, fatigue and how busy they are |
@@ -94,15 +135,27 @@ dies); text goes through a queue. That took moving data to the UI from 5.3 % of 
 
 The **Boss learns** to make the most profit in a day: who to see first among patients of the same colour (the most
 urgent colour always goes first, like real triage), and when to **call in staff on call** and send them home (more
-staff, more wages; fewer, longer waits and patients who give up). `python learn.py 8 4` plays 4 hospitals at once
-without the window, a whole day each round, trying small changes and keeping what makes more (Ctrl+C stops it);
-`python charts.py` draws how it's going (needs `pip install matplotlib`).
+staff, more wages; fewer, longer waits and patients who give up). It also learns how long each task takes, and
+who's quickest at what.
 
-## More
+`python learn.py 8 4` plays 4 hospitals at once without the window, a whole day each round, trying small changes
+and keeping what makes more money (Ctrl+C stops it; it saves after every round, so you can leave it running at
+night). `python charts.py` draws how it's going (needs `pip install matplotlib`).
 
-Every file, every synchronisation, the tests and the performance numbers:
-[`hospital2d/README.md`](hospital2d/README.md). The building is a [Tiled](https://www.mapeditor.org/) map per
-floor ([`hospital2d/maps/`](hospital2d/maps/)), and everything you see is an image you can edit.
+![The Boss's card](docs/boss_card.png)
+
+## Making it yours
+
+- **Everything you see is an image file** you can edit (nothing is drawn by the code): walls, doors, roads, cars,
+  people lying in bed, the urgency marks, the window icon, the yellow selection frame.
+- **The building is a [Tiled](https://www.mapeditor.org/) map**, one per floor
+  ([`hospital2d/maps/`](hospital2d/maps/)). Edit the left half, then from `hospital2d` run
+  `python tools/mirror_rooms.py` (it copies it to the right) and `python tools/bake.py` (it makes the image files).
+- **The numbers** (prices, wages, how long things take, how many patients...) are in
+  [`hospital2d/config.py`](hospital2d/config.py).
+
+Every file, every synchronisation, the tests and the performance numbers, in more detail:
+[`hospital2d/README.md`](hospital2d/README.md).
 
 ```
 cd hospital2d
@@ -116,4 +169,5 @@ python test_sim.py      # the simulation, with real threads (~5 min)
 - [2D Top-Down Pixel Art Characters](https://gamebetweenthelines.itch.io/top-down-pixel-art-characters) — Jephed, [Game Between The Lines](https://gamebetweenthelines.com/)
 - [Modern Town Tileset — Free Sample](https://chuckyassets.itch.io/modern-town-tileset-free-sample) — [Chucky Assets](https://chuckyassets.itch.io/)
 - [City Pack — Top Down — Pixel Art](https://nyknck.itch.io/citypackpixelart) — NYKNCK (buildings, cars, street furniture)
+- [Pixel Retro UI Theme Lite](https://juliusschmidt.itch.io/godot-ui-themes-lite) and the Umlaut Pixel font — Julius Schmidt
 - [m5x7](https://managore.itch.io/m5x7) font (speech bubbles) — Daniel Linssen, CC0
